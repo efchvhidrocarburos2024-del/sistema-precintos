@@ -1,0 +1,76 @@
+import { useState, useEffect } from 'react'
+import { supabase } from './supabase'
+
+function App() {
+  const [plantas, setPlantas] = useState([])
+  const [idPlanta, setIdPlanta] = useState('')
+  const [inicio, setInicio] = useState('')
+  const [fin, setFin] = useState('')
+  const [mensaje, setMensaje] = useState('')
+  const [cargando, setCargando] = useState(false)
+
+  useEffect(() => {
+    async function cargarPlantas() {
+      const { data } = await supabase.from('plantas').select('*').order('nombre')
+      if (data) {
+        setPlantas(data)
+        setIdPlanta(data[0]?.id_planta || '')
+      }
+    }
+    cargarPlantas()
+  }, [])
+
+  const registrarLote = async (e) => {
+    e.preventDefault()
+    setCargando(true)
+    setMensaje('')
+
+    const { data, error } = await supabase.rpc('fn_registrar_lote_precintos', {
+      p_id_planta: idPlanta,
+      p_correlativo_inicio: inicio,
+      p_correlativo_fin: fin
+    })
+
+    if (error) {
+      setMensaje('❌ Error: ' + error.message)
+    } else {
+      setMensaje(`✅ ¡Éxito! Se registraron ${data} precintos.`)
+      setInicio('')
+      setFin('')
+    }
+    setCargando(false)
+  }
+
+  return (
+    <div style={{ maxWidth: '400px', margin: '50px auto', fontFamily: 'Arial', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.1)' }}>
+      <h2 style={{ textAlign: 'center', color: '#0B5FA5', marginBottom: '5px' }}>Registro de Lotes</h2>
+      <p style={{ color: '#666', fontSize: '14px', textAlign: 'center', marginBottom: '20px' }}>
+        Analista de Operaciones
+      </p>
+
+      <form onSubmit={registrarLote} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+        
+        <label style={{ fontWeight: 'bold' }}>Planta destino:</label>
+        <select value={idPlanta} onChange={(e) => setIdPlanta(e.target.value)} style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}>
+          {plantas.map((p) => (
+            <option key={p.id_planta} value={p.id_planta}>{p.nombre} ({p.codigo})</option>
+          ))}
+        </select>
+
+        <label style={{ fontWeight: 'bold' }}>Correlativo Inicio (DEL):</label>
+        <input type="number" value={inicio} onChange={(e) => setInicio(e.target.value)} required style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
+
+        <label style={{ fontWeight: 'bold' }}>Correlativo Fin (AL):</label>
+        <input type="number" value={fin} onChange={(e) => setFin(e.target.value)} required style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
+
+        <button type="submit" disabled={cargando} style={{ padding: '12px', background: '#0B5FA5', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', marginTop: '10px' }}>
+          {cargando ? 'Guardando...' : 'Guardar en Sistema'}
+        </button>
+      </form>
+
+      {mensaje && <p style={{ marginTop: '20px', fontWeight: 'bold', textAlign: 'center', color: mensaje.includes('❌') ? 'red' : 'green' }}>{mensaje}</p>}
+    </div>
+  )
+}
+
+export default App
