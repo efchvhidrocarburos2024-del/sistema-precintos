@@ -6,7 +6,7 @@ import RegistroViajes from './components/RegistroViajes'
 import Excepciones from './components/Excepciones'
 import Dashboard from './components/Dashboard'
 import Reportes from './components/Reportes'
-import GestionUsuarios from './components/GestionUsuarios' // <-- NUEVO
+import GestionUsuarios from './components/GestionUsuarios'
 
 function App() {
   const [sesion, setSesion] = useState(null)
@@ -40,7 +40,7 @@ function App() {
       <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 30px', backgroundColor: '#0B5FA5', flexWrap: 'wrap' }}>
         
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {(rol === 'analista_operaciones' || rol === 'jefe_operaciones') && (
+          {(rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto') && (
             <button onClick={() => setPantalla('lotes')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'lotes' ? 'white' : 'transparent', color: pantalla === 'lotes' ? '#0B5FA5' : 'white' }}>Registro de Lotes</button>
           )}
           
@@ -51,15 +51,15 @@ function App() {
             </>
           )}
 
-          {(rol === 'auditor' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'admin_planta') && (
+          {(rol === 'auditor' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto' || rol === 'admin_planta') && (
             <>
               <button onClick={() => setPantalla('dashboard')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'dashboard' ? 'white' : 'transparent', color: pantalla === 'dashboard' ? '#0B5FA5' : 'white' }}>Dashboard</button>
               <button onClick={() => setPantalla('reportes')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'reportes' ? 'white' : 'transparent', color: pantalla === 'reportes' ? '#0B5FA5' : 'white' }}>Reportes</button>
             </>
           )}
 
-          {/* NUEVA PESTAÑA SOLO PARA JEFE O ADMIN SISTEMA */}
-          {(rol === 'jefe_operaciones' || rol === 'admin_sistema') && (
+          {/* PESTAÑA EXCLUSIVA PARA JEFE DE PROYECTO */}
+          {(rol === 'jefe_proyecto') && (
             <button onClick={() => setPantalla('usuarios')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'usuarios' ? 'white' : 'transparent', color: pantalla === 'usuarios' ? '#0B5FA5' : 'white' }}>Crear Usuarios</button>
           )}
         </div>
@@ -71,12 +71,12 @@ function App() {
       </nav>
 
       <div style={{ paddingTop: '20px' }}>
-        {pantalla === 'lotes' && (rol === 'analista_operaciones' || rol === 'jefe_operaciones') && <RegistroLotes />}
+        {pantalla === 'lotes' && (rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto') && <RegistroLotes />}
         {pantalla === 'admin' && (rol === 'admin_planta') && <RegistroViajes />}
         {pantalla === 'excepciones' && (rol === 'admin_planta') && <Excepciones />}
         {pantalla === 'dashboard' && <Dashboard />}
         {pantalla === 'reportes' && <Reportes />}
-        {pantalla === 'usuarios' && (rol === 'jefe_operaciones' || rol === 'admin_sistema') && <GestionUsuarios />}
+        {pantalla === 'usuarios' && rol === 'jefe_proyecto' && <GestionUsuarios />}
         
         {pantalla === '' && (
           <div style={{ textAlign: 'center', marginTop: '100px', color: '#666' }}>

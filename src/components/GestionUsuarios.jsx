@@ -10,7 +10,6 @@ export default function GestionUsuarios() {
   const [mensaje, setMensaje] = useState('')
   const [cargando, setCargando] = useState(false)
 
-  // Cargar la lista de plantas para el selector
   useEffect(() => {
     async function cargarPlantas() {
       const { data } = await supabase.from('plantas').select('*').order('nombre')
@@ -27,7 +26,6 @@ export default function GestionUsuarios() {
     setCargando(true)
     setMensaje('')
 
-    // Llamamos a la función segura que desplegaste en Supabase
     const { data, error } = await supabase.functions.invoke('crear-usuario', {
       body: {
         email: email,
@@ -64,10 +62,10 @@ export default function GestionUsuarios() {
           <option value="admin_planta">Administrador de Planta</option>
           <option value="analista_operaciones">Analista de Operaciones</option>
           <option value="jefe_operaciones">Jefe de Operaciones</option>
+          <option value="jefe_proyecto">Jefe de Proyecto</option>
           <option value="auditor">Auditor</option>
         </select>
 
-        {/* Solo mostramos el selector de planta si el rol es Administrador de Planta */}
         {rol === 'admin_planta' && (
           <>
             <label style={{ fontWeight: 'bold' }}>Asignar a la Planta:</label>
