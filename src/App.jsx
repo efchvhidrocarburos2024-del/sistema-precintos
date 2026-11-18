@@ -14,12 +14,13 @@ import ForgotPassword from './components/ForgotPassword'
 import ResetPassword from './components/ResetPassword'
 import Conciliacion from './components/Conciliacion'
 import ProyeccionDemanda from './components/ProyeccionDemanda'
+import ListadoPrecintos from './components/ListadoPrecintos' // <-- NUEVO IMPORT
 
 function App() {
   const [sesion, setSesion] = useState(null)
   const [pantalla, setPantalla] = useState('')
   
-  // 1. NUEVO ESTADO PARA EL ROL Y CARGA
+  // ESTADO PARA EL ROL Y CARGA
   const [rol, setRol] = useState(null) 
   const [cargandoRol, setCargandoRol] = useState(true)
 
@@ -44,7 +45,7 @@ function App() {
     return () => authListener.subscription.unsubscribe()
   }, [])
 
-  // 2. NUEVO USEEFFECT: CONSULTAR EL ROL EN LA TABLA USUARIOS
+  // CONSULTAR EL ROL EN LA TABLA USUARIOS
   useEffect(() => {
     if (!sesion) {
       setRol(null)
@@ -54,7 +55,6 @@ function App() {
 
     async function obtenerRolUsuario() {
       setCargandoRol(true)
-      // Consultamos la tabla usuarios y unimos con roles
       const { data, error } = await supabase
         .from('usuarios')
         .select(`
@@ -67,12 +67,11 @@ function App() {
 
       if (error) {
         console.error('Error al obtener rol:', error)
-        setRol('AUDITOR') // Rol por defecto si hay error
+        setRol('auditor') // Rol por defecto si hay error
       } else if (data && data.roles) {
-        // Convertimos a minúsculas para que coincida con las validaciones del menú
         setRol(data.roles.codigo.toLowerCase()) 
       } else {
-        setRol('AUDITOR')
+        setRol('auditor')
       }
       setCargandoRol(false)
     }
@@ -93,7 +92,7 @@ function App() {
     return <Login setPantalla={setPantalla} />
   }
 
-  // Mientras carga el rol desde la base de datos, mostramos un mensaje
+  // Mientras carga el rol desde la base de datos
   if (cargandoRol) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f3f4f6' }}>
@@ -108,12 +107,12 @@ function App() {
         
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           
-          {/* 3. ACTUALIZACIÓN DE PERMISOS: ADMIN_SISTEMA TIENE ACCESO TOTAL */}
-          
+          {/* 1. REGISTRO DE LOTES */}
           {(rol === 'admin_sistema' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto') && (
             <button onClick={() => setPantalla('lotes')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'lotes' ? 'white' : 'transparent', color: pantalla === 'lotes' ? '#0B5FA5' : 'white' }}>Registro de Lotes</button>
           )}
           
+          {/* 2. PANTALLAS DE PLANTA */}
           {(rol === 'admin_sistema' || rol === 'admin_planta') && (
             <>
               <button onClick={() => setPantalla('admin')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'admin' ? 'white' : 'transparent', color: pantalla === 'admin' ? '#0B5FA5' : 'white' }}>Registrar Viajes (SCOP)</button>
@@ -121,7 +120,12 @@ function App() {
             </>
           )}
 
-          {/* Todos pueden ver Dashboard y Reportes */}
+          {/* 3. LISTADO DE PRECINTOS (NUEVO) */}
+          {(rol === 'admin_sistema' || rol === 'admin_planta' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'auditor' || rol === 'jefe_proyecto') && (
+            <button onClick={() => setPantalla('precintos')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'precintos' ? 'white' : 'transparent', color: pantalla === 'precintos' ? '#0B5FA5' : 'white' }}>Precintos</button>
+          )}
+
+          {/* 4. DASHBOARD Y REPORTES */}
           {(rol === 'admin_sistema' || rol === 'auditor' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto' || rol === 'admin_planta') && (
             <>
               <button onClick={() => setPantalla('dashboard')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'dashboard' ? 'white' : 'transparent', color: pantalla === 'dashboard' ? '#0B5FA5' : 'white' }}>Dashboard</button>
@@ -129,17 +133,17 @@ function App() {
             </>
           )}
 
-          {/* Conciliación (Agregado Admin_Sistema) */}
+          {/* 5. CONCILIACIÓN */}
           {(rol === 'admin_sistema' || rol === 'jefe_proyecto' || rol === 'analista_operaciones' || rol === 'jefe_operaciones') && (
             <button onClick={() => setPantalla('conciliacion')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'conciliacion' ? 'white' : 'transparent', color: pantalla === 'conciliacion' ? '#0B5FA5' : 'white' }}>Conciliación</button>
           )}
 
-          {/* Proyección Demanda (Agregado Admin_Sistema) */}
+          {/* 6. PROYECCIÓN DEMANDA */}
           {(rol === 'admin_sistema' || rol === 'jefe_proyecto' || rol === 'jefe_operaciones' || rol === 'analista_operaciones') && (
             <button onClick={() => setPantalla('proyeccion')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'proyeccion' ? 'white' : 'transparent', color: pantalla === 'proyeccion' ? '#0B5FA5' : 'white' }}>Proyección Demanda</button>
           )}
 
-          {/* Crear Usuarios (Cambiado de jefe_proyecto a admin_sistema) */}
+          {/* 7. CREAR USUARIOS */}
           {(rol === 'admin_sistema' || rol === 'jefe_proyecto') && (
             <button onClick={() => setPantalla('usuarios')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'usuarios' ? 'white' : 'transparent', color: pantalla === 'usuarios' ? '#0B5FA5' : 'white' }}>Crear Usuarios</button>
           )}
@@ -155,15 +159,23 @@ function App() {
       </nav>
 
       <div style={{ paddingTop: '20px' }}>
-        {/* 4. VALIDACIÓN DE RENDERIZADO DE COMPONENTES */}
+        {/* RENDERIZADO DE COMPONENTES */}
         {pantalla === 'lotes' && (rol === 'admin_sistema' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto') && <RegistroLotes />}
+        
         {pantalla === 'admin' && (rol === 'admin_sistema' || rol === 'admin_planta') && <RegistroViajes />}
+        
         {pantalla === 'excepciones' && (rol === 'admin_sistema' || rol === 'admin_planta') && <Excepciones />}
+        
+        {/* NUEVO RENDERIZADO DE PRECINTOS */}
+        {pantalla === 'precintos' && (rol === 'admin_sistema' || rol === 'admin_planta' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'auditor' || rol === 'jefe_proyecto') && <ListadoPrecintos />}
+
         {pantalla === 'dashboard' && <Dashboard />}
         {pantalla === 'reportes' && <Reportes />}
+        
         {pantalla === 'usuarios' && (rol === 'admin_sistema' || rol === 'jefe_proyecto') && <GestionUsuarios />}
         
         {pantalla === 'conciliacion' && (rol === 'admin_sistema' || rol === 'jefe_proyecto' || rol === 'analista_operaciones' || rol === 'jefe_operaciones') && <Conciliacion />}
+        
         {pantalla === 'proyeccion' && (rol === 'admin_sistema' || rol === 'jefe_proyecto' || rol === 'jefe_operaciones' || rol === 'analista_operaciones') && <ProyeccionDemanda />}
 
         {pantalla === 'cambiar-password' && <CambiarPassword />}
