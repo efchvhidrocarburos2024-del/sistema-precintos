@@ -30,7 +30,7 @@ export default function GestionUsuarios() {
       body: {
         email: email,
         password: password,
-        rol: rol,
+        rol: rol, // Enviamos el string, la Edge Function buscará el UUID
         id_planta: rol === 'admin_planta' ? idPlanta : null
       }
     })
@@ -63,6 +63,7 @@ export default function GestionUsuarios() {
           <option value="analista_operaciones">Analista de Operaciones</option>
           <option value="jefe_operaciones">Jefe de Operaciones</option>
           <option value="jefe_proyecto">Jefe de Proyecto</option>
+          <option value="admin_sistema">Administrador de Sistema</option>
           <option value="auditor">Auditor</option>
         </select>
 
