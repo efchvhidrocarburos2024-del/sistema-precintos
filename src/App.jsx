@@ -8,17 +8,34 @@ import Dashboard from './components/Dashboard'
 import Reportes from './components/Reportes'
 import GestionUsuarios from './components/GestionUsuarios'
 
+// --- NUEVOS COMPONENTES ---
+import CambiarPassword from './components/CambiarPassword'
+import ForgotPassword from './components/ForgotPassword'
+import ResetPassword from './components/ResetPassword'
+
 function App() {
   const [sesion, setSesion] = useState(null)
   const [pantalla, setPantalla] = useState('')
 
+  // --- LÓGICA PARA DETECTAR ENLACE DE RECUPERACIÓN ---
+  const [esRecuperacion, setEsRecuperacion] = useState(false)
+
   useEffect(() => {
+    // Detectar si el usuario viene de un enlace de correo de Supabase
+    if (window.location.hash.includes('type=recovery') || window.location.search.includes('type=recovery')) {
+      setEsRecuperacion(true)
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSesion(session)
     })
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSesion(session)
+      // Si Supabase procesa el token del correo, quitamos la vista de recuperación
+      if (_event === 'PASSWORD_RECOVERY') {
+        setEsRecuperacion(true)
+      }
     })
 
     return () => authListener.subscription.unsubscribe()
@@ -29,8 +46,18 @@ function App() {
     setPantalla('')
   }
 
+  // --- LÓGICA DE PANTALLAS SIN SESIÓN ---
   if (!sesion) {
-    return <Login />
+    // 1. Si viene de un correo de recuperación, mostramos ResetPassword
+    if (esRecuperacion) {
+      return <ResetPassword />
+    }
+    // 2. Si el usuario hizo clic en "Olvidé mi contraseña" desde el Login
+    if (pantalla === 'forgot') {
+      return <ForgotPassword setPantalla={setPantalla} />
+    }
+    // 3. Si no, mostramos el Login normal (le pasamos setPantalla por si acaso)
+    return <Login setPantalla={setPantalla} />
   }
 
   const rol = sesion.user.user_metadata?.rol || 'auditor'
@@ -58,7 +85,6 @@ function App() {
             </>
           )}
 
-          {/* PESTAÑA EXCLUSIVA PARA JEFE DE PROYECTO */}
           {(rol === 'jefe_proyecto') && (
             <button onClick={() => setPantalla('usuarios')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'usuarios' ? 'white' : 'transparent', color: pantalla === 'usuarios' ? '#0B5FA5' : 'white' }}>Crear Usuarios</button>
           )}
@@ -66,6 +92,10 @@ function App() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', color: 'white', fontSize: '14px' }}>
           <span>👤 {sesion.user.email} ({rol})</span>
+          
+          {/* NUEVO BOTÓN DE CAMBIAR CONTRASEÑA */}
+          <button onClick={() => setPantalla('cambiar-password')} style={{ padding: '8px 12px', background: '#EAB308', color: 'black', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Mi Perfil</button>
+          
           <button onClick={cerrarSesion} style={{ padding: '8px 12px', background: '#DC2626', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Salir</button>
         </div>
       </nav>
@@ -77,6 +107,9 @@ function App() {
         {pantalla === 'dashboard' && <Dashboard />}
         {pantalla === 'reportes' && <Reportes />}
         {pantalla === 'usuarios' && rol === 'jefe_proyecto' && <GestionUsuarios />}
+        
+        {/* NUEVO COMPONENTE EN PANTALLA */}
+        {pantalla === 'cambiar-password' && <CambiarPassword />}
         
         {pantalla === '' && (
           <div style={{ textAlign: 'center', marginTop: '100px', color: '#666' }}>
