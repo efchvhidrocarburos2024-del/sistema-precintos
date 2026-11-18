@@ -9,6 +9,7 @@ export default function RegistroViajes() {
   
   // Estados para manejar plantas y roles
   const [idPlanta, setIdPlanta] = useState('')
+  const [nombrePlanta, setNombrePlanta] = useState('') // <-- NUEVO ESTADO
   const [rol, setRol] = useState('')
   const [plantas, setPlantas] = useState([])
   const [cargandoPerfil, setCargandoPerfil] = useState(true)
@@ -21,12 +22,13 @@ export default function RegistroViajes() {
       const { data: { user } } = await supabase.auth.getUser()
       
       if (user) {
-        // 1. Obtener rol y planta del usuario desde la tabla pública
+        // 1. Obtener rol y planta del usuario desde la tabla pública (hacemos JOIN con plantas)
         const { data: usuarioData } = await supabase
           .from('usuarios')
           .select(`
             id_planta,
-            roles ( codigo )
+            roles ( codigo ),
+            plantas ( nombre )
           `)
           .eq('id_usuario', user.id)
           .single()
@@ -40,14 +42,16 @@ export default function RegistroViajes() {
             const { data: todasPlantas } = await supabase.from('plantas').select('id_planta, nombre').order('nombre')
             if (todasPlantas) {
               setPlantas(todasPlantas)
-              // Por defecto seleccionamos la planta que tenga asignada, o la primera de la lista
               setIdPlanta(usuarioData.id_planta || todasPlantas[0]?.id_planta || '')
+              setNombrePlanta(usuarioData.plantas?.nombre || todasPlantas[0]?.nombre || '')
             }
           } else {
-            // 3. Si es admin_planta u otro rol, usamos su planta asignada
-            setIdPlanta(usuarioData.id_planta || '')
-            // Si no tiene planta en la BD, intentamos adivinarla por el correo (Fallback)
-            if (!usuarioData.id_planta) {
+            // 3. Si es admin_planta, usamos su planta asignada
+            if (usuarioData.id_planta) {
+              setIdPlanta(usuarioData.id_planta)
+              setNombrePlanta(usuarioData.plantas?.nombre || 'Planta Asignada')
+            } else {
+              // Fallback: intentamos adivinarla por el correo
               const prefijoCorreo = user.email.split('@')[0].replace('planta.', '').toLowerCase()
               const { data: matchPlanta } = await supabase
                 .from('plantas')
@@ -57,6 +61,7 @@ export default function RegistroViajes() {
               
               if (matchPlanta && matchPlanta.length > 0) {
                 setIdPlanta(matchPlanta[0].id_planta)
+                setNombrePlanta(matchPlanta[0].nombre)
               }
             }
           }
@@ -66,6 +71,14 @@ export default function RegistroViajes() {
     }
     obtenerPerfilUsuario()
   }, [])
+
+  // Cuando el admin global cambia de planta en el select, actualizamos el nombre
+  const handlePlantaChange = (e) => {
+    const nuevaId = e.target.value
+    setIdPlanta(nuevaId)
+    const plantaSeleccionada = plantas.find(p => p.id_planta === nuevaId)
+    if (plantaSeleccionada) setNombrePlanta(plantaSeleccionada.nombre)
+  }
 
   const registrarViaje = async (e) => {
     e.preventDefault()
@@ -107,7 +120,7 @@ export default function RegistroViajes() {
     return (
       <div style={{ maxWidth: '400px', margin: '20px auto', padding: '20px', textAlign: 'center', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.1)' }}>
         <h3 style={{ color: '#DC2626' }}>⚠️ Sin Planta Asignada</h3>
-        <p style={{ color: '#666' }}>Tu usuario no tiene una planta vinculada. Contacta al Administrador del Sistema para que asigne tu planta.</p>
+        <p style={{ color: '#666' }}>Tu usuario no tiene una planta vinculada. Contacta al Administrador del Sistema para que asigne tu planta en el panel de usuarios.</p>
       </div>
     )
   }
@@ -124,7 +137,7 @@ export default function RegistroViajes() {
             <label style={{ fontWeight: 'bold' }}>Seleccionar Planta:</label>
             <select 
               value={idPlanta} 
-              onChange={(e) => setIdPlanta(e.target.value)} 
+              onChange={handlePlantaChange} 
               required 
               style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: 'white', color: 'black' }}
             >
@@ -134,8 +147,8 @@ export default function RegistroViajes() {
             </select>
           </>
         ) : (
-          <p style={{ color: '#0B5FA5', fontSize: '14px', textAlign: 'center', fontWeight: 'bold', margin: '0 0 10px 0' }}>
-            Planta: {plantas.find(p => p.id_planta === idPlanta)?.nombre || 'Cargando...'}
+          <p style={{ color: '#0B5FA5', fontSize: '15px', textAlign: 'center', fontWeight: 'bold', margin: '0 0 10px 0', padding: '10px', backgroundColor: '#eef6ff', borderRadius: '4px' }}>
+            Planta: {nombrePlanta}
           </p>
         )}
 
