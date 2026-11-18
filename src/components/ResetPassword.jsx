@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
+import { Card, Input, Boton } from "./ui";
 
 export default function ResetPassword() {
   const [nueva, setNueva] = useState("");
@@ -33,7 +34,7 @@ export default function ResetPassword() {
       setMsg({ tipo: "ok", texto: "✅ Contraseña actualizada. Redirigiendo..." });
       // Al recargar la página, App.jsx leerá que ya hay sesión y mostrará el Dashboard
       setTimeout(() => {
-        window.location.href = '/'; 
+        window.location.href = '/';
       }, 2000);
     }
   }
@@ -41,20 +42,54 @@ export default function ResetPassword() {
   if (!listo) {
     return (
       <div style={{ maxWidth: '400px', margin: '50px auto', textAlign: 'center' }}>
-        <p>Verificando enlace...</p>
+        <p style={{ color: 'var(--text-light)' }}>Verificando enlace...</p>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 'bold', textAlign: 'center' }}>Crear nueva contraseña</h1>
-        <input type="password" placeholder="Nueva contraseña" value={nueva} onChange={(e) => setNueva(e.target.value)} required style={{ padding: '10px', border: '1px solid #ccc', borderRadius: '4px' }} />
-        <input type="password" placeholder="Confirmar contraseña" value={confirmar} onChange={(e) => setConfirmar(e.target.value)} required style={{ padding: '10px', border: '1px solid #ccc', borderRadius: '4px' }} />
-        {msg && <p style={{ color: msg.tipo === "ok" ? "green" : "red", textAlign: 'center' }}>{msg.texto}</p>}
-        <button type="submit" style={{ padding: '10px', backgroundColor: '#0B5FA5', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Guardar contraseña</button>
-      </form>
+    <div style={{ maxWidth: '400px', margin: '50px auto' }}>
+      <Card>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <h1 style={{ fontSize: '20px', fontWeight: 'bold', textAlign: 'center', color: 'var(--text-dark)', margin: 0 }}>
+            Crear nueva contraseña
+          </h1>
+
+          <Input
+            type="password"
+            placeholder="Nueva contraseña"
+            value={nueva}
+            onChange={(e) => setNueva(e.target.value)}
+            required
+            label={null}
+          />
+
+          <Input
+            type="password"
+            placeholder="Confirmar contraseña"
+            value={confirmar}
+            onChange={(e) => setConfirmar(e.target.value)}
+            required
+            label={null}
+          />
+
+          {msg && (
+            <p style={{
+              color: msg.tipo === "ok" ? 'var(--success-green, #16A34A)' : 'var(--danger-red, #DC2626)',
+              textAlign: 'center',
+              margin: 0,
+              fontSize: '14px',
+              fontWeight: 'bold'
+            }}>
+              {msg.texto}
+            </p>
+          )}
+
+          <Boton tipo="submit" variante="primary">
+            Guardar contraseña
+          </Boton>
+        </form>
+      </Card>
     </div>
   );
 }
