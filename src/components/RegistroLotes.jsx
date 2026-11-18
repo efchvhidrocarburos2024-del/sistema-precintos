@@ -6,6 +6,10 @@ export default function RegistroLotes() {
   const [idPlanta, setIdPlanta] = useState('')
   const [inicio, setInicio] = useState('')
   const [fin, setFin] = useState('')
+  // Nuevos estados para los campos adicionales
+  const [valorSinIgv, setValorSinIgv] = useState('')
+  const [color, setColor] = useState('')
+  
   const [mensaje, setMensaje] = useState('')
   const [cargando, setCargando] = useState(false)
 
@@ -25,18 +29,24 @@ export default function RegistroLotes() {
     setCargando(true)
     setMensaje('')
 
+    // Actualizamos la llamada RPC enviando los 5 parámetros
     const { data, error } = await supabase.rpc('fn_registrar_lote_precintos', {
       p_id_planta: idPlanta,
-      p_correlativo_inicio: inicio,
-      p_correlativo_fin: fin
+      p_correlativo_inicio: parseInt(inicio),
+      p_correlativo_fin: parseInt(fin),
+      p_valor_sin_igv: parseFloat(valorSinIgv),
+      p_color: color
     })
 
     if (error) {
       setMensaje('❌ Error: ' + error.message)
     } else {
       setMensaje(`✅ ¡Éxito! Se registraron ${data} precintos.`)
+      // Limpiamos los campos después del registro
       setInicio('')
       setFin('')
+      setValorSinIgv('')
+      setColor('')
     }
     setCargando(false)
   }
@@ -62,6 +72,14 @@ export default function RegistroLotes() {
 
         <label style={{ fontWeight: 'bold' }}>Correlativo Fin (AL):</label>
         <input type="number" value={fin} onChange={(e) => setFin(e.target.value)} required style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
+
+        {/* --- NUEVOS CAMPOS --- */}
+        <label style={{ fontWeight: 'bold' }}>Valor sin IGV (S/):</label>
+        <input type="number" step="0.01" min="0" value={valorSinIgv} onChange={(e) => setValorSinIgv(e.target.value)} required placeholder="Ej. 1.50" style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
+
+        <label style={{ fontWeight: 'bold' }}>Color:</label>
+        <input type="text" value={color} onChange={(e) => setColor(e.target.value)} required placeholder="Ej. Rojo" style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
+        {/* --------------------- */}
 
         <button type="submit" disabled={cargando} style={{ padding: '12px', background: '#0B5FA5', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', marginTop: '10px' }}>
           {cargando ? 'Guardando...' : 'Guardar en Sistema'}
