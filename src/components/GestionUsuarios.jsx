@@ -93,7 +93,7 @@ export default function GestionUsuarios() {
         cargarDatos()
       }
     } else {
-      // CREAR NUEVO USUARIO (Usando la función anterior)
+      // CREAR NUEVO USUARIO
       if (!password) {
         toast.error("La contraseña es obligatoria para nuevos usuarios")
         setGuardando(false)
@@ -113,6 +113,24 @@ export default function GestionUsuarios() {
         toast.error(data?.error || error.message)
       } else {
         toast.success(`Usuario ${email} creado con éxito.`)
+        
+        // --- NUEVA LÓGICA: ENVIAR CREDENCIALES POR CORREO ---
+        try {
+          await supabase.functions.invoke('enviar-credenciales', {
+            body: {
+              email: email,
+              nombre: nombre,
+              password: password,
+              rol: rol // Enviamos el rol para que se vea en el correo
+            }
+          })
+          toast.success('Credenciales enviadas por correo exitosamente')
+        } catch (err) {
+          console.error('Error al enviar credenciales:', err)
+          toast.error('Usuario creado, pero no se pudo enviar el correo.')
+        }
+        // ----------------------------------------------------
+
         limpiarFormulario()
         cargarDatos()
       }
