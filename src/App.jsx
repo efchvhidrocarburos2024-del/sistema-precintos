@@ -18,6 +18,7 @@ import ProyeccionDemanda from './components/ProyeccionDemanda'
 import ListadoPrecintos from './components/ListadoPrecintos'
 import Bitacora from './components/Bitacora'
 import GestionPlantas from './components/GestionPlantas'
+import PanelRespaldos from './components/PanelRespaldos' // <-- NUEVO IMPORT
 
 // CONSTANTES DE TIEMPO (En milisegundos)
 const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000; // 1 Hora (3600000 ms)
@@ -98,12 +99,10 @@ function App() {
     
     setMostrarAviso(false)
 
-    // Temporizador para mostrar el aviso (a los 58 minutos)
     avisoTimerRef.current = setTimeout(() => {
       setMostrarAviso(true)
     }, TIEMPO_DE_AVISO)
 
-    // Temporizador para cerrar sesión definitivamente (a los 60 minutos)
     timerRef.current = setTimeout(() => {
       cerrarSesion()
       toast.error("Sesión cerrada por inactividad")
@@ -111,22 +110,17 @@ function App() {
   }, [cerrarSesion])
 
   useEffect(() => {
-    // Solo activamos el temporizador si hay una sesión iniciada y no estamos en la pantalla de aviso
     if (!sesion) return
 
     const eventos = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll']
     
     const manejarActividad = () => {
-      // Si el aviso está en pantalla, no reiniciamos el tiempo con el movimiento. 
-      // El usuario debe hacer clic en el botón para reiniciar.
       if (!mostrarAviso) {
         reiniciarTemporizador()
       }
     }
 
     eventos.forEach(evento => window.addEventListener(evento, manejarActividad))
-    
-    // Iniciar temporizador por primera vez
     reiniciarTemporizador()
 
     return () => {
@@ -252,7 +246,12 @@ function App() {
           )}
 
           {(rol === 'admin_sistema') && (
-            <button onClick={() => navegar('plantas')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'plantas' ? 'white' : 'transparent', color: pantalla === 'plantas' ? '#0B5FA5' : 'white' }}>Config. Plantas</button>
+            <>
+              <button onClick={() => navegar('plantas')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'plantas' ? 'white' : 'transparent', color: pantalla === 'plantas' ? '#0B5FA5' : 'white' }}>Config. Plantas</button>
+              
+              {/* NUEVO BOTÓN: RESPALDOS */}
+              <button onClick={() => navegar('respaldos')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'respaldos' ? 'white' : 'transparent', color: pantalla === 'respaldos' ? '#0B5FA5' : 'white' }}>Respaldos</button>
+            </>
           )}
         </div>
 
@@ -279,6 +278,9 @@ function App() {
         {pantalla === 'proyeccion' && (rol === 'admin_sistema' || rol === 'jefe_proyecto' || rol === 'jefe_operaciones' || rol === 'analista_operaciones') && <ProyeccionDemanda />}
         {pantalla === 'cambiar-password' && <CambiarPassword />}
         {pantalla === 'plantas' && rol === 'admin_sistema' && <GestionPlantas />}
+        
+        {/* NUEVO RENDERIZADO: RESPALDOS */}
+        {pantalla === 'respaldos' && rol === 'admin_sistema' && <PanelRespaldos />}
 
         {pantalla === '' && (
           <div style={{ textAlign: 'center', marginTop: '100px', color: '#666', padding: '0 20px' }}>
