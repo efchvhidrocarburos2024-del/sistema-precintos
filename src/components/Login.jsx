@@ -26,23 +26,35 @@ export default function Login({ setPantalla }) {
 
   return (
     <div className="auth-wrapper">
-      <div style={{ width: '100%', maxWidth: '380px' }}>
-        <h2 style={{
-          textAlign: 'center',
-          color: 'var(--primary-blue)',
-          marginBottom: '8px',
-          fontSize: '24px'
-        }}>
-          Sistema de Precintos
-        </h2>
-        <p style={{
-          textAlign: 'center',
-          color: 'var(--text-light)',
-          fontSize: '14px',
-          marginBottom: '25px'
-        }}>
-          Ingresa tus credenciales
-        </p>
+      <div style={{ width: '100%', maxWidth: '400px' }}>
+        
+        {/* NUEVA CABECERA SIGMO */}
+        <div style={{ textAlign: 'center', marginBottom: '25px' }}>
+          <h1 style={{
+            color: 'var(--primary-blue)',
+            margin: '0 0 5px 0',
+            fontSize: '36px',
+            fontWeight: '900',
+            letterSpacing: '1.5px'
+          }}>
+            SIGMO
+          </h1>
+          <p style={{
+            color: 'var(--text-dark)',
+            fontSize: '16px',
+            fontWeight: '600',
+            margin: '0 0 5px 0'
+          }}>
+            Sistema de Gestión Modular
+          </p>
+          <p style={{
+            color: 'var(--text-light)',
+            fontSize: '14px',
+            margin: 0
+          }}>
+            Ingresa tus credenciales para acceder
+          </p>
+        </div>
 
         <Card>
           <form onSubmit={iniciarSesion}>
@@ -70,7 +82,7 @@ export default function Login({ setPantalla }) {
               disabled={cargando}
               style={{ width: '100%', marginTop: '8px' }}
             >
-              {cargando ? 'Ingresando...' : 'Iniciar Sesión'}
+              {cargando ? 'Ingresando...' : 'Iniciar Sesión en SIGMO'}
             </Boton>
           </form>
 

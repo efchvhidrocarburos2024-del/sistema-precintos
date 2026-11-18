@@ -2,8 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from './supabase'
 import { Toaster } from 'react-hot-toast'
 import toast from 'react-hot-toast'
-import './App.css' // <-- IMPORTAMOS EL CSS GLOBAL
+import './App.css'
 
+// Importación de todos los componentes del módulo de Precintos
 import Login from './components/Login'
 import RegistroLotes from './components/RegistroLotes'
 import RegistroViajes from './components/RegistroViajes'
@@ -24,9 +25,86 @@ import PanelRespaldos from './components/PanelRespaldos'
 const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000;
 const TIEMPO_DE_AVISO = TIEMPO_INACTIVIDAD_TOTAL - (2 * 60 * 1000);
 
+// ============================================================================
+// COMPONENTE: LOBBY DE MÓDULOS (Pantalla Principal SIGMO)
+// ============================================================================
+function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
+  return (
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
+      {/* Cabecera del Lobby */}
+      <header style={{ padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+        <div>
+          <h1 style={{ margin: 0, color: 'var(--primary-blue)', fontSize: '32px', fontWeight: '900', letterSpacing: '1.5px' }}>SIGMO</h1>
+          <span style={{ color: 'var(--text-light)', fontSize: '14px', fontWeight: '500' }}>Sistema de Gestión Modular</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <span style={{ color: 'var(--text-dark)', fontWeight: '600', fontSize: '14px' }}>👤 {sesion.user.email} ({rol?.toUpperCase() || 'SIN ROL'})</span>
+          <button onClick={cerrarSesion} style={{ padding: '8px 16px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', color: '#374151' }}>
+            Cerrar Sesión
+          </button>
+        </div>
+      </header>
+
+      {/* Contenido del Lobby */}
+      <main style={{ flex: 1, padding: '60px 20px', maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
+        <div style={{ textAlign: 'center', marginBottom: '50px' }}>
+          <h2 style={{ color: 'var(--text-dark)', fontSize: '28px', marginBottom: '10px' }}>Bienvenido a tu plataforma</h2>
+          <p style={{ color: 'var(--text-light)', fontSize: '16px' }}>Selecciona el módulo que deseas administrar</p>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '25px' }}>
+          
+          {/* MÓDULO ACTIVO: Precintos */}
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '30px', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '2px solid var(--primary-blue)' }}>
+            <div style={{ fontSize: '50px', marginBottom: '15px' }}>📦</div>
+            <h3 style={{ color: 'var(--primary-blue)', marginBottom: '15px', fontSize: '20px' }}>Gestión de Precintos</h3>
+            <p style={{ color: 'var(--text-light)', marginBottom: '25px', fontSize: '14px', lineHeight: '1.5' }}>
+              Control de viajes, SCOP, inventario de plantas y reportes operativos.
+            </p>
+            <button 
+              onClick={() => setPantalla('dashboard')} 
+              style={{ width: '100%', padding: '12px', borderRadius: '6px', border: 'none', background: 'var(--primary-blue)', color: 'white', fontWeight: 'bold', cursor: 'pointer', fontSize: '15px' }}
+            >
+              Entrar al Módulo
+            </button>
+          </div>
+
+          {/* MÓDULO FUTURO 1 (Bloqueado) */}
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '30px', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', opacity: 0.6 }}>
+            <div style={{ fontSize: '50px', marginBottom: '15px' }}>🚚</div>
+            <h3 style={{ color: 'var(--text-dark)', marginBottom: '15px', fontSize: '20px' }}>Gestión de Flota</h3>
+            <p style={{ color: 'var(--text-light)', marginBottom: '25px', fontSize: '14px', lineHeight: '1.5' }}>
+              Control de vehículos, rutas y conductores.
+            </p>
+            <button disabled style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #ccc', background: '#f3f4f6', color: '#9ca3af', fontWeight: 'bold', fontSize: '15px', cursor: 'not-allowed' }}>
+              Próximamente
+            </button>
+          </div>
+
+          {/* MÓDULO FUTURO 2 (Bloqueado) */}
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '30px', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', opacity: 0.6 }}>
+            <div style={{ fontSize: '50px', marginBottom: '15px' }}>📊</div>
+            <h3 style={{ color: 'var(--text-dark)', marginBottom: '15px', fontSize: '20px' }}>Business Intelligence</h3>
+            <p style={{ color: 'var(--text-light)', marginBottom: '25px', fontSize: '14px', lineHeight: '1.5' }}>
+              Dashboards avanzados, KPIs y reportes gerenciales.
+            </p>
+            <button disabled style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #ccc', background: '#f3f4f6', color: '#9ca3af', fontWeight: 'bold', fontSize: '15px', cursor: 'not-allowed' }}>
+              Próximamente
+            </button>
+          </div>
+
+        </div>
+      </main>
+    </div>
+  )
+}
+
+// ============================================================================
+// COMPONENTE PRINCIPAL: APP
+// ============================================================================
 function App() {
   const [sesion, setSesion] = useState(null)
-  const [pantalla, setPantalla] = useState('')
+  const [pantalla, setPantalla] = useState('') // '' = Lobby (SIGMO), 'dashboard' = Precintos
   const [rol, setRol] = useState(null) 
   const [permisos, setPermisos] = useState([])
   const [cargandoRol, setCargandoRol] = useState(true)
@@ -37,7 +115,7 @@ function App() {
   const timerRef = useRef(null)
   const avisoTimerRef = useRef(null)
 
-  // ... (Lógica de autenticación y roles se mantiene igual) ...
+  // Lógica de Autenticación
   useEffect(() => {
     if (window.location.hash.includes('type=recovery') || window.location.search.includes('type=recovery')) {
       setEsRecuperacion(true)
@@ -57,6 +135,7 @@ function App() {
     return () => authListener.subscription.unsubscribe()
   }, [])
 
+  // Lógica de Roles y Permisos
   useEffect(() => {
     if (!sesion) {
       setRol(null)
@@ -90,9 +169,10 @@ function App() {
     obtenerRolUsuario()
   }, [sesion])
 
+  // Lógica de Inactividad
   const cerrarSesion = useCallback(async () => {
     await supabase.auth.signOut()
-    setPantalla('')
+    setPantalla('') // Al salir, volvemos al lobby (que redirigirá al Login)
     setRol(null)
     setPermisos([])
     setMostrarAviso(false)
@@ -133,6 +213,7 @@ function App() {
     }
   }, [sesion, mostrarAviso, reiniciarTemporizador])
 
+  // Funciones de Navegación
   const navegar = (pantallaDestino) => {
     setPantalla(pantallaDestino)
     setMenuAbierto(false)
@@ -144,12 +225,14 @@ function App() {
     return false
   }
 
+  // --- VISTAS PÚBLICAS (SIN SESIÓN) ---
   if (!sesion) {
     if (esRecuperacion) return <ResetPassword />
     if (pantalla === 'forgot') return <ForgotPassword setPantalla={setPantalla} />
     return <Login setPantalla={setPantalla} />
   }
 
+  // --- PANTALLA DE CARGA ---
   if (cargandoRol) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f3f4f6' }}>
@@ -158,6 +241,30 @@ function App() {
     )
   }
 
+  // --- VISTA LOBBY (SIGMO) ---
+  // Si no hay una pantalla seleccionada, mostramos el lobby de módulos
+  if (pantalla === '') {
+    return (
+      <>
+        <Toaster position="top-right" toastOptions={{ duration: 4000, style: { fontWeight: 'bold' } }} />
+        {mostrarAviso && (
+          <div className="modal-overlay">
+            <div className="modal-content">
+              <h2 style={{ color: 'var(--danger-red)', marginTop: 0 }}>⚠️ Sesión a punto de expirar</h2>
+              <p style={{ color: 'var(--text-dark)', marginBottom: '25px', fontSize: '15px' }}>Tu sesión se cerrará en <strong>2 minutos</strong>.</p>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={reiniciarTemporizador} style={{ padding: '10px', background: 'var(--primary-green)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flex: 1 }}>Mantener sesión</button>
+                <button onClick={cerrarSesion} style={{ padding: '10px', background: '#6B7280', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flex: 1 }}>Cerrar ahora</button>
+              </div>
+            </div>
+          </div>
+        )}
+        <LobbyModulos sesion={sesion} cerrarSesion={cerrarSesion} setPantalla={setPantalla} rol={rol} />
+      </>
+    )
+  }
+
+  // --- VISTA DEL MÓDULO DE PRECINTOS (APP ACTUAL) ---
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
       
@@ -182,9 +289,19 @@ function App() {
         </div>
       )}
 
-      {/* NAVEGACIÓN CON CLASES CSS */}
+      {/* NAVEGACIÓN DEL MÓDULO PRECINTOS */}
       <nav className="nav-container">
-        <div className="nav-logo">Petroamérica</div>
+        {/* LOGO Y BOTÓN VOLVER */}
+        <div className="nav-logo" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button 
+            onClick={() => navegar('')} 
+            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+            title="Volver al menú de módulos de SIGMO"
+          >
+            ← SIGMO
+          </button>
+          <span style={{ fontSize: '18px', fontWeight: 'bold', color: 'white' }}>Precintos</span>
+        </div>
         
         <button className="btn-menu" onClick={() => setMenuAbierto(!menuAbierto)}>
           {menuAbierto ? '✕' : '☰'}
@@ -250,7 +367,7 @@ function App() {
       </nav>
 
       <div style={{ paddingTop: '20px', paddingBottom: '40px' }}>
-        {/* RENDERIZADO DE COMPONENTES */}
+        {/* RENDERIZADO DE COMPONENTES DEL MÓDULO */}
         {pantalla === 'lotes' && tienePermiso('lotes', ['admin_sistema', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto']) && <RegistroLotes />}
         {pantalla === 'admin' && tienePermiso('viajes', ['admin_sistema', 'admin_planta']) && <RegistroViajes />}
         {pantalla === 'excepciones' && tienePermiso('viajes', ['admin_sistema', 'admin_planta']) && <Excepciones />}
@@ -265,12 +382,6 @@ function App() {
         {pantalla === 'plantas' && tienePermiso('plantas', ['admin_sistema']) && <GestionPlantas />}
         {pantalla === 'respaldos' && tienePermiso('respaldos', ['admin_sistema']) && <PanelRespaldos />}
 
-        {pantalla === '' && (
-          <div style={{ textAlign: 'center', marginTop: '100px', color: 'var(--text-light)', padding: '0 20px' }}>
-            <h2>Bienvenido al Sistema de Precintos</h2>
-            <p>Selecciona una opción en el menú superior para comenzar.</p>
-          </div>
-        )}
       </div>
     </div>
   )
