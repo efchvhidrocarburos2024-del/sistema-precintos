@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from './supabase'
 import { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 
 import Login from './components/Login'
 import RegistroLotes from './components/RegistroLotes'
@@ -16,7 +17,11 @@ import Conciliacion from './components/Conciliacion'
 import ProyeccionDemanda from './components/ProyeccionDemanda'
 import ListadoPrecintos from './components/ListadoPrecintos'
 import Bitacora from './components/Bitacora'
-import GestionPlantas from './components/GestionPlantas' // <-- NUEVO IMPORT
+import GestionPlantas from './components/GestionPlantas'
+
+// CONSTANTES DE TIEMPO (En milisegundos)
+const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000; // 1 Hora (3600000 ms)
+const TIEMPO_DE_AVISO = TIEMPO_INACTIVIDAD_TOTAL - (2 * 60 * 1000); // Avisar 2 minutos antes
 
 function App() {
   const [sesion, setSesion] = useState(null)
@@ -25,6 +30,11 @@ function App() {
   const [cargandoRol, setCargandoRol] = useState(true)
   const [esRecuperacion, setEsRecuperacion] = useState(false)
   const [menuAbierto, setMenuAbierto] = useState(false)
+
+  // ESTADOS Y REFERENCIAS PARA EL AUTO-CIERRE DE SESIÓN
+  const [mostrarAviso, setMostrarAviso] = useState(false)
+  const timerRef = useRef(null)
+  const avisoTimerRef = useRef(null)
 
   useEffect(() => {
     if (window.location.hash.includes('type=recovery') || window.location.search.includes('type=recovery')) {
@@ -74,11 +84,57 @@ function App() {
     obtenerRolUsuario()
   }, [sesion])
 
-  const cerrarSesion = async () => {
+  const cerrarSesion = useCallback(async () => {
     await supabase.auth.signOut()
     setPantalla('')
     setRol(null)
-  }
+    setMostrarAviso(false)
+  }, [])
+
+  // --- LÓGICA DE INACTIVIDAD ---
+  const reiniciarTemporizador = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (avisoTimerRef.current) clearTimeout(avisoTimerRef.current)
+    
+    setMostrarAviso(false)
+
+    // Temporizador para mostrar el aviso (a los 58 minutos)
+    avisoTimerRef.current = setTimeout(() => {
+      setMostrarAviso(true)
+    }, TIEMPO_DE_AVISO)
+
+    // Temporizador para cerrar sesión definitivamente (a los 60 minutos)
+    timerRef.current = setTimeout(() => {
+      cerrarSesion()
+      toast.error("Sesión cerrada por inactividad")
+    }, TIEMPO_INACTIVIDAD_TOTAL)
+  }, [cerrarSesion])
+
+  useEffect(() => {
+    // Solo activamos el temporizador si hay una sesión iniciada y no estamos en la pantalla de aviso
+    if (!sesion) return
+
+    const eventos = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll']
+    
+    const manejarActividad = () => {
+      // Si el aviso está en pantalla, no reiniciamos el tiempo con el movimiento. 
+      // El usuario debe hacer clic en el botón para reiniciar.
+      if (!mostrarAviso) {
+        reiniciarTemporizador()
+      }
+    }
+
+    eventos.forEach(evento => window.addEventListener(evento, manejarActividad))
+    
+    // Iniciar temporizador por primera vez
+    reiniciarTemporizador()
+
+    return () => {
+      eventos.forEach(evento => window.removeEventListener(evento, manejarActividad))
+      if (timerRef.current) clearTimeout(timerRef.current)
+      if (avisoTimerRef.current) clearTimeout(avisoTimerRef.current)
+    }
+  }, [sesion, mostrarAviso, reiniciarTemporizador])
 
   const navegar = (pantallaDestino) => {
     setPantalla(pantallaDestino)
@@ -107,6 +163,10 @@ function App() {
         .nav-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
         .user-info { display: flex; align-items: center; gap: 15px; color: white; font-size: 14px; }
         .btn-menu { display: none; background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
+        
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .modal-content { background: white; padding: 30px; border-radius: 8px; max-width: 400px; width: 90%; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+
         @media (max-width: 900px) {
           .nav-container { padding: 10px 15px; }
           .nav-buttons { display: none; width: 100%; flex-direction: column; margin-top: 15px; gap: 5px; }
@@ -119,6 +179,32 @@ function App() {
 
       <Toaster position="top-right" toastOptions={{ duration: 4000, style: { fontWeight: 'bold' } }} />
 
+      {/* MODAL DE AVISO DE INACTIVIDAD */}
+      {mostrarAviso && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h2 style={{ color: '#DC2626', marginTop: 0 }}>⚠️ Sesión a punto de expirar</h2>
+            <p style={{ color: '#444', marginBottom: '25px', fontSize: '15px' }}>
+              Tu sesión se cerrará automáticamente en <strong>2 minutos</strong> por inactividad. ¿Deseas mantenerla abierta?
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button 
+                onClick={reiniciarTemporizador} 
+                style={{ padding: '12px 20px', background: '#16A34A', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', flex: 1 }}
+              >
+                Sí, mantener sesión
+              </button>
+              <button 
+                onClick={cerrarSesion} 
+                style={{ padding: '12px 20px', background: '#6B7280', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', flex: 1 }}
+              >
+                Cerrar ahora
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <nav className="nav-container">
         <div style={{ color: 'white', fontWeight: 'bold', fontSize: '18px' }}>Petroamérica</div>
         
@@ -127,7 +213,6 @@ function App() {
         </button>
 
         <div className={`nav-buttons ${menuAbierto ? 'abierto' : ''}`}>
-          
           {(rol === 'admin_sistema' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto') && (
             <button onClick={() => navegar('lotes')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'lotes' ? 'white' : 'transparent', color: pantalla === 'lotes' ? '#0B5FA5' : 'white' }}>Registro de Lotes</button>
           )}
@@ -163,10 +248,9 @@ function App() {
           )}
 
           {(rol === 'admin_sistema' || rol === 'jefe_proyecto') && (
-            <button onClick={() => navegar('usuarios')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'usuarios' ? 'white' : 'transparent', color: pantalla === 'usuarios' ? '#0B5FA5' : 'white' }}>Crear Usuarios</button>
+            <button onClick={() => navegar('usuarios')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'usuarios' ? 'white' : 'transparent', color: pantalla === 'usuarios' ? '#0B5FA5' : 'white' }}>Administrar Usuarios</button>
           )}
 
-          {/* NUEVO BOTÓN: CONFIGURACIÓN PLANTAS (SOLO ADMIN SISTEMA) */}
           {(rol === 'admin_sistema') && (
             <button onClick={() => navegar('plantas')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'plantas' ? 'white' : 'transparent', color: pantalla === 'plantas' ? '#0B5FA5' : 'white' }}>Config. Plantas</button>
           )}
@@ -194,8 +278,6 @@ function App() {
         {pantalla === 'conciliacion' && (rol === 'admin_sistema' || rol === 'jefe_proyecto' || rol === 'analista_operaciones' || rol === 'jefe_operaciones') && <Conciliacion />}
         {pantalla === 'proyeccion' && (rol === 'admin_sistema' || rol === 'jefe_proyecto' || rol === 'jefe_operaciones' || rol === 'analista_operaciones') && <ProyeccionDemanda />}
         {pantalla === 'cambiar-password' && <CambiarPassword />}
-        
-        {/* NUEVO RENDERIZADO: CONFIGURACIÓN PLANTAS */}
         {pantalla === 'plantas' && rol === 'admin_sistema' && <GestionPlantas />}
 
         {pantalla === '' && (
