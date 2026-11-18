@@ -16,6 +16,7 @@ import Conciliacion from './components/Conciliacion'
 import ProyeccionDemanda from './components/ProyeccionDemanda'
 import ListadoPrecintos from './components/ListadoPrecintos'
 import Bitacora from './components/Bitacora'
+import GestionPlantas from './components/GestionPlantas' // <-- NUEVO IMPORT
 
 function App() {
   const [sesion, setSesion] = useState(null)
@@ -23,8 +24,6 @@ function App() {
   const [rol, setRol] = useState(null) 
   const [cargandoRol, setCargandoRol] = useState(true)
   const [esRecuperacion, setEsRecuperacion] = useState(false)
-  
-  // ESTADO PARA EL MENÚ MÓVIL
   const [menuAbierto, setMenuAbierto] = useState(false)
 
   useEffect(() => {
@@ -83,7 +82,7 @@ function App() {
 
   const navegar = (pantallaDestino) => {
     setPantalla(pantallaDestino)
-    setMenuAbierto(false) // Cierra el menú al hacer clic en una opción en móvil
+    setMenuAbierto(false)
   }
 
   if (!sesion) {
@@ -103,14 +102,11 @@ function App() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6' }}>
       
-      {/* ESTILOS RESPONSIVOS GLOBALES */}
       <style>{`
         .nav-container { display: flex; justify-content: space-between; align-items: center; padding: 15px 30px; background-color: #0B5FA5; flex-wrap: wrap; }
         .nav-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
         .user-info { display: flex; align-items: center; gap: 15px; color: white; font-size: 14px; }
         .btn-menu { display: none; background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
-        
-        /* DISEÑO PARA CELULARES Y TABLETS */
         @media (max-width: 900px) {
           .nav-container { padding: 10px 15px; }
           .nav-buttons { display: none; width: 100%; flex-direction: column; margin-top: 15px; gap: 5px; }
@@ -124,18 +120,12 @@ function App() {
       <Toaster position="top-right" toastOptions={{ duration: 4000, style: { fontWeight: 'bold' } }} />
 
       <nav className="nav-container">
+        <div style={{ color: 'white', fontWeight: 'bold', fontSize: '18px' }}>Petroamérica</div>
         
-        {/* LOGO O TÍTULO PARA MÓVIL */}
-        <div style={{ color: 'white', fontWeight: 'bold', fontSize: '18px' }}>
-          Petroamérica
-        </div>
-
-        {/* BOTÓN HAMBURGUESA */}
         <button className="btn-menu" onClick={() => setMenuAbierto(!menuAbierto)}>
           {menuAbierto ? '✕' : '☰'}
         </button>
 
-        {/* BOTONES DEL MENÚ */}
         <div className={`nav-buttons ${menuAbierto ? 'abierto' : ''}`}>
           
           {(rol === 'admin_sistema' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto') && (
@@ -175,9 +165,13 @@ function App() {
           {(rol === 'admin_sistema' || rol === 'jefe_proyecto') && (
             <button onClick={() => navegar('usuarios')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'usuarios' ? 'white' : 'transparent', color: pantalla === 'usuarios' ? '#0B5FA5' : 'white' }}>Crear Usuarios</button>
           )}
+
+          {/* NUEVO BOTÓN: CONFIGURACIÓN PLANTAS (SOLO ADMIN SISTEMA) */}
+          {(rol === 'admin_sistema') && (
+            <button onClick={() => navegar('plantas')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'plantas' ? 'white' : 'transparent', color: pantalla === 'plantas' ? '#0B5FA5' : 'white' }}>Config. Plantas</button>
+          )}
         </div>
 
-        {/* INFO DE USUARIO Y BOTONES DE SESIÓN */}
         <div className="user-info">
           <span>👤 {sesion.user.email} ({rol ? rol.toUpperCase() : 'SIN ROL'})</span>
           
@@ -201,6 +195,9 @@ function App() {
         {pantalla === 'proyeccion' && (rol === 'admin_sistema' || rol === 'jefe_proyecto' || rol === 'jefe_operaciones' || rol === 'analista_operaciones') && <ProyeccionDemanda />}
         {pantalla === 'cambiar-password' && <CambiarPassword />}
         
+        {/* NUEVO RENDERIZADO: CONFIGURACIÓN PLANTAS */}
+        {pantalla === 'plantas' && rol === 'admin_sistema' && <GestionPlantas />}
+
         {pantalla === '' && (
           <div style={{ textAlign: 'center', marginTop: '100px', color: '#666', padding: '0 20px' }}>
             <h2>Bienvenido al Sistema de Precintos</h2>
