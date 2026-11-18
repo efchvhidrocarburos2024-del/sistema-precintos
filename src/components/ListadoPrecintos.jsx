@@ -4,11 +4,20 @@ import { supabase } from '../supabase'
 export default function ListadoPrecintos() {
   const [precintos, setPrecintos] = useState([])
   const [cargando, setCargando] = useState(true)
-  const [filtro, setFiltro] = useState('')
+  
+  // Estados para filtros y paginación
+  const [filtroTexto, setFiltroTexto] = useState('')
+  const [filtroEstado, setFiltroEstado] = useState('')
+  const [pagina, setPagina] = useState(0)
+  const [totalRegistros, setTotalRegistros] = useState(0)
+  const itemsPorPagina = 20
 
   useEffect(() => {
     async function cargarPrecintos() {
-      const { data, error } = await supabase
+      setCargando(true)
+      
+      // Iniciar la consulta con el conteo exacto para la paginación
+      let query = supabase
         .from('precintos')
         .select(`
           id_precinto,
@@ -18,51 +27,71 @@ export default function ListadoPrecintos() {
           valor_sin_igv,
           fecha_recepcion,
           plantas ( nombre )
-        `)
+        `, { count: 'exact' })
+
+      // Aplicar filtros si existen
+      if (filtroTexto) {
+        query = query.ilike('correlativo', `%${filtroTexto}%`)
+      }
+      if (filtroEstado) {
+        query = query.eq('estado', filtroEstado)
+      }
+
+      // Aplicar paginación (desde - hasta)
+      const from = pagina * itemsPorPagina
+      const to = from + itemsPorPagina - 1
+      
+      query = query
         .order('fecha_recepcion', { ascending: false })
-        .limit(100)
+        .range(from, to)
+
+      const { data, error, count } = await query
 
       if (!error && data) {
         setPrecintos(data)
+        setTotalRegistros(count || 0)
       }
       setCargando(false)
     }
+
     cargarPrecintos()
-  }, [])
+  }, [pagina, filtroTexto, filtroEstado]) // Se vuelve a ejecutar si cambian estos estados
 
-  // Filtrar en tiempo real
-  const precintosFiltrados = precintos.filter(p => 
-    p.correlativo.toLowerCase().includes(filtro.toLowerCase()) || 
-    (p.plantas?.nombre || '').toLowerCase().includes(filtro.toLowerCase())
-  )
+  // Calcular total de páginas
+  const totalPaginas = Math.ceil(totalRegistros / itemsPorPagina)
 
-  // --- FUNCIÓN PARA EXPORTAR A EXCEL/CSV ---
-  const exportarCSV = () => {
-    if (precintosFiltrados.length === 0) {
-      alert("No hay datos para exportar")
+  // Limpiar filtros
+  const limpiarFiltros = () => {
+    setFiltroTexto('')
+    setFiltroEstado('')
+    setPagina(0)
+  }
+
+  // --- FUNCIÓN PARA EXPORTAR A EXCEL/CSV (Trae todos los datos filtrados, no solo la página actual) ---
+  const exportarCSV = async () => {
+    setCargando(true)
+    
+    // Hacemos la misma consulta pero SIN el .range() para traer todo
+    let query = supabase.from('precintos').select(`correlativo, estado, color, valor_sin_igv, fecha_recepcion, plantas(nombre)`)
+    if (filtroTexto) query = query.ilike('correlativo', `%${filtroTexto}%`)
+    if (filtroEstado) query = query.eq('estado', filtroEstado)
+    
+    const { data } = await query.order('fecha_recepcion', { ascending: false })
+
+    if (!data || data.length === 0) {
+      alert("No hay datos para exportar con los filtros actuales")
+      setCargando(false)
       return
     }
 
-    // Definir cabeceras
     const headers = ['Correlativo', 'Planta', 'Color', 'Valor sin IGV', 'Estado', 'Fecha de Recepcion']
-    
-    // Mapear los datos a filas
-    const rows = precintosFiltrados.map(p => [
-      p.correlativo,
-      p.plantas?.nombre || 'Sin Planta',
-      p.color || '-',
-      p.valor_sin_igv?.toFixed(2) || '0.00',
-      p.estado,
+    const rows = data.map(p => [
+      p.correlativo, p.plantas?.nombre || 'Sin Planta', p.color || '-',
+      p.valor_sin_igv?.toFixed(2) || '0.00', p.estado,
       new Date(p.fecha_recepcion).toLocaleDateString('es-PE')
     ])
 
-    // Construir el string CSV (con comillas para evitar problemas con comas en los nombres)
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n')
-
-    // Crear el archivo y forzar la descarga (agregamos \uFEFF para que Excel reconozca tildes y ñ)
+    const csvContent = [headers.join(','), ...rows.map(row => row.map(cell => `"${cell}"`).join(','))].join('\n')
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -72,6 +101,8 @@ export default function ListadoPrecintos() {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
+    
+    setCargando(false)
   }
 
   return (
@@ -79,36 +110,44 @@ export default function ListadoPrecintos() {
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <h2 style={{ color: '#0B5FA5', margin: 0 }}>Inventario de Precintos</h2>
-        
-        {/* BOTÓN DE EXPORTAR */}
-        <button 
-          onClick={exportarCSV}
-          style={{ padding: '10px 20px', background: '#16A34A', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}
-        >
+        <button onClick={exportarCSV} disabled={cargando} style={{ padding: '10px 20px', background: '#16A34A', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
           📥 Exportar a Excel
         </button>
       </div>
-      
-      <div style={{ marginBottom: '15px' }}>
+
+      {/* BARRA DE FILTROS */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', backgroundColor: '#f9fafb', padding: '15px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+        
         <input 
           type="text" 
-          placeholder="Buscar por correlativo o planta..." 
-          value={filtro}
-          onChange={(e) => setFiltro(e.target.value)}
-          style={{ 
-            width: '100%', 
-            padding: '10px', 
-            borderRadius: '4px', 
-            border: '1px solid #ccc', 
-            boxSizing: 'border-box',
-            backgroundColor: 'white', // Forzamos fondo blanco
-            color: 'black'            // Forzamos texto oscuro
-          }}
+          placeholder="Buscar por correlativo (Ej. CAL-100)..." 
+          value={filtroTexto}
+          onChange={(e) => { setFiltroTexto(e.target.value); setPagina(0); }}
+          style={{ flex: '1 1 250px', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: 'white', color: 'black' }}
         />
+
+        <select 
+          value={filtroEstado} 
+          onChange={(e) => { setFiltroEstado(e.target.value); setPagina(0); }}
+          style={{ flex: '0 1 200px', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: 'white', color: 'black' }}
+        >
+          <option value="">Todos los estados</option>
+          <option value="DISPONIBLE">Disponible</option>
+          <option value="ASIGNADO">Asignado</option>
+          <option value="DEVUELTO">Devuelto</option>
+          <option value="EN_MAL_ESTADO">En Mal Estado</option>
+          <option value="ROTO_EN_USO">Roto en Uso</option>
+          <option value="BAJA">Baja</option>
+        </select>
+
+        <button onClick={limpiarFiltros} style={{ padding: '10px 15px', background: '#6B7280', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+          Limpiar
+        </button>
       </div>
 
+      {/* TABLA DE DATOS */}
       {cargando ? (
-        <p style={{ textAlign: 'center', color: '#666' }}>Cargando precintos...</p>
+        <p style={{ textAlign: 'center', color: '#666', padding: '40px' }}>Cargando datos desde el servidor...</p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
@@ -123,12 +162,12 @@ export default function ListadoPrecintos() {
               </tr>
             </thead>
             <tbody>
-              {precintosFiltrados.length === 0 ? (
+              {precintos.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#666' }}>No se encontraron precintos.</td>
+                  <td colSpan="6" style={{ padding: '30px', textAlign: 'center', color: '#666' }}>No se encontraron precintos con estos filtros.</td>
                 </tr>
               ) : (
-                precintosFiltrados.map((p) => (
+                precintos.map((p) => (
                   <tr key={p.id_precinto} style={{ borderBottom: '1px solid #e5e7eb' }}>
                     <td style={{ padding: '12px', fontWeight: 'bold' }}>{p.correlativo}</td>
                     <td style={{ padding: '12px' }}>{p.plantas?.nombre || 'Sin Planta'}</td>
@@ -155,6 +194,36 @@ export default function ListadoPrecintos() {
           </table>
         </div>
       )}
+
+      {/* CONTROLES DE PAGINACIÓN */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', flexWrap: 'wrap', gap: '10px' }}>
+        <span style={{ color: '#666', fontSize: '14px' }}>
+          Mostrando <strong>{precintos.length}</strong> de <strong>{totalRegistros}</strong> registros totales
+        </span>
+        
+        <div style={{ display: 'flex', gap: '5px' }}>
+          <button 
+            onClick={() => setPagina(p => Math.max(0, p - 1))} 
+            disabled={pagina === 0 || cargando}
+            style={{ padding: '8px 15px', cursor: pagina === 0 ? 'not-allowed' : 'pointer', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: pagina === 0 ? '#f3f4f6' : 'white', color: pagina === 0 ? '#999' : '#333' }}
+          >
+            Anterior
+          </button>
+          
+          <span style={{ padding: '8px 15px', backgroundColor: '#0B5FA5', color: 'white', borderRadius: '4px', fontWeight: 'bold' }}>
+            Página {pagina + 1} de {totalPaginas || 1}
+          </span>
+
+          <button 
+            onClick={() => setPagina(p => Math.min(totalPaginas - 1, p + 1))} 
+            disabled={pagina >= totalPaginas - 1 || cargando}
+            style={{ padding: '8px 15px', cursor: pagina >= totalPaginas - 1 ? 'not-allowed' : 'pointer', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: pagina >= totalPaginas - 1 ? '#f3f4f6' : 'white', color: pagina >= totalPaginas - 1 ? '#999' : '#333' }}
+          >
+            Siguiente
+          </button>
+        </div>
+      </div>
+
     </div>
   )
 }
