@@ -3,6 +3,7 @@ import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { PageHeader, Card, Input, Tabla, Badge, Boton, Spinner } from './ui'
 
 export default function Bitacora() {
   const [eventos, setEventos] = useState([])
@@ -36,16 +37,16 @@ export default function Bitacora() {
   const eventosFiltrados = eventos.filter(e => {
     const mensajeDetalle = e.detalles?.mensaje || ''
     return (
-      e.accion.toLowerCase().includes(filtro.toLowerCase()) || 
+      e.accion.toLowerCase().includes(filtro.toLowerCase()) ||
       mensajeDetalle.toLowerCase().includes(filtro.toLowerCase()) ||
       (e.usuarios?.email || '').toLowerCase().includes(filtro.toLowerCase())
     )
   })
 
-  // --- EXPORTAR A EXCEL ---
+  // --- EXPORTAR A EXCEL (CSV) ---
   const exportarCSV = () => {
     if (eventosFiltrados.length === 0) {
-      toast.error("No hay datos para exportar con los filtros actuales")
+      toast.error('No hay datos para exportar con los filtros actuales')
       return
     }
 
@@ -68,28 +69,28 @@ export default function Bitacora() {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-    
-    toast.success("Archivo Excel exportado correctamente")
+
+    toast.success('Archivo Excel exportado correctamente')
   }
 
   // --- EXPORTAR A PDF ---
   const generarPDF = () => {
     if (eventosFiltrados.length === 0) {
-      toast.error("No hay datos para generar el PDF")
+      toast.error('No hay datos para generar el PDF')
       return
     }
 
     const doc = new jsPDF('landscape', 'pt', 'a4')
-    
+
     // Cabecera
     doc.setFontSize(18)
-    doc.setTextColor(11, 95, 165) // Azul Petroamérica
+    doc.setTextColor(11, 95, 165)
     doc.text('PETROAMÉRICA', 40, 40)
-    
+
     doc.setFontSize(12)
     doc.setTextColor(50, 50, 50)
     doc.text('Reporte de Bitácora de Auditoría', 40, 60)
-    
+
     doc.setFontSize(10)
     doc.setTextColor(100, 100, 100)
     const fechaActual = new Date().toLocaleString('es-PE')
@@ -98,7 +99,7 @@ export default function Bitacora() {
     doc.text(filtrosAplicados, 40, 80)
 
     // Tabla
-    const tableColumn = ["Fecha / Hora", "Usuario", "Planta", "Acción", "Detalle"]
+    const tableColumn = ['Fecha / Hora', 'Usuario', 'Planta', 'Acción', 'Detalle']
     const tableRows = eventosFiltrados.map(e => [
       new Date(e.fecha).toLocaleString('es-PE'),
       e.usuarios?.email || 'Sistema',
@@ -117,7 +118,7 @@ export default function Bitacora() {
       alternateRowStyles: { fillColor: [243, 244, 246] },
       margin: { top: 100, left: 40, right: 40 },
       columnStyles: {
-        4: { cellWidth: 200 } // Hacemos la columna de Detalle más ancha
+        4: { cellWidth: 200 }
       }
     })
 
@@ -127,88 +128,62 @@ export default function Bitacora() {
       doc.setPage(i)
       doc.setFontSize(8)
       doc.setTextColor(150, 150, 150)
-      doc.text(`Página ${i} de ${pageCount} - Auditoría Sistema de Precintos`, 40, doc.internal.pageSize.height - 20)
+      doc.text(
+        `Página ${i} de ${pageCount} - Auditoría Sistema de Precintos`,
+        40,
+        doc.internal.pageSize.height - 20
+      )
     }
 
     doc.save(`Bitacora_Auditoria_${new Date().toISOString().slice(0, 10)}.pdf`)
-    toast.success("Reporte PDF generado exitosamente")
+    toast.success('Reporte PDF generado exitosamente')
   }
 
+  if (cargando) return <Spinner />
+
   return (
-    <div style={{ maxWidth: '1100px', margin: '20px auto', fontFamily: 'Arial', padding: '20px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.1)' }}>
-      
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-        <h2 style={{ color: '#0B5FA5', margin: 0 }}>Bitácora de Auditoría</h2>
-        
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={exportarCSV} style={{ padding: '10px 20px', background: '#16A34A', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+    <div className="page-container">
+      <PageHeader titulo="Bitácora de Auditoría">
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <Boton variante="success" onClick={exportarCSV}>
             📥 Exportar a Excel
-          </button>
-          <button onClick={generarPDF} style={{ padding: '10px 20px', background: '#DC2626', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+          </Boton>
+          <Boton variante="danger" onClick={generarPDF}>
             📄 Descargar PDF
-          </button>
+          </Boton>
         </div>
-      </div>
-      
-      <div style={{ marginBottom: '20px' }}>
-        <input 
-          type="text" 
-          placeholder="Buscar por acción, detalle o correo del usuario..." 
+      </PageHeader>
+
+      <Card>
+        <Input
+          label="Buscar eventos"
           value={filtro}
           onChange={(e) => setFiltro(e.target.value)}
-          style={{ width: '100%', padding: '12px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: 'white', color: 'black', boxSizing: 'border-box' }}
+          placeholder="Buscar por acción, detalle o correo del usuario..."
         />
-      </div>
+      </Card>
 
-      {cargando ? (
-        <p style={{ textAlign: 'center', color: '#666', padding: '40px' }}>Cargando bitácora...</p>
-      ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '2px solid #e5e7eb' }}>
-                <th style={{ padding: '12px' }}>Fecha / Hora</th>
-                <th style={{ padding: '12px' }}>Usuario</th>
-                <th style={{ padding: '12px' }}>Planta</th>
-                <th style={{ padding: '12px' }}>Acción</th>
-                <th style={{ padding: '12px' }}>Detalle</th>
-              </tr>
-            </thead>
-            <tbody>
-              {eventosFiltrados.length === 0 ? (
-                <tr>
-                  <td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: '#666' }}>No se encontraron eventos.</td>
-                </tr>
-              ) : (
-                eventosFiltrados.map((e) => (
-                  <tr key={e.id_evento} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '12px', color: '#666' }}>
-                      {new Date(e.fecha).toLocaleString('es-PE')}
-                    </td>
-                    <td style={{ padding: '12px', fontWeight: 'bold' }}>
-                      {e.usuarios?.email || 'Sistema'}
-                    </td>
-                    <td style={{ padding: '12px', color: '#444' }}>
-                      {e.plantas?.nombre || 'Global'}
-                    </td>
-                    <td style={{ padding: '12px' }}>
-                      <span style={{ 
-                        padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold',
-                        backgroundColor: '#E0E7FF', color: '#3730A3'
-                      }}>
-                        {e.accion}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px', color: '#444' }}>
-                      {e.detalles?.mensaje || JSON.stringify(e.detalles)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <Tabla
+        columnas={['Fecha / Hora', 'Usuario', 'Planta', 'Acción', 'Detalle']}
+        hayDatos={eventosFiltrados.length > 0}
+        vacio="No se encontraron eventos."
+      >
+        {eventosFiltrados.map((e) => (
+          <tr key={e.id_evento}>
+            <td style={{ color: 'var(--text-light)', whiteSpace: 'nowrap' }}>
+              {new Date(e.fecha).toLocaleString('es-PE')}
+            </td>
+            <td style={{ fontWeight: 'bold' }}>
+              {e.usuarios?.email || 'Sistema'}
+            </td>
+            <td>{e.plantas?.nombre || 'Global'}</td>
+            <td>
+              <Badge variante="info">{e.accion}</Badge>
+            </td>
+            <td>{e.detalles?.mensaje || JSON.stringify(e.detalles)}</td>
+          </tr>
+        ))}
+      </Tabla>
     </div>
   )
 }
