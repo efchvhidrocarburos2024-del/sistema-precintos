@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
-import toast from 'react-hot-toast' // <-- NUEVO IMPORT
+import toast from 'react-hot-toast'
 
 export default function GestionUsuarios() {
   const [email, setEmail] = useState('')
@@ -45,19 +45,20 @@ export default function GestionUsuarios() {
   }
 
   return (
-    <div style={{ maxWidth: '450px', margin: '50px auto', fontFamily: 'Arial', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.1)', backgroundColor: 'white' }}>
+    // CAMBIO RESPONSIVO AQUÍ: width: '90%' y boxSizing: 'border-box'
+    <div style={{ width: '90%', maxWidth: '450px', margin: '20px auto', fontFamily: 'Arial', padding: '20px', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.1)', backgroundColor: 'white' }}>
       <h2 style={{ textAlign: 'center', color: '#0B5FA5', marginBottom: '20px' }}>Crear Nuevo Usuario</h2>
 
       <form onSubmit={crearUsuario} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
         
         <label style={{ fontWeight: 'bold' }}>Correo electrónico:</label>
-        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
+        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: 'white', color: 'black' }} />
 
         <label style={{ fontWeight: 'bold' }}>Contraseña provisional:</label>
-        <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
+        <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: 'white', color: 'black' }} />
 
         <label style={{ fontWeight: 'bold' }}>Rol del usuario:</label>
-        <select value={rol} onChange={(e) => setRol(e.target.value)} style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}>
+        <select value={rol} onChange={(e) => setRol(e.target.value)} style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: 'white', color: 'black' }}>
           <option value="admin_planta">Administrador de Planta</option>
           <option value="analista_operaciones">Analista de Operaciones</option>
           <option value="jefe_operaciones">Jefe de Operaciones</option>
@@ -69,7 +70,7 @@ export default function GestionUsuarios() {
         {rol === 'admin_planta' && (
           <>
             <label style={{ fontWeight: 'bold' }}>Asignar a la Planta:</label>
-            <select value={idPlanta} onChange={(e) => setIdPlanta(e.target.value)} style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}>
+            <select value={idPlanta} onChange={(e) => setIdPlanta(e.target.value)} style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: 'white', color: 'black' }}>
               {plantas.map(p => (
                 <option key={p.id_planta} value={p.id_planta}>{p.nombre}</option>
               ))}
