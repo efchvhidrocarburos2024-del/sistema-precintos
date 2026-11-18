@@ -1,76 +1,153 @@
-import { useState, useEffect } from 'react'
-import { supabase } from './supabase'
-
-function App() {
-  const [plantas, setPlantas] = useState([])
-  const [idPlanta, setIdPlanta] = useState('')
-  const [inicio, setInicio] = useState('')
-  const [fin, setFin] = useState('')
-  const [mensaje, setMensaje] = useState('')
-  const [cargando, setCargando] = useState(false)
-
-  useEffect(() => {
-    async function cargarPlantas() {
-      const { data } = await supabase.from('plantas').select('*').order('nombre')
-      if (data) {
-        setPlantas(data)
-        setIdPlanta(data[0]?.id_planta || '')
-      }
-    }
-    cargarPlantas()
-  }, [])
-
-  const registrarLote = async (e) => {
-    e.preventDefault()
-    setCargando(true)
-    setMensaje('')
-
-    const { data, error } = await supabase.rpc('fn_registrar_lote_precintos', {
-      p_id_planta: idPlanta,
-      p_correlativo_inicio: inicio,
-      p_correlativo_fin: fin
-    })
-
-    if (error) {
-      setMensaje('❌ Error: ' + error.message)
-    } else {
-      setMensaje(`✅ ¡Éxito! Se registraron ${data} precintos.`)
-      setInicio('')
-      setFin('')
-    }
-    setCargando(false)
-  }
-
-  return (
-    <div style={{ maxWidth: '400px', margin: '50px auto', fontFamily: 'Arial', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.1)' }}>
-      <h2 style={{ textAlign: 'center', color: '#0B5FA5', marginBottom: '5px' }}>Registro de Lotes</h2>
-      <p style={{ color: '#666', fontSize: '14px', textAlign: 'center', marginBottom: '20px' }}>
-        Analista de Operaciones
-      </p>
-
-      <form onSubmit={registrarLote} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-        
-        <label style={{ fontWeight: 'bold' }}>Planta destino:</label>
-        <select value={idPlanta} onChange={(e) => setIdPlanta(e.target.value)} style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}>
-          {plantas.map((p) => (
-            <option key={p.id_planta} value={p.id_planta}>{p.nombre} ({p.codigo})</option>
-          ))}
-        </select>
-
-        <label style={{ fontWeight: 'bold' }}>Correlativo Inicio (DEL):</label>
-        <input type="number" value={inicio} onChange={(e) => setInicio(e.target.value)} required style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
-
-        <label style={{ fontWeight: 'bold' }}>Correlativo Fin (AL):</label>
-        <input type="number" value={fin} onChange={(e) => setFin(e.target.value)} required style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }} />
-
-        <button type="submit" disabled={cargando} style={{ padding: '12px', background: '#0B5FA5', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', marginTop: '10px' }}>
-          {cargando ? 'Guardando...' : 'Guardar en Sistema'}
-        </button>
-      </form>
-
-      {mensaje && <p style={{ marginTop: '20px', fontWeight: 'bold', textAlign: 'center', color: mensaje.includes('❌') ? 'red' : 'green' }}>{mensaje}</p>}
-    </div>
-  )
+/* src/App.css */
+:root {
+  --primary-blue: #0B5FA5;
+  --primary-green: #16A34A;
+  --danger-red: #DC2626;
+  --warning-yellow: #EAB308;
+  --gray-bg: #f3f4f6;
+  --white: #ffffff;
+  --text-dark: #333333;
+  --text-light: #666666;
 }
 
-export default App
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background-color: var(--gray-bg);
+  color: var(--text-dark);
+}
+
+/* --- ESTILOS DEL MENÚ DE NAVEGACIÓN --- */
+.nav-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 30px;
+  background-color: var(--primary-blue);
+  flex-wrap: wrap;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.nav-logo {
+  color: var(--white);
+  font-weight: bold;
+  font-size: 20px;
+  letter-spacing: 0.5px;
+}
+
+.nav-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.nav-btn {
+  padding: 10px 15px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+  border: none;
+  border-radius: 4px;
+  background-color: transparent;
+  color: var(--white);
+  transition: all 0.2s ease-in-out;
+}
+
+.nav-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.nav-btn.active {
+  background-color: var(--white);
+  color: var(--primary-blue);
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  color: var(--white);
+  font-size: 14px;
+  margin-top: 5px;
+}
+
+.btn-profile {
+  padding: 8px 12px;
+  background: var(--warning-yellow);
+  color: black;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.btn-logout {
+  padding: 8px 12px;
+  background: var(--danger-red);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.btn-menu {
+  display: none;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+/* --- ESTILOS DEL MODAL DE INACTIVIDAD --- */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.modal-content {
+  background: white;
+  padding: 30px;
+  border-radius: 8px;
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+/* --- RESPONSIVO (Móviles) --- */
+@media (max-width: 1100px) {
+  .nav-container { padding: 10px 15px; }
+  .nav-buttons { 
+    display: none; 
+    width: 100%; 
+    flex-direction: column; 
+    margin-top: 15px; 
+    gap: 5px; 
+  }
+  .nav-buttons.abierto { display: flex; }
+  .btn-menu { display: block; }
+  .user-info { 
+    width: 100%; 
+    justify-content: space-between; 
+    margin-top: 10px; 
+    border-top: 1px solid rgba(255,255,255,0.2); 
+    padding-top: 10px; 
+  }
+  .nav-btn { width: 100%; text-align: left; padding: 12px !important; }
+}
