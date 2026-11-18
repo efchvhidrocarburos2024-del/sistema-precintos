@@ -12,6 +12,7 @@ import GestionUsuarios from './components/GestionUsuarios'
 import CambiarPassword from './components/CambiarPassword'
 import ForgotPassword from './components/ForgotPassword'
 import ResetPassword from './components/ResetPassword'
+import Conciliacion from './components/Conciliacion'
 
 function App() {
   const [sesion, setSesion] = useState(null)
@@ -48,15 +49,12 @@ function App() {
 
   // --- LÓGICA DE PANTALLAS SIN SESIÓN ---
   if (!sesion) {
-    // 1. Si viene de un correo de recuperación, mostramos ResetPassword
     if (esRecuperacion) {
       return <ResetPassword />
     }
-    // 2. Si el usuario hizo clic en "Olvidé mi contraseña" desde el Login
     if (pantalla === 'forgot') {
       return <ForgotPassword setPantalla={setPantalla} />
     }
-    // 3. Si no, mostramos el Login normal (le pasamos setPantalla por si acaso)
     return <Login setPantalla={setPantalla} />
   }
 
@@ -85,6 +83,11 @@ function App() {
             </>
           )}
 
+          {/* PESTAÑA DE CONCILIACIÓN ACTUALIZADA */}
+          {(rol === 'jefe_proyecto' || rol === 'analista_operaciones' || rol === 'jefe_operaciones') && (
+            <button onClick={() => setPantalla('conciliacion')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'conciliacion' ? 'white' : 'transparent', color: pantalla === 'conciliacion' ? '#0B5FA5' : 'white' }}>Conciliación</button>
+          )}
+
           {(rol === 'jefe_proyecto') && (
             <button onClick={() => setPantalla('usuarios')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'usuarios' ? 'white' : 'transparent', color: pantalla === 'usuarios' ? '#0B5FA5' : 'white' }}>Crear Usuarios</button>
           )}
@@ -93,7 +96,6 @@ function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', color: 'white', fontSize: '14px' }}>
           <span>👤 {sesion.user.email} ({rol})</span>
           
-          {/* NUEVO BOTÓN DE CAMBIAR CONTRASEÑA */}
           <button onClick={() => setPantalla('cambiar-password')} style={{ padding: '8px 12px', background: '#EAB308', color: 'black', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Mi Perfil</button>
           
           <button onClick={cerrarSesion} style={{ padding: '8px 12px', background: '#DC2626', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Salir</button>
@@ -108,7 +110,9 @@ function App() {
         {pantalla === 'reportes' && <Reportes />}
         {pantalla === 'usuarios' && rol === 'jefe_proyecto' && <GestionUsuarios />}
         
-        {/* NUEVO COMPONENTE EN PANTALLA */}
+        {/* PANTALLA DE CONCILIACIÓN ACTUALIZADA */}
+        {pantalla === 'conciliacion' && (rol === 'jefe_proyecto' || rol === 'analista_operaciones' || rol === 'jefe_operaciones') && <Conciliacion />}
+
         {pantalla === 'cambiar-password' && <CambiarPassword />}
         
         {pantalla === '' && (
