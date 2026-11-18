@@ -4,7 +4,7 @@ import { Toaster } from 'react-hot-toast'
 import toast from 'react-hot-toast'
 import './App.css'
 
-// Importación de todos los componentes del módulo de Precintos
+// Importación de todos los componentes (Precintos + Repositorio)
 import Login from './components/Login'
 import RegistroLotes from './components/RegistroLotes'
 import RegistroViajes from './components/RegistroViajes'
@@ -21,6 +21,7 @@ import ListadoPrecintos from './components/ListadoPrecintos'
 import Bitacora from './components/Bitacora'
 import GestionPlantas from './components/GestionPlantas'
 import PanelRespaldos from './components/PanelRespaldos'
+import RepositorioDocumental from './components/RepositorioDocumental' // <-- NUEVO MÓDULO
 
 const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000;
 const TIEMPO_DE_AVISO = TIEMPO_INACTIVIDAD_TOTAL - (2 * 60 * 1000);
@@ -46,7 +47,7 @@ function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
       </header>
 
       {/* Contenido del Lobby */}
-      <main style={{ flex: 1, padding: '60px 20px', maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
+      <main style={{ flex: 1, padding: '60px 20px', maxWidth: '1100px', margin: '0 auto', width: '100%' }}>
         <div style={{ textAlign: 'center', marginBottom: '50px' }}>
           <h2 style={{ color: 'var(--text-dark)', fontSize: '28px', marginBottom: '10px' }}>Bienvenido a tu plataforma</h2>
           <p style={{ color: 'var(--text-light)', fontSize: '16px' }}>Selecciona el módulo que deseas administrar</p>
@@ -54,7 +55,7 @@ function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '25px' }}>
           
-          {/* MÓDULO ACTIVO: Precintos */}
+          {/* MÓDULO 1: PRECINTOS (ACTIVO) */}
           <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '30px', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '2px solid var(--primary-blue)' }}>
             <div style={{ fontSize: '50px', marginBottom: '15px' }}>📦</div>
             <h3 style={{ color: 'var(--primary-blue)', marginBottom: '15px', fontSize: '20px' }}>Gestión de Precintos</h3>
@@ -69,24 +70,27 @@ function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
             </button>
           </div>
 
-          {/* MÓDULO FUTURO 1 (Bloqueado) */}
+          {/* MÓDULO 2: REPOSITORIO DOCUMENTAL (ACTIVO - NUEVO) */}
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '30px', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '2px solid var(--primary-blue)' }}>
+            <div style={{ fontSize: '50px', marginBottom: '15px' }}>📂</div>
+            <h3 style={{ color: 'var(--primary-blue)', marginBottom: '15px', fontSize: '20px' }}>Repositorio Documental</h3>
+            <p style={{ color: 'var(--text-light)', marginBottom: '25px', fontSize: '14px', lineHeight: '1.5' }}>
+              Busca tus archivos por categorías y gestiónalos fácilmente.
+            </p>
+            <button 
+              onClick={() => setPantalla('repositorio')} 
+              style={{ width: '100%', padding: '12px', borderRadius: '6px', border: 'none', background: 'var(--primary-blue)', color: 'white', fontWeight: 'bold', cursor: 'pointer', fontSize: '15px' }}
+            >
+              Entrar al Módulo
+            </button>
+          </div>
+
+          {/* MÓDULO FUTURO: FLOTA (BLOQUEADO) */}
           <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '30px', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', opacity: 0.6 }}>
             <div style={{ fontSize: '50px', marginBottom: '15px' }}>🚚</div>
             <h3 style={{ color: 'var(--text-dark)', marginBottom: '15px', fontSize: '20px' }}>Gestión de Flota</h3>
             <p style={{ color: 'var(--text-light)', marginBottom: '25px', fontSize: '14px', lineHeight: '1.5' }}>
               Control de vehículos, rutas y conductores.
-            </p>
-            <button disabled style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #ccc', background: '#f3f4f6', color: '#9ca3af', fontWeight: 'bold', fontSize: '15px', cursor: 'not-allowed' }}>
-              Próximamente
-            </button>
-          </div>
-
-          {/* MÓDULO FUTURO 2 (Bloqueado) */}
-          <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '30px', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', opacity: 0.6 }}>
-            <div style={{ fontSize: '50px', marginBottom: '15px' }}>📊</div>
-            <h3 style={{ color: 'var(--text-dark)', marginBottom: '15px', fontSize: '20px' }}>Business Intelligence</h3>
-            <p style={{ color: 'var(--text-light)', marginBottom: '25px', fontSize: '14px', lineHeight: '1.5' }}>
-              Dashboards avanzados, KPIs y reportes gerenciales.
             </p>
             <button disabled style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #ccc', background: '#f3f4f6', color: '#9ca3af', fontWeight: 'bold', fontSize: '15px', cursor: 'not-allowed' }}>
               Próximamente
@@ -104,7 +108,7 @@ function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
 // ============================================================================
 function App() {
   const [sesion, setSesion] = useState(null)
-  const [pantalla, setPantalla] = useState('') // '' = Lobby (SIGMO), 'dashboard' = Precintos
+  const [pantalla, setPantalla] = useState('') // '' = Lobby (SIGMO)
   const [rol, setRol] = useState(null) 
   const [permisos, setPermisos] = useState([])
   const [cargandoRol, setCargandoRol] = useState(true)
@@ -172,7 +176,7 @@ function App() {
   // Lógica de Inactividad
   const cerrarSesion = useCallback(async () => {
     await supabase.auth.signOut()
-    setPantalla('') // Al salir, volvemos al lobby (que redirigirá al Login)
+    setPantalla('')
     setRol(null)
     setPermisos([])
     setMostrarAviso(false)
@@ -242,7 +246,6 @@ function App() {
   }
 
   // --- VISTA LOBBY (SIGMO) ---
-  // Si no hay una pantalla seleccionada, mostramos el lobby de módulos
   if (pantalla === '') {
     return (
       <>
@@ -260,6 +263,29 @@ function App() {
           </div>
         )}
         <LobbyModulos sesion={sesion} cerrarSesion={cerrarSesion} setPantalla={setPantalla} rol={rol} />
+      </>
+    )
+  }
+
+  // --- VISTA: MÓDULO REPOSITORIO DOCUMENTAL ---
+  // Esta vista se muestra a pantalla completa sin la barra de navegación de precintos
+  if (pantalla === 'repositorio') {
+    return (
+      <>
+        <Toaster position="top-right" toastOptions={{ duration: 4000, style: { fontWeight: 'bold' } }} />
+        {mostrarAviso && (
+           <div className="modal-overlay">
+           <div className="modal-content">
+             <h2 style={{ color: 'var(--danger-red)', marginTop: 0 }}>⚠️ Sesión a punto de expirar</h2>
+             <p style={{ color: 'var(--text-dark)', marginBottom: '25px', fontSize: '15px' }}>Tu sesión se cerrará en <strong>2 minutos</strong>.</p>
+             <div style={{ display: 'flex', gap: '10px' }}>
+               <button onClick={reiniciarTemporizador} style={{ padding: '10px', background: 'var(--primary-green)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flex: 1 }}>Mantener sesión</button>
+               <button onClick={cerrarSesion} style={{ padding: '10px', background: '#6B7280', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flex: 1 }}>Cerrar ahora</button>
+             </div>
+           </div>
+         </div>
+        )}
+        <RepositorioDocumental setPantalla={setPantalla} />
       </>
     )
   }
@@ -367,7 +393,7 @@ function App() {
       </nav>
 
       <div style={{ paddingTop: '20px', paddingBottom: '40px' }}>
-        {/* RENDERIZADO DE COMPONENTES DEL MÓDULO */}
+        {/* RENDERIZADO DE COMPONENTES DEL MÓDULO PRECINTOS */}
         {pantalla === 'lotes' && tienePermiso('lotes', ['admin_sistema', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto']) && <RegistroLotes />}
         {pantalla === 'admin' && tienePermiso('viajes', ['admin_sistema', 'admin_planta']) && <RegistroViajes />}
         {pantalla === 'excepciones' && tienePermiso('viajes', ['admin_sistema', 'admin_planta']) && <Excepciones />}
