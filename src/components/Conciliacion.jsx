@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
-import toast from 'react-hot-toast' // <-- NUEVO IMPORT
+import toast from 'react-hot-toast'
+import { PageHeader, Card, Select, Boton, Tabla, Badge } from './ui'
 
 export default function Conciliacion() {
   const [plantas, setPlantas] = useState([])
@@ -33,7 +34,7 @@ export default function Conciliacion() {
     const { data: precintos, error } = await supabase
       .from('precintos')
       .select('estado')
-      .eq('id_planta', plantaSeleccionada) 
+      .eq('id_planta', plantaSeleccionada)
 
     if (error) {
       setMensaje('❌ Error al consultar: ' + error.message)
@@ -41,7 +42,6 @@ export default function Conciliacion() {
       return
     }
 
-    // Calculamos los totales
     let disponibles = 0, asignados = 0, devueltos = 0, rotos = 0
 
     precintos.forEach(p => {
@@ -58,13 +58,13 @@ export default function Conciliacion() {
     setResultados({
       disponibles, asignados, devueltos, rotos, totalSistema, sumaEstados, cuadra
     })
-    
+
     if (cuadra) {
       setMensaje('✅ El inventario CUADRA perfectamente.')
     } else {
       setMensaje('❌ DESCUADRE DETECTADO. Debes justificar antes de cerrar.')
     }
-    
+
     setCargando(false)
   }
 
@@ -78,7 +78,6 @@ export default function Conciliacion() {
     setCargando(true)
     const user = await supabase.auth.getUser()
 
-    // Guardar en la base de datos
     const { error } = await supabase.from('conciliaciones').insert([{
       planta_id: plantaSeleccionada,
       total_disponibles: resultados.disponibles,
@@ -98,17 +97,16 @@ export default function Conciliacion() {
       setMensaje('💾 Cierre semanal guardado exitosamente en el historial.')
       toast.success('Cierre guardado con éxito')
 
-      // --- NUEVA LÓGICA: ENVIAR CORREO DE ALERTA ---
+      // --- ENVIAR CORREO DE ALERTA ---
       try {
         const nombrePlanta = plantas.find(p => p.id_planta === plantaSeleccionada)?.nombre || 'Desconocida'
-        
-        // Armamos un resumen de lo que pasó para enviarlo en el correo
-        const resumenDetalles = `Estado: ${resultados.cuadra ? 'CUADRADO' : 'DESCUADRADO'}. ` +
+
+        const resumenDetalles =
+          `Estado: ${resultados.cuadra ? 'CUADRADO' : 'DESCUADRADO'}. ` +
           `Disponibles: ${resultados.disponibles}, Asignados: ${resultados.asignados}, ` +
           `Devueltos: ${resultados.devueltos}, Rotos: ${resultados.rotos}. ` +
           `Total Registros: ${resultados.totalSistema}.`
-        
-        // Invocamos la función en Supabase
+
         await supabase.functions.invoke('notificar-conciliacion', {
           body: {
             planta_nombre: nombrePlanta,
@@ -121,9 +119,8 @@ export default function Conciliacion() {
         console.error('Error al enviar correo:', err)
         toast.error('Cierre guardado, pero no se pudo enviar el correo.')
       }
-      // ----------------------------------------------
 
-      // Limpiamos el formulario
+      // Limpiar formulario
       setResultados(null)
       setJustificacion('')
       setPlantaSeleccionada('')
@@ -131,88 +128,128 @@ export default function Conciliacion() {
     setCargando(false)
   }
 
+  // Clase dinámica para el mensaje
+  const claseMensaje = () => {
+    if (!mensaje) return ''
+    if (mensaje.includes('❌') || mensaje.includes('⚠️')) return 'alert alert-error'
+    return 'alert alert-success'
+  }
+
   return (
-    <div style={{ width: '90%', maxWidth: '800px', margin: '40px auto', fontFamily: 'Arial', padding: '10px', boxSizing: 'border-box' }}>
-      <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-        <h2 style={{ color: '#0B5FA5', borderBottom: '2px solid #eee', paddingBottom: '10px' }}>Cierre y Conciliación Semanal</h2>
-        
-        <div style={{ display: 'flex', gap: '15px', marginTop: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <select 
-            value={plantaSeleccionada} 
+    <div className="page-container" style={{ maxWidth: '900px' }}>
+      <PageHeader titulo="Cierre y Conciliación Semanal" />
+
+      <Card>
+        <div className="form-row">
+          <Select
+            label="Planta a auditar"
+            value={plantaSeleccionada}
             onChange={(e) => setPlantaSeleccionada(e.target.value)}
-            style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ccc', flex: '1 1 200px', backgroundColor: 'white', color: 'black' }}
-          >
-            <option value="">Seleccione una planta para auditar...</option>
-            {plantas.map(p => (
-              <option key={p.id_planta} value={p.id_planta}>{p.nombre}</option>
-            ))}
-          </select>
-          
-          <button 
-            onClick={ejecutarConciliacion} 
-            disabled={cargando || !plantaSeleccionada}
-            style={{ padding: '10px 20px', background: '#0B5FA5', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
-          >
-            {cargando ? 'Calculando...' : 'Ejecutar Conciliación'}
-          </button>
+            placeholder="Seleccione una planta para auditar..."
+            options={plantas.map(p => ({
+              value: p.id_planta,
+              label: p.nombre
+            }))}
+          />
+          <div className="form-group" style={{ justifyContent: 'flex-end' }}>
+            <Boton
+              variante="primary"
+              onClick={ejecutarConciliacion}
+              disabled={cargando || !plantaSeleccionada}
+            >
+              {cargando ? 'Calculando...' : 'Ejecutar Conciliación'}
+            </Boton>
+          </div>
         </div>
 
-        {/* RESULTADOS */}
-        {resultados && (
-          <div style={{ marginTop: '30px', border: `2px solid ${resultados.cuadra ? '#16A34A' : '#DC2626'}`, borderRadius: '8px', padding: '20px' }}>
-            <h3 style={{ textAlign: 'center', color: resultados.cuadra ? '#16A34A' : '#DC2626', marginBottom: '20px' }}>
-              {resultados.cuadra ? '✅ INVENTARIO CUADRADO' : '❌ DESCUADRE EN INVENTARIO'}
-            </h3>
-            
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', marginBottom: '20px' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#f9f9f9' }}>
-                    <th style={{ padding: '10px' }}>Estado</th>
-                    <th style={{ padding: '10px' }}>Cantidad</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr><td style={{ padding: '10px', borderBottom: '1px solid #eee' }}>Disponibles</td><td style={{ padding: '10px', borderBottom: '1px solid #eee' }}>{resultados.disponibles}</td></tr>
-                  <tr><td style={{ padding: '10px', borderBottom: '1px solid #eee' }}>Asignados</td><td style={{ padding: '10px', borderBottom: '1px solid #eee' }}>{resultados.asignados}</td></tr>
-                  <tr><td style={{ padding: '10px', borderBottom: '1px solid #eee' }}>Devueltos</td><td style={{ padding: '10px', borderBottom: '1px solid #eee' }}>{resultados.devueltos}</td></tr>
-                  <tr><td style={{ padding: '10px', borderBottom: '1px solid #eee' }}>Rotos / Dañados</td><td style={{ padding: '10px', borderBottom: '1px solid #eee' }}>{resultados.rotos}</td></tr>
-                  <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f4f8' }}>
-                    <td style={{ padding: '10px' }}>Suma de Estados (Sistema)</td>
-                    <td style={{ padding: '10px' }}>{resultados.sumaEstados}</td>
-                  </tr>
-                  <tr style={{ fontWeight: 'bold', backgroundColor: '#f0f4f8' }}>
-                    <td style={{ padding: '10px' }}>Total Físico (Registros)</td>
-                    <td style={{ padding: '10px' }}>{resultados.totalSistema}</td>
-                  </tr>
-                </tbody>
-              </table>
+        {mensaje && !resultados && (
+          <div className={claseMensaje()}>{mensaje}</div>
+        )}
+      </Card>
+
+      {/* RESULTADOS */}
+      {resultados && (
+        <Card>
+          <div
+            style={{
+              textAlign: 'center',
+              padding: '15px',
+              marginBottom: '20px',
+              borderRadius: '6px',
+              background: resultados.cuadra ? '#dcfce7' : '#fee2e2',
+              color: resultados.cuadra ? '#166534' : '#991b1b',
+              fontWeight: 'bold',
+              fontSize: '18px'
+            }}
+          >
+            {resultados.cuadra ? '✅ INVENTARIO CUADRADO' : '❌ DESCUADRE EN INVENTARIO'}
+          </div>
+
+          <Tabla
+            columnas={['Estado', 'Cantidad']}
+            hayDatos={true}
+          >
+            <tr>
+              <td>Disponibles</td>
+              <td><Badge variante="info">{resultados.disponibles}</Badge></td>
+            </tr>
+            <tr>
+              <td>Asignados</td>
+              <td><Badge variante="warning">{resultados.asignados}</Badge></td>
+            </tr>
+            <tr>
+              <td>Devueltos</td>
+              <td><Badge variante="success">{resultados.devueltos}</Badge></td>
+            </tr>
+            <tr>
+              <td>Rotos / Dañados</td>
+              <td><Badge variante="danger">{resultados.rotos}</Badge></td>
+            </tr>
+            <tr style={{ background: '#f0f4f8', fontWeight: 'bold' }}>
+              <td>Suma de Estados (Sistema)</td>
+              <td>{resultados.sumaEstados}</td>
+            </tr>
+            <tr style={{ background: '#f0f4f8', fontWeight: 'bold' }}>
+              <td>Total Físico (Registros)</td>
+              <td>{resultados.totalSistema}</td>
+            </tr>
+          </Tabla>
+
+          {!resultados.cuadra && (
+            <div className="form-group" style={{ marginTop: '20px' }}>
+              <label className="form-label" style={{ color: 'var(--danger-red)' }}>
+                Justificación del Descuadre <span className="required">*</span>
+              </label>
+              <textarea
+                value={justificacion}
+                onChange={(e) => setJustificacion(e.target.value)}
+                placeholder="Ej. Se perdieron 2 precintos en el camión, se reportó a gerencia..."
+                className="form-textarea"
+                style={{ minHeight: '80px' }}
+              />
             </div>
+          )}
 
-            {!resultados.cuadra && (
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px', color: '#DC2626' }}>Justificación del Descuadre:</label>
-                <textarea 
-                  value={justificacion}
-                  onChange={(e) => setJustificacion(e.target.value)}
-                  placeholder="Ej. Se perdieron 2 precintos en el camión, se reportó a gerencia..."
-                  style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', minHeight: '80px', boxSizing: 'border-box' }}
-                />
-              </div>
-            )}
-
-            <button 
+          <div style={{ marginTop: '20px' }}>
+            <Boton
+              variante={resultados.cuadra ? 'success' : 'danger'}
               onClick={guardarCierre}
               disabled={cargando}
-              style={{ width: '100%', padding: '12px', background: resultados.cuadra ? '#16A34A' : '#DC2626', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+              style={{ width: '100%' }}
             >
-              {cargando ? 'Guardando...' : `Guardar Cierre Semanal (${resultados.cuadra ? 'Cuadrado' : 'Con Descuadre'})`}
-            </button>
+              {cargando
+                ? 'Guardando...'
+                : `Guardar Cierre Semanal (${resultados.cuadra ? 'Cuadrado' : 'Con Descuadre'})`}
+            </Boton>
           </div>
-        )}
 
-        {mensaje && <p style={{ textAlign: 'center', marginTop: '20px', fontWeight: 'bold', color: mensaje.includes('❌') || mensaje.includes('⚠️') ? 'red' : 'green' }}>{mensaje}</p>}
-      </div>
+          {mensaje && (
+            <div className={claseMensaje()} style={{ marginTop: '20px', marginBottom: 0 }}>
+              {mensaje}
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   )
 }
