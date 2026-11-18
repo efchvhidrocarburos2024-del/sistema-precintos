@@ -11,10 +11,11 @@ export default function Excepciones() {
   // --- ESTADOS ROTURA ---
   const [correlativoRoto, setCorrelativoRoto] = useState('')
   const [causa, setCausa] = useState('Falla de fábrica')
+  const [fotoRotura, setFotoRotura] = useState(null) // NUEVO ESTADO
   const [mensajeRotura, setMensajeRotura] = useState('')
   const [cargandoRotura, setCargandoRotura] = useState(false)
 
-  // --- ESTADOS DEVOLUCIONES (NUEVO) ---
+  // --- ESTADOS DEVOLUCIONES ---
   const [devueltos, setDevueltos] = useState([])
   const [mensajeVerificacion, setMensajeVerificacion] = useState('')
 
@@ -64,11 +65,20 @@ export default function Excepciones() {
     setCargandoVenta(false)
   }
 
+  // --- LÓGICA DE ROTURA ACTUALIZADA CON FOTO Y NO CONFORMIDAD ---
   const reportarRotura = async (e) => {
     e.preventDefault()
     setCargandoRotura(true)
     setMensajeRotura('')
 
+    // 1. Validar que se haya subido una foto
+    if (!fotoRotura) {
+      setMensajeRotura('❌ La foto de evidencia es OBLIGATORIA.')
+      setCargandoRotura(false)
+      return
+    }
+
+    // 2. Buscar el precinto
     const { data: precinto, error: errorBusqueda } = await supabase
       .from('precintos').select('id_precinto, estado').eq('correlativo', correlativoRoto).limit(1).single()
 
@@ -83,17 +93,56 @@ export default function Excepciones() {
       return
     }
 
-    const { data, error } = await supabase.rpc('fn_reportar_rotura', {
-      p_id_precinto: precinto.id_precinto, p_causa: causa, p_observacion: 'Reportado desde web'
-    })
+    try {
+      // 3. Subir la foto al Storage
+      const fileExt = fotoRotura.name.split('.').pop()
+      const fileName = `${correlativoRoto}_${Date.now()}.${fileExt}`
+      
+      const { error: uploadError } = await supabase.storage
+        .from('evidencias')
+        .upload(fileName, fotoRotura)
 
-    if (error) {
-      setMensajeRotura('❌ Error: ' + error.message)
-    } else {
+      if (uploadError) throw new Error("Error al subir la foto: " + uploadError.message)
+
+      // 4. Obtener la URL pública de la foto
+      const { data: urlData } = supabase.storage
+        .from('evidencias')
+        .getPublicUrl(fileName)
+      
+      const fotoUrl = urlData.publicUrl
+
+      // 5. Ejecutar tu RPC para cambiar el estado del precinto
+      const { data, error } = await supabase.rpc('fn_reportar_rotura', {
+        p_id_precinto: precinto.id_precinto, 
+        p_causa: causa, 
+        p_observacion: `Foto: ${fotoUrl}` // Pasamos la URL como observación
+      })
+
+      if (error) throw new Error(error.message)
+
+      // 6. Si es falla de fábrica, crear la No Conformidad automáticamente
+      if (causa === 'Falla de fábrica') {
+        const { error: ncError } = await supabase
+          .from('no_conformidades')
+          .insert([{
+            precinto_id: correlativoRoto,
+            motivo: "Falla de fábrica detectada en uso",
+            descripcion: "Reportado automáticamente desde el módulo de excepciones.",
+            foto_url: fotoUrl
+          }])
+        
+        if (ncError) console.error("Error al crear no conformidad:", ncError)
+      }
+
       setMensajeRotura(`✅ ${data}`)
       setCorrelativoRoto('')
+      setFotoRotura(null) // Limpiar el input de archivo
+
+    } catch (error) {
+      setMensajeRotura('❌ Error: ' + error.message)
+    } finally {
+      setCargandoRotura(false)
     }
-    setCargandoRotura(false)
   }
 
   const verificarIntegridad = async (id_precinto, estado_fisico) => {
@@ -125,16 +174,34 @@ export default function Excepciones() {
           {mensajeVenta && <p style={{ marginTop: '15px', fontSize: '13px', fontWeight: 'bold', color: mensajeVenta.includes('❌') ? 'red' : 'green' }}>{mensajeVenta}</p>}
         </div>
 
-        {/* TARJETA 2: ROTURA EN USO */}
+        {/* TARJETA 2: ROTURA EN USO (ACTUALIZADA) */}
         <div style={{ width: '350px', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', backgroundColor: 'white', boxShadow: '0 4px 8px rgba(0,0,0,0.1)' }}>
           <h3 style={{ textAlign: 'center', color: '#DC2626' }}>Reportar Rotura</h3>
           <form onSubmit={reportarRotura} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <input type="text" placeholder="Número de precinto" value={correlativoRoto} onChange={(e) => setCorrelativoRoto(e.target.value)} required style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }} />
+            
             <select value={causa} onChange={(e) => setCausa(e.target.value)} style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}>
               <option value="Falla de fábrica">Falla de fábrica</option>
               <option value="Mal manipuleo">Mal manipuleo</option>
             </select>
-            <button type="submit" disabled={cargandoRotura} style={{ padding: '10px', background: '#DC2626', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Reportar</button>
+
+            {/* NUEVO INPUT DE FOTO */}
+            <div style={{ backgroundColor: '#f8f9fa', padding: '10px', borderRadius: '4px', border: '1px dashed #DC2626' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', fontWeight: 'bold', color: '#DC2626' }}>
+                📷 Foto de Evidencia (Obligatoria)
+              </label>
+              <input 
+                type="file" 
+                accept="image/*" 
+                capture="environment" // Abre la cámara directo en celulares
+                onChange={(e) => setFotoRotura(e.target.files[0])}
+                style={{ fontSize: '12px', width: '100%' }}
+              />
+            </div>
+
+            <button type="submit" disabled={cargandoRotura} style={{ padding: '10px', background: '#DC2626', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+              {cargandoRotura ? 'Subiendo...' : 'Reportar'}
+            </button>
           </form>
           {mensajeRotura && <p style={{ marginTop: '15px', fontSize: '13px', fontWeight: 'bold', color: mensajeRotura.includes('❌') ? 'red' : 'green' }}>{mensajeRotura}</p>}
         </div>
