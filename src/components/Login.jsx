@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../supabase'
 
-// 1. Agregamos setPantalla a las props
 export default function Login({ setPantalla }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -19,7 +18,8 @@ export default function Login({ setPantalla }) {
     })
 
     if (error) {
-      setError('❌ Correo o contraseña incorrectos.')
+      // AHORA MOSTRAMOS EL ERROR REAL DE SUPABASE
+      setError('❌ ' + error.message) 
     }
     setCargando(false)
   }
@@ -57,7 +57,6 @@ export default function Login({ setPantalla }) {
 
         {error && <p style={{ color: 'red', textAlign: 'center', marginTop: '15px', fontSize: '13px' }}>{error}</p>}
 
-        {/* NUEVO BOTÓN: Recuperar contraseña */}
         <div style={{ textAlign: 'center', marginTop: '20px' }}>
           <button 
             type="button" 
@@ -67,7 +66,6 @@ export default function Login({ setPantalla }) {
             ¿Olvidaste tu contraseña?
           </button>
         </div>
-
       </div>
     </div>
   )
