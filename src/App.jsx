@@ -18,7 +18,7 @@ import ProyeccionDemanda from './components/ProyeccionDemanda'
 import ListadoPrecintos from './components/ListadoPrecintos'
 import Bitacora from './components/Bitacora'
 import GestionPlantas from './components/GestionPlantas'
-import PanelRespaldos from './components/PanelRespaldos' // <-- NUEVO IMPORT
+import PanelRespaldos from './components/PanelRespaldos'
 
 // CONSTANTES DE TIEMPO (En milisegundos)
 const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000; // 1 Hora (3600000 ms)
@@ -28,6 +28,7 @@ function App() {
   const [sesion, setSesion] = useState(null)
   const [pantalla, setPantalla] = useState('')
   const [rol, setRol] = useState(null) 
+  const [permisos, setPermisos] = useState([]) // NUEVO ESTADO PARA PERMISOS EXTRA
   const [cargandoRol, setCargandoRol] = useState(true)
   const [esRecuperacion, setEsRecuperacion] = useState(false)
   const [menuAbierto, setMenuAbierto] = useState(false)
@@ -59,6 +60,7 @@ function App() {
   useEffect(() => {
     if (!sesion) {
       setRol(null)
+      setPermisos([])
       setCargandoRol(false)
       return
     }
@@ -67,17 +69,20 @@ function App() {
       setCargandoRol(true)
       const { data, error } = await supabase
         .from('usuarios')
-        .select(`roles ( codigo )`)
+        .select(`roles ( codigo ), permisos`) // Agregamos el campo permisos
         .eq('id_usuario', sesion.user.id)
         .single()
 
       if (error) {
         console.error('Error al obtener rol:', error)
         setRol('auditor')
-      } else if (data && data.roles) {
-        setRol(data.roles.codigo.toLowerCase()) 
+        setPermisos([])
+      } else if (data) {
+        setRol(data.roles?.codigo?.toLowerCase() || 'auditor') 
+        setPermisos(data.permisos || []) // Guardamos el arreglo de permisos
       } else {
         setRol('auditor')
+        setPermisos([])
       }
       setCargandoRol(false)
     }
@@ -89,6 +94,7 @@ function App() {
     await supabase.auth.signOut()
     setPantalla('')
     setRol(null)
+    setPermisos([])
     setMostrarAviso(false)
   }, [])
 
@@ -133,6 +139,14 @@ function App() {
   const navegar = (pantallaDestino) => {
     setPantalla(pantallaDestino)
     setMenuAbierto(false)
+  }
+
+  // --- FUNCIÓN AUXILIAR DE PERMISOS ---
+  // Retorna true si el rol está permitido por defecto O si el usuario tiene el permiso extra
+  const tienePermiso = (permisoExtra, rolesPermitidos) => {
+    if (rolesPermitidos.includes(rol)) return true
+    if (permisos.includes(permisoExtra)) return true
+    return false
   }
 
   if (!sesion) {
@@ -207,51 +221,51 @@ function App() {
         </button>
 
         <div className={`nav-buttons ${menuAbierto ? 'abierto' : ''}`}>
-          {(rol === 'admin_sistema' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto') && (
+          
+          {tienePermiso('lotes', ['admin_sistema', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto']) && (
             <button onClick={() => navegar('lotes')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'lotes' ? 'white' : 'transparent', color: pantalla === 'lotes' ? '#0B5FA5' : 'white' }}>Registro de Lotes</button>
           )}
           
-          {(rol === 'admin_sistema' || rol === 'admin_planta') && (
+          {tienePermiso('viajes', ['admin_sistema', 'admin_planta']) && (
             <>
               <button onClick={() => navegar('admin')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'admin' ? 'white' : 'transparent', color: pantalla === 'admin' ? '#0B5FA5' : 'white' }}>Registrar Viajes (SCOP)</button>
               <button onClick={() => navegar('excepciones')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'excepciones' ? 'white' : 'transparent', color: pantalla === 'excepciones' ? '#0B5FA5' : 'white' }}>Excepciones</button>
             </>
           )}
 
-          {(rol === 'admin_sistema' || rol === 'admin_planta' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'auditor' || rol === 'jefe_proyecto') && (
+          {tienePermiso('precintos', ['admin_sistema', 'admin_planta', 'analista_operaciones', 'jefe_operaciones', 'auditor', 'jefe_proyecto']) && (
             <button onClick={() => navegar('precintos')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'precintos' ? 'white' : 'transparent', color: pantalla === 'precintos' ? '#0B5FA5' : 'white' }}>Precintos</button>
           )}
 
-          {(rol === 'admin_sistema' || rol === 'auditor' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto' || rol === 'admin_planta') && (
+          {tienePermiso('dashboard', ['admin_sistema', 'auditor', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto', 'admin_planta']) && (
             <>
               <button onClick={() => navegar('dashboard')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'dashboard' ? 'white' : 'transparent', color: pantalla === 'dashboard' ? '#0B5FA5' : 'white' }}>Dashboard</button>
               <button onClick={() => navegar('reportes')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'reportes' ? 'white' : 'transparent', color: pantalla === 'reportes' ? '#0B5FA5' : 'white' }}>Reportes</button>
             </>
           )}
 
-          {(rol === 'admin_sistema' || rol === 'jefe_proyecto' || rol === 'analista_operaciones' || rol === 'jefe_operaciones') && (
+          {tienePermiso('conciliacion', ['admin_sistema', 'jefe_proyecto', 'analista_operaciones', 'jefe_operaciones']) && (
             <button onClick={() => navegar('conciliacion')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'conciliacion' ? 'white' : 'transparent', color: pantalla === 'conciliacion' ? '#0B5FA5' : 'white' }}>Conciliación</button>
           )}
 
-          {(rol === 'admin_sistema' || rol === 'jefe_proyecto' || rol === 'jefe_operaciones' || rol === 'analista_operaciones') && (
+          {tienePermiso('proyeccion', ['admin_sistema', 'jefe_proyecto', 'jefe_operaciones', 'analista_operaciones']) && (
             <button onClick={() => navegar('proyeccion')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'proyeccion' ? 'white' : 'transparent', color: pantalla === 'proyeccion' ? '#0B5FA5' : 'white' }}>Proyección Demanda</button>
           )}
 
-          {(rol === 'admin_sistema' || rol === 'auditor' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto') && (
+          {tienePermiso('bitacora', ['admin_sistema', 'auditor', 'jefe_operaciones', 'jefe_proyecto']) && (
             <button onClick={() => navegar('bitacora')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'bitacora' ? 'white' : 'transparent', color: pantalla === 'bitacora' ? '#0B5FA5' : 'white' }}>Bitácora</button>
           )}
 
-          {(rol === 'admin_sistema' || rol === 'jefe_proyecto') && (
+          {tienePermiso('usuarios', ['admin_sistema', 'jefe_proyecto']) && (
             <button onClick={() => navegar('usuarios')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'usuarios' ? 'white' : 'transparent', color: pantalla === 'usuarios' ? '#0B5FA5' : 'white' }}>Administrar Usuarios</button>
           )}
 
-          {(rol === 'admin_sistema') && (
-            <>
-              <button onClick={() => navegar('plantas')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'plantas' ? 'white' : 'transparent', color: pantalla === 'plantas' ? '#0B5FA5' : 'white' }}>Config. Plantas</button>
-              
-              {/* NUEVO BOTÓN: RESPALDOS */}
-              <button onClick={() => navegar('respaldos')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'respaldos' ? 'white' : 'transparent', color: pantalla === 'respaldos' ? '#0B5FA5' : 'white' }}>Respaldos</button>
-            </>
+          {tienePermiso('plantas', ['admin_sistema']) && (
+            <button onClick={() => navegar('plantas')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'plantas' ? 'white' : 'transparent', color: pantalla === 'plantas' ? '#0B5FA5' : 'white' }}>Config. Plantas</button>
+          )}
+
+          {tienePermiso('respaldos', ['admin_sistema']) && (
+            <button onClick={() => navegar('respaldos')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'respaldos' ? 'white' : 'transparent', color: pantalla === 'respaldos' ? '#0B5FA5' : 'white' }}>Respaldos</button>
           )}
         </div>
 
@@ -266,21 +280,33 @@ function App() {
       </nav>
 
       <div style={{ paddingTop: '20px', paddingBottom: '40px' }}>
-        {pantalla === 'lotes' && (rol === 'admin_sistema' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto') && <RegistroLotes />}
-        {pantalla === 'admin' && (rol === 'admin_sistema' || rol === 'admin_planta') && <RegistroViajes />}
-        {pantalla === 'excepciones' && (rol === 'admin_sistema' || rol === 'admin_planta') && <Excepciones />}
-        {pantalla === 'precintos' && (rol === 'admin_sistema' || rol === 'admin_planta' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'auditor' || rol === 'jefe_proyecto') && <ListadoPrecintos />}
-        {pantalla === 'dashboard' && <Dashboard />}
-        {pantalla === 'reportes' && <Reportes />}
-        {pantalla === 'bitacora' && (rol === 'admin_sistema' || rol === 'auditor' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto') && <Bitacora />}
-        {pantalla === 'usuarios' && (rol === 'admin_sistema' || rol === 'jefe_proyecto') && <GestionUsuarios />}
-        {pantalla === 'conciliacion' && (rol === 'admin_sistema' || rol === 'jefe_proyecto' || rol === 'analista_operaciones' || rol === 'jefe_operaciones') && <Conciliacion />}
-        {pantalla === 'proyeccion' && (rol === 'admin_sistema' || rol === 'jefe_proyecto' || rol === 'jefe_operaciones' || rol === 'analista_operaciones') && <ProyeccionDemanda />}
-        {pantalla === 'cambiar-password' && <CambiarPassword />}
-        {pantalla === 'plantas' && rol === 'admin_sistema' && <GestionPlantas />}
         
-        {/* NUEVO RENDERIZADO: RESPALDOS */}
-        {pantalla === 'respaldos' && rol === 'admin_sistema' && <PanelRespaldos />}
+        {/* RENDERIZADO DE COMPONENTES CON VALIDACIÓN DE PERMISOS */}
+        {pantalla === 'lotes' && tienePermiso('lotes', ['admin_sistema', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto']) && <RegistroLotes />}
+        
+        {pantalla === 'admin' && tienePermiso('viajes', ['admin_sistema', 'admin_planta']) && <RegistroViajes />}
+        
+        {pantalla === 'excepciones' && tienePermiso('viajes', ['admin_sistema', 'admin_planta']) && <Excepciones />}
+        
+        {pantalla === 'precintos' && tienePermiso('precintos', ['admin_sistema', 'admin_planta', 'analista_operaciones', 'jefe_operaciones', 'auditor', 'jefe_proyecto']) && <ListadoPrecintos />}
+        
+        {pantalla === 'dashboard' && tienePermiso('dashboard', ['admin_sistema', 'auditor', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto', 'admin_planta']) && <Dashboard />}
+        
+        {pantalla === 'reportes' && tienePermiso('dashboard', ['admin_sistema', 'auditor', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto', 'admin_planta']) && <Reportes />}
+        
+        {pantalla === 'bitacora' && tienePermiso('bitacora', ['admin_sistema', 'auditor', 'jefe_operaciones', 'jefe_proyecto']) && <Bitacora />}
+        
+        {pantalla === 'usuarios' && tienePermiso('usuarios', ['admin_sistema', 'jefe_proyecto']) && <GestionUsuarios />}
+        
+        {pantalla === 'conciliacion' && tienePermiso('conciliacion', ['admin_sistema', 'jefe_proyecto', 'analista_operaciones', 'jefe_operaciones']) && <Conciliacion />}
+        
+        {pantalla === 'proyeccion' && tienePermiso('proyeccion', ['admin_sistema', 'jefe_proyecto', 'jefe_operaciones', 'analista_operaciones']) && <ProyeccionDemanda />}
+        
+        {pantalla === 'cambiar-password' && <CambiarPassword />}
+        
+        {pantalla === 'plantas' && tienePermiso('plantas', ['admin_sistema']) && <GestionPlantas />}
+        
+        {pantalla === 'respaldos' && tienePermiso('respaldos', ['admin_sistema']) && <PanelRespaldos />}
 
         {pantalla === '' && (
           <div style={{ textAlign: 'center', marginTop: '100px', color: '#666', padding: '0 20px' }}>

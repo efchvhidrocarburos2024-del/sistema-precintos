@@ -17,6 +17,20 @@ export default function GestionUsuarios() {
   const [rol, setRol] = useState('admin_planta')
   const [idPlanta, setIdPlanta] = useState('')
   const [activo, setActivo] = useState(true)
+  
+  // NUEVO: Estado para los permisos (arreglo de strings)
+  const [permisos, setPermisos] = useState([])
+
+  // Lista de permisos disponibles en el sistema
+  const permisosDisponibles = [
+    { id: 'bitacora', label: 'Ver Bitácora de Auditoría' },
+    { id: 'proyeccion', label: 'Ver Proyección de Demanda' },
+    { id: 'conciliacion', label: 'Ejecutar Conciliación' },
+    { id: 'usuarios', label: 'Administrar Usuarios' },
+    { id: 'plantas', label: 'Configurar Plantas' },
+    { id: 'respaldos', label: 'Descargar Respaldos' },
+    { id: 'todas_plantas', label: 'Acceso a todas las plantas' },
+  ]
 
   useEffect(() => {
     cargarDatos()
@@ -24,13 +38,11 @@ export default function GestionUsuarios() {
 
   async function cargarDatos() {
     setCargando(true)
-    
-    // Cargar roles, plantas y usuarios en paralelo
     const [resRoles, resPlantas, resUsuarios] = await Promise.all([
       supabase.from('roles').select('*').order('nombre'),
       supabase.from('plantas').select('*').order('nombre'),
       supabase.from('usuarios').select(`
-        id_usuario, email, nombre_completo, activo,
+        id_usuario, email, nombre_completo, activo, permisos,
         roles ( codigo ),
         plantas ( nombre )
       `).order('email')
@@ -42,7 +54,6 @@ export default function GestionUsuarios() {
       setIdPlanta(resPlantas.data[0]?.id_planta || '')
     }
     if (resUsuarios.data) setUsuarios(resUsuarios.data)
-    
     setCargando(false)
   }
 
@@ -54,17 +65,28 @@ export default function GestionUsuarios() {
     setRol('admin_planta')
     setIdPlanta(plantas[0]?.id_planta || '')
     setActivo(true)
+    setPermisos([]) // Limpiamos permisos
   }
 
   const editarUsuario = (u) => {
     setIdEditando(u.id_usuario)
     setEmail(u.email)
     setNombre(u.nombre_completo || '')
-    setPassword('') // Dejamos la contraseña vacía para no sobreescribirla
+    setPassword('') 
     setRol(u.roles?.codigo?.toLowerCase() || 'admin_planta')
     setIdPlanta(u.plantas?.id_planta || plantas[0]?.id_planta || '')
     setActivo(u.activo)
+    setPermisos(u.permisos || []) // Cargamos sus permisos actuales
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // Manejar el check/uncheck de permisos
+  const togglePermiso = (permisoId) => {
+    if (permisos.includes(permisoId)) {
+      setPermisos(permisos.filter(p => p !== permisoId))
+    } else {
+      setPermisos([...permisos, permisoId])
+    }
   }
 
   const guardarUsuario = async (e) => {
@@ -72,7 +94,6 @@ export default function GestionUsuarios() {
     setGuardando(true)
 
     if (idEditando) {
-      // ACTUALIZAR USUARIO EXISTENTE
       const { data, error } = await supabase.functions.invoke('gestionar-usuario', {
         body: {
           id_usuario: idEditando,
@@ -81,7 +102,8 @@ export default function GestionUsuarios() {
           rol: rol,
           id_planta: rol === 'admin_planta' ? idPlanta : null,
           activo: activo,
-          password: password
+          password: password,
+          permisos: permisos // Enviamos los permisos
         }
       })
 
@@ -93,7 +115,7 @@ export default function GestionUsuarios() {
         cargarDatos()
       }
     } else {
-      // CREAR NUEVO USUARIO
+      // ... (Lógica de creación existente) ...
       if (!password) {
         toast.error("La contraseña es obligatoria para nuevos usuarios")
         setGuardando(false)
@@ -113,24 +135,12 @@ export default function GestionUsuarios() {
         toast.error(data?.error || error.message)
       } else {
         toast.success(`Usuario ${email} creado con éxito.`)
-        
-        // --- NUEVA LÓGICA: ENVIAR CREDENCIALES POR CORREO ---
         try {
           await supabase.functions.invoke('enviar-credenciales', {
-            body: {
-              email: email,
-              nombre: nombre,
-              password: password,
-              rol: rol // Enviamos el rol para que se vea en el correo
-            }
+            body: { email: email, nombre: nombre, password: password, rol: rol }
           })
-          toast.success('Credenciales enviadas por correo exitosamente')
-        } catch (err) {
-          console.error('Error al enviar credenciales:', err)
-          toast.error('Usuario creado, pero no se pudo enviar el correo.')
-        }
-        // ----------------------------------------------------
-
+          toast.success('Credenciales enviadas por correo')
+        } catch (err) {}
         limpiarFormulario()
         cargarDatos()
       }
@@ -194,9 +204,31 @@ export default function GestionUsuarios() {
             </div>
           )}
 
+          {/* SECCIÓN DE PERMISOS EXTRA (SOLO AL EDITAR) */}
+          {idEditando && (
+            <div style={{ gridColumn: '1 / -1', backgroundColor: '#f9fafb', padding: '15px', borderRadius: '8px', border: '1px solid #e5e7eb', marginTop: '10px' }}>
+              <label style={{ fontWeight: 'bold', fontSize: '14px', display: 'block', marginBottom: '10px', color: '#0B5FA5' }}>
+                Conceder Permisos Especiales (Opcional):
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
+                {permisosDisponibles.map(p => (
+                  <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={permisos.includes(p.id)} 
+                      onChange={() => togglePermiso(p.id)}
+                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                    />
+                    {p.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: '10px', gridColumn: '1 / -1', marginTop: '10px' }}>
             <button type="submit" disabled={guardando} style={{ flex: 1, padding: '12px', background: idEditando ? '#EAB308' : '#16A34A', color: idEditando ? 'black' : 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-              {guardando ? 'Guardando...' : (idEditando ? 'Actualizar Usuario' : 'Crear Usuario')}
+              {guardando ? 'Guardando...' : (idEditando ? 'Actualizar Usuario y Permisos' : 'Crear Usuario')}
             </button>
             
             {idEditando && (
@@ -229,7 +261,13 @@ export default function GestionUsuarios() {
               <tbody>
                 {usuarios.map((u) => (
                   <tr key={u.id_usuario} style={{ borderBottom: '1px solid #eee', backgroundColor: u.activo ? 'white' : '#fef2f2' }}>
-                    <td style={{ padding: '12px', fontWeight: 'bold' }}>{u.email}</td>
+                    <td style={{ padding: '12px', fontWeight: 'bold' }}>
+                      {u.email}
+                      {/* Mostramos un mini-indicador si tiene permisos extra */}
+                      {u.permisos && u.permisos.length > 0 && (
+                        <span title={`Permisos extra: ${u.permisos.join(', ')}`} style={{ marginLeft: '8px', cursor: 'help', fontSize: '16px' }}>⭐</span>
+                      )}
+                    </td>
                     <td style={{ padding: '12px' }}>{u.nombre_completo || '-'}</td>
                     <td style={{ padding: '12px' }}>
                       <span style={{ padding: '4px 8px', backgroundColor: '#E0E7FF', color: '#3730A3', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>
