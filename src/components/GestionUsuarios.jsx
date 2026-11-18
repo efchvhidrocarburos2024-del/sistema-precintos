@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
+import toast from 'react-hot-toast' // <-- NUEVO IMPORT
 
 export default function GestionUsuarios() {
   const [email, setEmail] = useState('')
@@ -7,7 +8,6 @@ export default function GestionUsuarios() {
   const [rol, setRol] = useState('admin_planta')
   const [idPlanta, setIdPlanta] = useState('')
   const [plantas, setPlantas] = useState([])
-  const [mensaje, setMensaje] = useState('')
   const [cargando, setCargando] = useState(false)
 
   useEffect(() => {
@@ -24,21 +24,20 @@ export default function GestionUsuarios() {
   const crearUsuario = async (e) => {
     e.preventDefault()
     setCargando(true)
-    setMensaje('')
 
     const { data, error } = await supabase.functions.invoke('crear-usuario', {
       body: {
         email: email,
         password: password,
-        rol: rol, // Enviamos el string, la Edge Function buscará el UUID
+        rol: rol,
         id_planta: rol === 'admin_planta' ? idPlanta : null
       }
     })
 
     if (error || (data && data.error)) {
-      setMensaje('❌ Error: ' + (data?.error || error.message))
+      toast.error(data?.error || error.message)
     } else {
-      setMensaje(`✅ Usuario ${email} creado con éxito.`)
+      toast.success(`Usuario ${email} creado con éxito.`)
       setEmail('')
       setPassword('')
     }
@@ -82,7 +81,6 @@ export default function GestionUsuarios() {
           {cargando ? 'Creando...' : 'Crear Usuario'}
         </button>
       </form>
-      {mensaje && <p style={{ marginTop: '20px', fontWeight: 'bold', textAlign: 'center', color: mensaje.includes('❌') ? 'red' : 'green' }}>{mensaje}</p>}
     </div>
   )
 }

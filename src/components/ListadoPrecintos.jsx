@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
+import toast from 'react-hot-toast' // <-- NUEVO IMPORT
 
 export default function ListadoPrecintos() {
   const [precintos, setPrecintos] = useState([])
   const [cargando, setCargando] = useState(true)
-  
-  // Estados para filtros y paginación
   const [filtroTexto, setFiltroTexto] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
   const [pagina, setPagina] = useState(0)
@@ -16,34 +15,19 @@ export default function ListadoPrecintos() {
     async function cargarPrecintos() {
       setCargando(true)
       
-      // Iniciar la consulta con el conteo exacto para la paginación
       let query = supabase
         .from('precintos')
         .select(`
-          id_precinto,
-          correlativo,
-          estado,
-          color,
-          valor_sin_igv,
-          fecha_recepcion,
-          plantas ( nombre )
+          id_precinto, correlativo, estado, color, valor_sin_igv, fecha_recepcion, plantas ( nombre )
         `, { count: 'exact' })
 
-      // Aplicar filtros si existen
-      if (filtroTexto) {
-        query = query.ilike('correlativo', `%${filtroTexto}%`)
-      }
-      if (filtroEstado) {
-        query = query.eq('estado', filtroEstado)
-      }
+      if (filtroTexto) query = query.ilike('correlativo', `%${filtroTexto}%`)
+      if (filtroEstado) query = query.eq('estado', filtroEstado)
 
-      // Aplicar paginación (desde - hasta)
       const from = pagina * itemsPorPagina
       const to = from + itemsPorPagina - 1
       
-      query = query
-        .order('fecha_recepcion', { ascending: false })
-        .range(from, to)
+      query = query.order('fecha_recepcion', { ascending: false }).range(from, to)
 
       const { data, error, count } = await query
 
@@ -55,23 +39,18 @@ export default function ListadoPrecintos() {
     }
 
     cargarPrecintos()
-  }, [pagina, filtroTexto, filtroEstado]) // Se vuelve a ejecutar si cambian estos estados
+  }, [pagina, filtroTexto, filtroEstado])
 
-  // Calcular total de páginas
   const totalPaginas = Math.ceil(totalRegistros / itemsPorPagina)
 
-  // Limpiar filtros
   const limpiarFiltros = () => {
     setFiltroTexto('')
     setFiltroEstado('')
     setPagina(0)
   }
 
-  // --- FUNCIÓN PARA EXPORTAR A EXCEL/CSV (Trae todos los datos filtrados, no solo la página actual) ---
   const exportarCSV = async () => {
     setCargando(true)
-    
-    // Hacemos la misma consulta pero SIN el .range() para traer todo
     let query = supabase.from('precintos').select(`correlativo, estado, color, valor_sin_igv, fecha_recepcion, plantas(nombre)`)
     if (filtroTexto) query = query.ilike('correlativo', `%${filtroTexto}%`)
     if (filtroEstado) query = query.eq('estado', filtroEstado)
@@ -79,7 +58,7 @@ export default function ListadoPrecintos() {
     const { data } = await query.order('fecha_recepcion', { ascending: false })
 
     if (!data || data.length === 0) {
-      alert("No hay datos para exportar con los filtros actuales")
+      toast.error("No hay datos para exportar con los filtros actuales") // <-- Cambiado a toast
       setCargando(false)
       return
     }
@@ -102,6 +81,7 @@ export default function ListadoPrecintos() {
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
     
+    toast.success("Archivo exportado correctamente")
     setCargando(false)
   }
 
@@ -115,7 +95,6 @@ export default function ListadoPrecintos() {
         </button>
       </div>
 
-      {/* BARRA DE FILTROS */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', backgroundColor: '#f9fafb', padding: '15px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
         
         <input 
@@ -145,7 +124,6 @@ export default function ListadoPrecintos() {
         </button>
       </div>
 
-      {/* TABLA DE DATOS */}
       {cargando ? (
         <p style={{ textAlign: 'center', color: '#666', padding: '40px' }}>Cargando datos desde el servidor...</p>
       ) : (
@@ -195,7 +173,6 @@ export default function ListadoPrecintos() {
         </div>
       )}
 
-      {/* CONTROLES DE PAGINACIÓN */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <span style={{ color: '#666', fontSize: '14px' }}>
           Mostrando <strong>{precintos.length}</strong> de <strong>{totalRegistros}</strong> registros totales

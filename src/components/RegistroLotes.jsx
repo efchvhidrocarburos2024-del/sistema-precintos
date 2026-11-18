@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
+import toast from 'react-hot-toast' // <-- NUEVO IMPORT
 
 export default function RegistroLotes() {
   const [plantas, setPlantas] = useState([])
@@ -8,7 +9,6 @@ export default function RegistroLotes() {
   const [fin, setFin] = useState('')
   const [valorSinIgv, setValorSinIgv] = useState('')
   const [color, setColor] = useState('')
-  const [mensaje, setMensaje] = useState('')
   const [cargando, setCargando] = useState(false)
 
   useEffect(() => {
@@ -25,7 +25,6 @@ export default function RegistroLotes() {
   const registrarLote = async (e) => {
     e.preventDefault()
     setCargando(true)
-    setMensaje('')
 
     const { data, error } = await supabase.rpc('fn_registrar_lote_precintos', {
       p_id_planta: idPlanta,
@@ -36,9 +35,9 @@ export default function RegistroLotes() {
     })
 
     if (error) {
-      setMensaje('❌ Error: ' + error.message)
+      toast.error(error.message)
     } else {
-      setMensaje(`✅ ¡Éxito! Se registraron ${data} precintos.`)
+      toast.success(`¡Éxito! Se registraron ${data} precintos.`)
       setInicio('')
       setFin('')
       setValorSinIgv('')
@@ -79,8 +78,6 @@ export default function RegistroLotes() {
           {cargando ? 'Guardando...' : 'Guardar en Sistema'}
         </button>
       </form>
-
-      {mensaje && <p style={{ marginTop: '20px', fontWeight: 'bold', textAlign: 'center', color: mensaje.includes('❌') ? 'red' : 'green' }}>{mensaje}</p>}
     </div>
   )
 }

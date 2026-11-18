@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
+import { Toaster } from 'react-hot-toast' // <-- NUEVO IMPORT
+
 import Login from './components/Login'
 import RegistroLotes from './components/RegistroLotes'
 import RegistroViajes from './components/RegistroViajes'
@@ -7,23 +9,19 @@ import Excepciones from './components/Excepciones'
 import Dashboard from './components/Dashboard'
 import Reportes from './components/Reportes'
 import GestionUsuarios from './components/GestionUsuarios'
-
-// --- NUEVOS COMPONENTES ---
 import CambiarPassword from './components/CambiarPassword'
 import ForgotPassword from './components/ForgotPassword'
 import ResetPassword from './components/ResetPassword'
 import Conciliacion from './components/Conciliacion'
 import ProyeccionDemanda from './components/ProyeccionDemanda'
-import ListadoPrecintos from './components/ListadoPrecintos' // <-- NUEVO IMPORT
+import ListadoPrecintos from './components/ListadoPrecintos'
+import Bitacora from './components/Bitacora'
 
 function App() {
   const [sesion, setSesion] = useState(null)
   const [pantalla, setPantalla] = useState('')
-  
-  // ESTADO PARA EL ROL Y CARGA
   const [rol, setRol] = useState(null) 
   const [cargandoRol, setCargandoRol] = useState(true)
-
   const [esRecuperacion, setEsRecuperacion] = useState(false)
 
   useEffect(() => {
@@ -45,7 +43,6 @@ function App() {
     return () => authListener.subscription.unsubscribe()
   }, [])
 
-  // CONSULTAR EL ROL EN LA TABLA USUARIOS
   useEffect(() => {
     if (!sesion) {
       setRol(null)
@@ -57,17 +54,13 @@ function App() {
       setCargandoRol(true)
       const { data, error } = await supabase
         .from('usuarios')
-        .select(`
-          roles (
-            codigo
-          )
-        `)
+        .select(`roles ( codigo )`)
         .eq('id_usuario', sesion.user.id)
         .single()
 
       if (error) {
         console.error('Error al obtener rol:', error)
-        setRol('auditor') // Rol por defecto si hay error
+        setRol('auditor')
       } else if (data && data.roles) {
         setRol(data.roles.codigo.toLowerCase()) 
       } else {
@@ -85,14 +78,12 @@ function App() {
     setRol(null)
   }
 
-  // --- LÓGICA DE PANTALLAS SIN SESIÓN ---
   if (!sesion) {
     if (esRecuperacion) return <ResetPassword />
     if (pantalla === 'forgot') return <ForgotPassword setPantalla={setPantalla} />
     return <Login setPantalla={setPantalla} />
   }
 
-  // Mientras carga el rol desde la base de datos
   if (cargandoRol) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f3f4f6' }}>
@@ -103,16 +94,18 @@ function App() {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6' }}>
+      
+      {/* CONTENEDOR DE NOTIFICACIONES FLOTANTES */}
+      <Toaster position="top-right" toastOptions={{ duration: 4000, style: { fontWeight: 'bold' } }} />
+
       <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 30px', backgroundColor: '#0B5FA5', flexWrap: 'wrap' }}>
         
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           
-          {/* 1. REGISTRO DE LOTES */}
           {(rol === 'admin_sistema' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto') && (
             <button onClick={() => setPantalla('lotes')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'lotes' ? 'white' : 'transparent', color: pantalla === 'lotes' ? '#0B5FA5' : 'white' }}>Registro de Lotes</button>
           )}
           
-          {/* 2. PANTALLAS DE PLANTA */}
           {(rol === 'admin_sistema' || rol === 'admin_planta') && (
             <>
               <button onClick={() => setPantalla('admin')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'admin' ? 'white' : 'transparent', color: pantalla === 'admin' ? '#0B5FA5' : 'white' }}>Registrar Viajes (SCOP)</button>
@@ -120,12 +113,10 @@ function App() {
             </>
           )}
 
-          {/* 3. LISTADO DE PRECINTOS (NUEVO) */}
           {(rol === 'admin_sistema' || rol === 'admin_planta' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'auditor' || rol === 'jefe_proyecto') && (
             <button onClick={() => setPantalla('precintos')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'precintos' ? 'white' : 'transparent', color: pantalla === 'precintos' ? '#0B5FA5' : 'white' }}>Precintos</button>
           )}
 
-          {/* 4. DASHBOARD Y REPORTES */}
           {(rol === 'admin_sistema' || rol === 'auditor' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto' || rol === 'admin_planta') && (
             <>
               <button onClick={() => setPantalla('dashboard')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'dashboard' ? 'white' : 'transparent', color: pantalla === 'dashboard' ? '#0B5FA5' : 'white' }}>Dashboard</button>
@@ -133,17 +124,18 @@ function App() {
             </>
           )}
 
-          {/* 5. CONCILIACIÓN */}
           {(rol === 'admin_sistema' || rol === 'jefe_proyecto' || rol === 'analista_operaciones' || rol === 'jefe_operaciones') && (
             <button onClick={() => setPantalla('conciliacion')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'conciliacion' ? 'white' : 'transparent', color: pantalla === 'conciliacion' ? '#0B5FA5' : 'white' }}>Conciliación</button>
           )}
 
-          {/* 6. PROYECCIÓN DEMANDA */}
           {(rol === 'admin_sistema' || rol === 'jefe_proyecto' || rol === 'jefe_operaciones' || rol === 'analista_operaciones') && (
             <button onClick={() => setPantalla('proyeccion')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'proyeccion' ? 'white' : 'transparent', color: pantalla === 'proyeccion' ? '#0B5FA5' : 'white' }}>Proyección Demanda</button>
           )}
 
-          {/* 7. CREAR USUARIOS */}
+          {(rol === 'admin_sistema' || rol === 'auditor' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto') && (
+            <button onClick={() => setPantalla('bitacora')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'bitacora' ? 'white' : 'transparent', color: pantalla === 'bitacora' ? '#0B5FA5' : 'white' }}>Bitácora</button>
+          )}
+
           {(rol === 'admin_sistema' || rol === 'jefe_proyecto') && (
             <button onClick={() => setPantalla('usuarios')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'usuarios' ? 'white' : 'transparent', color: pantalla === 'usuarios' ? '#0B5FA5' : 'white' }}>Crear Usuarios</button>
           )}
@@ -159,25 +151,16 @@ function App() {
       </nav>
 
       <div style={{ paddingTop: '20px' }}>
-        {/* RENDERIZADO DE COMPONENTES */}
         {pantalla === 'lotes' && (rol === 'admin_sistema' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto') && <RegistroLotes />}
-        
         {pantalla === 'admin' && (rol === 'admin_sistema' || rol === 'admin_planta') && <RegistroViajes />}
-        
         {pantalla === 'excepciones' && (rol === 'admin_sistema' || rol === 'admin_planta') && <Excepciones />}
-        
-        {/* NUEVO RENDERIZADO DE PRECINTOS */}
         {pantalla === 'precintos' && (rol === 'admin_sistema' || rol === 'admin_planta' || rol === 'analista_operaciones' || rol === 'jefe_operaciones' || rol === 'auditor' || rol === 'jefe_proyecto') && <ListadoPrecintos />}
-
         {pantalla === 'dashboard' && <Dashboard />}
         {pantalla === 'reportes' && <Reportes />}
-        
+        {pantalla === 'bitacora' && (rol === 'admin_sistema' || rol === 'auditor' || rol === 'jefe_operaciones' || rol === 'jefe_proyecto') && <Bitacora />}
         {pantalla === 'usuarios' && (rol === 'admin_sistema' || rol === 'jefe_proyecto') && <GestionUsuarios />}
-        
         {pantalla === 'conciliacion' && (rol === 'admin_sistema' || rol === 'jefe_proyecto' || rol === 'analista_operaciones' || rol === 'jefe_operaciones') && <Conciliacion />}
-        
         {pantalla === 'proyeccion' && (rol === 'admin_sistema' || rol === 'jefe_proyecto' || rol === 'jefe_operaciones' || rol === 'analista_operaciones') && <ProyeccionDemanda />}
-
         {pantalla === 'cambiar-password' && <CambiarPassword />}
         
         {pantalla === '' && (
