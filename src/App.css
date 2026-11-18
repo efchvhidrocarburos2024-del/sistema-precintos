@@ -483,3 +483,15 @@ body {
   .form-actions { flex-direction: column-reverse; }
   .form-actions .btn { width: 100%; }
 }
+/* ============================================================
+   PANTALLAS DE AUTENTICACIÓN (Login, Forgot, Reset)
+============================================================ */
+.auth-wrapper {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  background-color: var(--gray-bg);
+  font-family: Arial, sans-serif;
+}
