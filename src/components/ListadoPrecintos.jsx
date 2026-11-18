@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
-import toast from 'react-hot-toast' // <-- NUEVO IMPORT
+import toast from 'react-hot-toast'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 export default function ListadoPrecintos() {
   const [precintos, setPrecintos] = useState([])
@@ -49,6 +51,7 @@ export default function ListadoPrecintos() {
     setPagina(0)
   }
 
+  // --- FUNCIÓN EXPORTAR A EXCEL ---
   const exportarCSV = async () => {
     setCargando(true)
     let query = supabase.from('precintos').select(`correlativo, estado, color, valor_sin_igv, fecha_recepcion, plantas(nombre)`)
@@ -58,7 +61,7 @@ export default function ListadoPrecintos() {
     const { data } = await query.order('fecha_recepcion', { ascending: false })
 
     if (!data || data.length === 0) {
-      toast.error("No hay datos para exportar con los filtros actuales") // <-- Cambiado a toast
+      toast.error("No hay datos para exportar con los filtros actuales")
       setCargando(false)
       return
     }
@@ -81,7 +84,83 @@ export default function ListadoPrecintos() {
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
     
-    toast.success("Archivo exportado correctamente")
+    toast.success("Archivo Excel exportado correctamente")
+    setCargando(false)
+  }
+
+  // --- NUEVA FUNCIÓN EXPORTAR A PDF ---
+  const generarPDF = async () => {
+    setCargando(true)
+    
+    // Traemos los datos con los filtros aplicados
+    let query = supabase.from('precintos').select(`correlativo, estado, color, valor_sin_igv, fecha_recepcion, plantas(nombre)`)
+    if (filtroTexto) query = query.ilike('correlativo', `%${filtroTexto}%`)
+    if (filtroEstado) query = query.eq('estado', filtroEstado)
+    
+    const { data } = await query.order('fecha_recepcion', { ascending: false })
+
+    if (!data || data.length === 0) {
+      toast.error("No hay datos para generar el PDF")
+      setCargando(false)
+      return
+    }
+
+    // Inicializar jsPDF (Formato A4, orientación horizontal 'landscape')
+    const doc = new jsPDF('landscape', 'pt', 'a4')
+    
+    // --- CABECERA DEL REPORTE ---
+    doc.setFontSize(18)
+    doc.setTextColor(11, 95, 165) // Azul Petroamérica (#0B5FA5)
+    doc.text('PETROAMÉRICA', 40, 40)
+    
+    doc.setFontSize(12)
+    doc.setTextColor(50, 50, 50)
+    doc.text('Reporte de Inventario de Precintos', 40, 60)
+    
+    // Fecha y filtros aplicados
+    doc.setFontSize(10)
+    doc.setTextColor(100, 100, 100)
+    const fechaActual = new Date().toLocaleString('es-PE')
+    let filtrosAplicados = `Generado el: ${fechaActual}`
+    if (filtroTexto) filtrosAplicados += ` | Filtro Correlativo: "${filtroTexto}"`
+    if (filtroEstado) filtrosAplicados += ` | Estado: ${filtroEstado}`
+    doc.text(filtrosAplicados, 40, 80)
+
+    // --- TABLA DE DATOS ---
+    const tableColumn = ["Correlativo", "Planta", "Color", "Valor (S/)", "Estado", "Fecha Recepción"]
+    const tableRows = data.map(p => [
+      p.correlativo,
+      p.plantas?.nombre || 'Sin Planta',
+      p.color || '-',
+      `S/ ${p.valor_sin_igv?.toFixed(2) || '0.00'}`,
+      p.estado,
+      new Date(p.fecha_recepcion).toLocaleDateString('es-PE')
+    ])
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 100, // Comenzar un poco más abajo de la cabecera
+      theme: 'grid',
+      styles: { fontSize: 9, cellPadding: 5 },
+      headStyles: { fillColor: [11, 95, 165], textColor: 255, fontStyle: 'bold' }, // Cabecera azul
+      alternateRowStyles: { fillColor: [243, 244, 246] }, // Filas grises claras intercaladas
+      margin: { top: 100, left: 40, right: 40 }
+    })
+
+    // --- PIE DE PÁGINA ---
+    const pageCount = doc.internal.getNumberOfPages()
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i)
+      doc.setFontSize(8)
+      doc.setTextColor(150, 150, 150)
+      doc.text(`Página ${i} de ${pageCount} - Sistema de Precintos`, 40, doc.internal.pageSize.height - 20)
+    }
+
+    // Guardar el archivo
+    doc.save(`Reporte_Precintos_${new Date().toISOString().slice(0, 10)}.pdf`)
+    
+    toast.success("Reporte PDF generado exitosamente")
     setCargando(false)
   }
 
@@ -90,9 +169,15 @@ export default function ListadoPrecintos() {
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <h2 style={{ color: '#0B5FA5', margin: 0 }}>Inventario de Precintos</h2>
-        <button onClick={exportarCSV} disabled={cargando} style={{ padding: '10px 20px', background: '#16A34A', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-          📥 Exportar a Excel
-        </button>
+        
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={exportarCSV} disabled={cargando} style={{ padding: '10px 20px', background: '#16A34A', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+            📥 Exportar a Excel
+          </button>
+          <button onClick={generarPDF} disabled={cargando} style={{ padding: '10px 20px', background: '#DC2626', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+            📄 Descargar PDF
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', backgroundColor: '#f9fafb', padding: '15px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
