@@ -13,6 +13,7 @@ import CambiarPassword from './components/CambiarPassword'
 import ForgotPassword from './components/ForgotPassword'
 import ResetPassword from './components/ResetPassword'
 import Conciliacion from './components/Conciliacion'
+import ProyeccionDemanda from './components/ProyeccionDemanda' // <-- 1. IMPORT AGREGADO
 
 function App() {
   const [sesion, setSesion] = useState(null)
@@ -22,7 +23,6 @@ function App() {
   const [esRecuperacion, setEsRecuperacion] = useState(false)
 
   useEffect(() => {
-    // Detectar si el usuario viene de un enlace de correo de Supabase
     if (window.location.hash.includes('type=recovery') || window.location.search.includes('type=recovery')) {
       setEsRecuperacion(true)
     }
@@ -33,7 +33,6 @@ function App() {
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSesion(session)
-      // Si Supabase procesa el token del correo, quitamos la vista de recuperación
       if (_event === 'PASSWORD_RECOVERY') {
         setEsRecuperacion(true)
       }
@@ -83,9 +82,14 @@ function App() {
             </>
           )}
 
-          {/* PESTAÑA DE CONCILIACIÓN ACTUALIZADA */}
+          {/* PESTAÑA DE CONCILIACIÓN */}
           {(rol === 'jefe_proyecto' || rol === 'analista_operaciones' || rol === 'jefe_operaciones') && (
             <button onClick={() => setPantalla('conciliacion')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'conciliacion' ? 'white' : 'transparent', color: pantalla === 'conciliacion' ? '#0B5FA5' : 'white' }}>Conciliación</button>
+          )}
+
+          {/* PESTAÑA DE PROYECCIÓN DEMANDA 2. BOTÓN AGREGADO */}
+          {(rol === 'jefe_proyecto' || rol === 'jefe_operaciones' || rol === 'analista_operaciones') && (
+            <button onClick={() => setPantalla('proyeccion')} style={{ padding: '10px 15px', cursor: 'pointer', fontWeight: 'bold', border: 'none', borderRadius: '4px', backgroundColor: pantalla === 'proyeccion' ? 'white' : 'transparent', color: pantalla === 'proyeccion' ? '#0B5FA5' : 'white' }}>Proyección Demanda</button>
           )}
 
           {(rol === 'jefe_proyecto') && (
@@ -110,8 +114,11 @@ function App() {
         {pantalla === 'reportes' && <Reportes />}
         {pantalla === 'usuarios' && rol === 'jefe_proyecto' && <GestionUsuarios />}
         
-        {/* PANTALLA DE CONCILIACIÓN ACTUALIZADA */}
+        {/* PANTALLA DE CONCILIACIÓN */}
         {pantalla === 'conciliacion' && (rol === 'jefe_proyecto' || rol === 'analista_operaciones' || rol === 'jefe_operaciones') && <Conciliacion />}
+
+        {/* PANTALLA DE PROYECCIÓN DEMANDA 3. RENDERIZADO AGREGADO */}
+        {pantalla === 'proyeccion' && (rol === 'jefe_proyecto' || rol === 'jefe_operaciones' || rol === 'analista_operaciones') && <ProyeccionDemanda />}
 
         {pantalla === 'cambiar-password' && <CambiarPassword />}
         
