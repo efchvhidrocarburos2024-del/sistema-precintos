@@ -2,22 +2,23 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { PageHeader, Card, Select, Input, Boton, Tabla } from './ui'
 
 export default function ProyeccionDemanda() {
   const [plantas, setPlantas] = useState([])
   const [plantaSeleccionada, setPlantaSeleccionada] = useState('')
-  
+
   // Variables de entrada
-  const [leadTime, setLeadTime] = useState(15) 
-  const [diasHistorial, setDiasHistorial] = useState(90) 
-  
+  const [leadTime, setLeadTime] = useState(15)
+  const [diasHistorial, setDiasHistorial] = useState(90)
+
   // Resultados
   const [stockActual, setStockActual] = useState(0)
   const [consumoTotal, setConsumoTotal] = useState(0)
   const [promedioDiario, setPromedioDiario] = useState(0)
   const [puntoReposicion, setPuntoReposicion] = useState(0)
   const [sugerenciaPedido, setSugerenciaPedido] = useState(0)
-  
+
   // Datos para la tabla y gráfico
   const [transacciones, setTransacciones] = useState([])
   const [datosGrafico, setDatosGrafico] = useState([])
@@ -43,11 +44,11 @@ export default function ProyeccionDemanda() {
     setCalculado(false)
 
     try {
-      // 1. Obtener Stock Actual (Solo los DISPONIBLES)
+      // 1. Obtener Stock Actual (Solo DISPONIBLES)
       const { count: countStock, error: errStock } = await supabase
         .from('precintos')
         .select('*', { count: 'exact', head: true })
-        .eq('id_planta', plantaSeleccionada) 
+        .eq('id_planta', plantaSeleccionada)
         .eq('estado', 'DISPONIBLE')
 
       if (errStock) throw errStock
@@ -57,7 +58,6 @@ export default function ProyeccionDemanda() {
       fechaInicio.setDate(fechaInicio.getDate() - diasHistorial)
       const fechaInicioStr = fechaInicio.toISOString()
 
-      // Traemos las transacciones para calcular y mostrar
       const { data: txData, error: errConsumo } = await supabase
         .from('transacciones')
         .select('id_transaccion, fecha_creacion, cantidad_precintos, scop')
@@ -75,13 +75,12 @@ export default function ProyeccionDemanda() {
 
       // 3. Matemática de Proyección
       const stock = countStock || 0
-      // Evitamos división por cero si el usuario pone 0 días
-      const diasEvaluar = diasHistorial > 0 ? diasHistorial : 1; 
+      const diasEvaluar = diasHistorial > 0 ? diasHistorial : 1
       const promedio = totalUsado / diasEvaluar
-      const puntoRepo = Math.ceil(promedio * leadTime) 
+      const puntoRepo = Math.ceil(promedio * leadTime)
       const cantidadSugerida = Math.max(0, Math.ceil(promedio * (leadTime + 15)) - stock)
 
-      // 4. Preparar datos para el gráfico (agrupados por los últimos 6 viajes, para que no se vea amontonado)
+      // 4. Datos para gráfico (últimos 6 viajes)
       const graficoData = (txData || []).slice(0, 6).reverse().map(t => ({
         name: new Date(t.fecha_creacion).toLocaleDateString('es-PE'),
         cantidad: t.cantidad_precintos
@@ -114,164 +113,226 @@ export default function ProyeccionDemanda() {
     }
   }
 
-  // Calcular el porcentaje de la barra visual
-  const porcentajeStock = puntoReposicion > 0 
-    ? Math.min(100, (stockActual / (puntoReposicion * 2)) * 100) 
-    : 100;
+  const porcentajeStock = puntoReposicion > 0
+    ? Math.min(100, (stockActual / (puntoReposicion * 2)) * 100)
+    : 100
 
   return (
-    <div style={{ width: '95%', maxWidth: '900px', margin: '20px auto', fontFamily: 'Arial', padding: '10px', boxSizing: 'border-box' }}>
-      <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-        
-        <h2 style={{ color: '#0B5FA5', borderBottom: '2px solid #eee', paddingBottom: '10px', marginBottom: '20px' }}>Proyección de Demanda y Reposición</h2>
-        <p style={{ fontSize: '14px', color: '#666', marginBottom: '20px' }}>
+    <div className="page-container" style={{ maxWidth: '900px' }}>
+      <PageHeader titulo="Proyección de Demanda y Reposición" />
+
+      <Card>
+        <p style={{ fontSize: '14px', color: 'var(--text-light)', marginBottom: '20px' }}>
           Calcula cuándo y cuánto pedir al proveedor basándose en el consumo histórico de la planta.
         </p>
 
-        {/* FORMULARIO */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
-          <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Planta:</label>
-            <select 
-              value={plantaSeleccionada} 
-              onChange={(e) => setPlantaSeleccionada(e.target.value)}
-              style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: 'white', color: 'black' }}
-            >
-              <option value="">Seleccione una planta...</option>
-              {plantas.map(p => (
-                <option key={p.id_planta} value={p.id_planta}>{p.nombre}</option>
-              ))}
-            </select>
-          </div>
-
-          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
-            <div style={{ flex: '1 1 200px' }}>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Lead Time Proveedor (Días):</label>
-              <input 
-                type="number" 
-                value={leadTime} 
-                onChange={(e) => setLeadTime(Number(e.target.value))}
-                min="1"
-                style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: 'white', color: 'black', boxSizing: 'border-box' }}
-              />
-            </div>
-            <div style={{ flex: '1 1 200px' }}>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Días de Historial a Evaluar:</label>
-              <input 
-                type="number" 
-                value={diasHistorial} 
-                onChange={(e) => setDiasHistorial(Number(e.target.value))}
-                min="1"
-                style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: 'white', color: 'black', boxSizing: 'border-box' }}
-              />
-            </div>
-          </div>
-
-          <button 
-            onClick={calcularProyeccion}
-            disabled={cargando || !plantaSeleccionada}
-            style={{ padding: '12px', background: '#0B5FA5', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', marginTop: '10px' }}
-          >
-            {cargando ? 'Analizando datos...' : 'Calcular Proyección'}
-          </button>
+        <div className="form-row">
+          <Select
+            label="Planta"
+            value={plantaSeleccionada}
+            onChange={(e) => setPlantaSeleccionada(e.target.value)}
+            placeholder="Seleccione una planta..."
+            options={plantas.map(p => ({
+              value: p.id_planta,
+              label: p.nombre
+            }))}
+          />
         </div>
 
-        {/* RESULTADOS */}
-        {calculado && (
-          <div style={{ marginTop: '30px', border: '1px solid #eee', borderRadius: '8px', overflow: 'hidden' }}>
-            
-            {/* SEMÁFORO DE ESTADO */}
-            <div style={{ backgroundColor: getEstadoAlerta().bg, padding: '15px', textAlign: 'center', borderBottom: '1px solid #eee' }}>
-              <h3 style={{ margin: 0, color: getEstadoAlerta().color }}>{getEstadoAlerta().texto}</h3>
+        <div className="form-row">
+          <Input
+            label="Lead Time Proveedor (Días)"
+            type="number"
+            value={leadTime}
+            onChange={(e) => setLeadTime(Number(e.target.value))}
+            min="1"
+          />
+          <Input
+            label="Días de Historial a Evaluar"
+            type="number"
+            value={diasHistorial}
+            onChange={(e) => setDiasHistorial(Number(e.target.value))}
+            min="1"
+          />
+        </div>
+
+        <Boton
+          variante="primary"
+          onClick={calcularProyeccion}
+          disabled={cargando || !plantaSeleccionada}
+          style={{ width: '100%', marginTop: '10px' }}
+        >
+          {cargando ? 'Analizando datos...' : 'Calcular Proyección'}
+        </Boton>
+      </Card>
+
+      {/* RESULTADOS */}
+      {calculado && (
+        <Card>
+          {/* SEMÁFORO */}
+          <div style={{
+            backgroundColor: getEstadoAlerta().bg,
+            padding: '15px',
+            borderRadius: '6px',
+            marginBottom: '20px',
+            textAlign: 'center'
+          }}>
+            <h3 style={{ margin: 0, color: getEstadoAlerta().color }}>
+              {getEstadoAlerta().texto}
+            </h3>
+          </div>
+
+          {/* BARRA VISUAL DE STOCK */}
+          <div style={{ marginBottom: '30px' }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              marginBottom: '5px',
+              fontSize: '14px',
+              fontWeight: 'bold'
+            }}>
+              <span>Stock Actual: {stockActual}</span>
+              <span>Punto de Reposición: {puntoReposicion}</span>
             </div>
-
-            <div style={{ padding: '20px' }}>
-              
-              {/* BARRA VISUAL DE STOCK */}
-              <div style={{ marginBottom: '30px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '14px', fontWeight: 'bold' }}>
-                  <span>Stock Actual: {stockActual}</span>
-                  <span>Punto de Reposición: {puntoReposicion}</span>
-                </div>
-                <div style={{ width: '100%', backgroundColor: '#e5e7eb', borderRadius: '10px', height: '20px', overflow: 'hidden' }}>
-                  <div style={{ 
-                    width: `${porcentajeStock}%`, 
-                    backgroundColor: getEstadoAlerta().color, 
-                    height: '100%', 
-                    transition: 'width 1s ease-in-out'
-                  }}></div>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
-                
-                {/* DATOS HISTÓRICOS */}
-                <div style={{ backgroundColor: '#f9f9f9', padding: '15px', borderRadius: '8px', border: '1px solid #eee' }}>
-                  <h4 style={{ margin: '0 0 10px 0', color: '#333', borderBottom: '1px solid #ddd', paddingBottom: '5px' }}>Análisis Histórico</h4>
-                  <p style={{ margin: '5px 0', fontSize: '14px' }}><strong>Consumo en {diasHistorial} días:</strong> {consumoTotal} un.</p>
-                  <p style={{ margin: '5px 0', fontSize: '14px' }}><strong>Consumo Promedio:</strong> {promedioDiario} un/día</p>
-                  
-                  {datosGrafico.length > 0 && (
-                    <div style={{ height: '120px', marginTop: '15px' }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={datosGrafico}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="name" tick={{fontSize: 10}} />
-                          <YAxis hide />
-                          <Tooltip />
-                          <Bar dataKey="cantidad" fill="#0B5FA5" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  )}
-                </div>
-
-                {/* RECOMENDACIÓN */}
-                <div style={{ backgroundColor: '#eef6ff', padding: '15px', borderRadius: '8px', border: '1px solid #cce5ff' }}>
-                  <h4 style={{ margin: '0 0 10px 0', color: '#0B5FA5', borderBottom: '1px solid #b3d7ff', paddingBottom: '5px' }}>Recomendación de Compra</h4>
-                  <p style={{ margin: '5px 0', fontSize: '14px' }}><strong>Punto de Reposición:</strong> {puntoReposicion} un.</p>
-                  <p style={{ margin: '5px 0', fontSize: '12px', color: '#666', fontStyle: 'italic' }}>
-                    (Cuando baje a este número, emite la orden de compra)
-                  </p>
-                  <div style={{ marginTop: '15px', padding: '10px', backgroundColor: sugerenciaPedido > 0 ? '#0B5FA5' : '#16A34A', color: 'white', borderRadius: '4px', textAlign: 'center' }}>
-                    <p style={{ margin: '0 0 5px 0', fontSize: '12px' }}>Sugerencia de Pedido:</p>
-                    <h2 style={{ margin: 0 }}>{sugerenciaPedido} <span style={{ fontSize: '14px', fontWeight: 'normal' }}>un.</span></h2>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* TABLA DE TRANSACCIONES (Auditoría) */}
-              {transacciones.length > 0 && (
-                <div style={{ marginTop: '30px' }}>
-                  <h4 style={{ color: '#333', borderBottom: '1px solid #ddd', paddingBottom: '5px' }}>Últimos Movimientos (Base del cálculo)</h4>
-                  <div style={{ overflowX: 'auto', maxHeight: '200px', overflowY: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                      <thead>
-                        <tr style={{ backgroundColor: '#f3f4f6', textAlign: 'left' }}>
-                          <th style={{ padding: '8px' }}>Fecha</th>
-                          <th style={{ padding: '8px' }}>SCOP</th>
-                          <th style={{ padding: '8px', textAlign: 'center' }}>Cantidad</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {transacciones.slice(0, 10).map(t => (
-                          <tr key={t.id_transaccion} style={{ borderBottom: '1px solid #eee' }}>
-                            <td style={{ padding: '8px', color: '#666' }}>{new Date(t.fecha_creacion).toLocaleDateString('es-PE')}</td>
-                            <td style={{ padding: '8px', fontWeight: 'bold' }}>{t.scop || '-'}</td>
-                            <td style={{ padding: '8px', textAlign: 'center', color: '#DC2626', fontWeight: 'bold' }}>-{t.cantidad_precintos}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
+            <div style={{
+              width: '100%',
+              backgroundColor: '#e5e7eb',
+              borderRadius: '10px',
+              height: '20px',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                width: `${porcentajeStock}%`,
+                backgroundColor: getEstadoAlerta().color,
+                height: '100%',
+                transition: 'width 1s ease-in-out'
+              }}></div>
             </div>
           </div>
-        )}
-      </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+            gap: '20px'
+          }}>
+            {/* DATOS HISTÓRICOS */}
+            <div style={{
+              backgroundColor: '#f9f9f9',
+              padding: '15px',
+              borderRadius: '8px',
+              border: '1px solid #eee'
+            }}>
+              <h4 style={{
+                margin: '0 0 10px 0',
+                color: 'var(--text-dark)',
+                borderBottom: '1px solid #ddd',
+                paddingBottom: '5px'
+              }}>
+                Análisis Histórico
+              </h4>
+              <p style={{ margin: '5px 0', fontSize: '14px' }}>
+                <strong>Consumo en {diasHistorial} días:</strong> {consumoTotal} un.
+              </p>
+              <p style={{ margin: '5px 0', fontSize: '14px' }}>
+                <strong>Consumo Promedio:</strong> {promedioDiario} un/día
+              </p>
+
+              {datosGrafico.length > 0 && (
+                <div style={{ height: '120px', marginTop: '15px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={datosGrafico}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                      <YAxis hide />
+                      <Tooltip />
+                      <Bar dataKey="cantidad" fill="#0B5FA5" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+
+            {/* RECOMENDACIÓN */}
+            <div style={{
+              backgroundColor: '#eef6ff',
+              padding: '15px',
+              borderRadius: '8px',
+              border: '1px solid #cce5ff'
+            }}>
+              <h4 style={{
+                margin: '0 0 10px 0',
+                color: 'var(--primary-blue)',
+                borderBottom: '1px solid #b3d7ff',
+                paddingBottom: '5px'
+              }}>
+                Recomendación de Compra
+              </h4>
+              <p style={{ margin: '5px 0', fontSize: '14px' }}>
+                <strong>Punto de Reposición:</strong> {puntoReposicion} un.
+              </p>
+              <p style={{
+                margin: '5px 0',
+                fontSize: '12px',
+                color: 'var(--text-light)',
+                fontStyle: 'italic'
+              }}>
+                (Cuando baje a este número, emite la orden de compra)
+              </p>
+              <div style={{
+                marginTop: '15px',
+                padding: '10px',
+                backgroundColor: sugerenciaPedido > 0 ? 'var(--primary-blue)' : 'var(--primary-green)',
+                color: 'var(--white)',
+                borderRadius: '6px',
+                textAlign: 'center'
+              }}>
+                <p style={{ margin: '0 0 5px 0', fontSize: '12px' }}>Sugerencia de Pedido:</p>
+                <h2 style={{ margin: 0 }}>
+                  {sugerenciaPedido}{' '}
+                  <span style={{ fontSize: '14px', fontWeight: 'normal' }}>un.</span>
+                </h2>
+              </div>
+            </div>
+          </div>
+
+          {/* TABLA DE TRANSACCIONES */}
+          {transacciones.length > 0 && (
+            <div style={{ marginTop: '30px' }}>
+              <h4 style={{
+                color: 'var(--text-dark)',
+                borderBottom: '1px solid #ddd',
+                paddingBottom: '5px',
+                marginBottom: '10px'
+              }}>
+                Últimos Movimientos (Base del cálculo)
+              </h4>
+
+              <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                <Tabla
+                  columnas={['Fecha', 'SCOP', 'Cantidad']}
+                  hayDatos={true}
+                >
+                  {transacciones.slice(0, 10).map(t => (
+                    <tr key={t.id_transaccion}>
+                      <td style={{ color: 'var(--text-light)' }}>
+                        {new Date(t.fecha_creacion).toLocaleDateString('es-PE')}
+                      </td>
+                      <td style={{ fontWeight: 'bold' }}>{t.scop || '-'}</td>
+                      <td style={{
+                        textAlign: 'center',
+                        color: 'var(--danger-red)',
+                        fontWeight: 'bold'
+                      }}>
+                        -{t.cantidad_precintos}
+                      </td>
+                    </tr>
+                  ))}
+                </Tabla>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   )
 }
