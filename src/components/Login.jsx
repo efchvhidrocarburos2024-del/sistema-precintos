@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../supabase'
+import { Card, Input, Boton } from './ui'
 
 export default function Login({ setPantalla }) {
   const [email, setEmail] = useState('')
@@ -18,54 +19,77 @@ export default function Login({ setPantalla }) {
     })
 
     if (error) {
-      // AHORA MOSTRAMOS EL ERROR REAL DE SUPABASE
-      setError('❌ ' + error.message) 
+      setError('❌ ' + error.message)
     }
     setCargando(false)
   }
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f3f4f6', fontFamily: 'Arial' }}>
-      <div style={{ width: '350px', padding: '40px', backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-        <h2 style={{ textAlign: 'center', color: '#0B5FA5', marginBottom: '10px' }}>Sistema de Precintos</h2>
-        <p style={{ textAlign: 'center', color: '#666', fontSize: '14px', marginBottom: '30px' }}>Ingresa tus credenciales</p>
+    <div className="auth-wrapper">
+      <div style={{ width: '100%', maxWidth: '380px' }}>
+        <h2 style={{
+          textAlign: 'center',
+          color: 'var(--primary-blue)',
+          marginBottom: '8px',
+          fontSize: '24px'
+        }}>
+          Sistema de Precintos
+        </h2>
+        <p style={{
+          textAlign: 'center',
+          color: 'var(--text-light)',
+          fontSize: '14px',
+          marginBottom: '25px'
+        }}>
+          Ingresa tus credenciales
+        </p>
 
-        <form onSubmit={iniciarSesion} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <input 
-            type="email" 
-            placeholder="Correo electrónico" 
-            value={email} 
-            onChange={(e) => setEmail(e.target.value)} 
-            required 
-            style={{ padding: '12px', borderRadius: '4px', border: '1px solid #ccc' }} 
-          />
-          <input 
-            type="password" 
-            placeholder="Contraseña" 
-            value={password} 
-            onChange={(e) => setPassword(e.target.value)} 
-            required 
-            style={{ padding: '12px', borderRadius: '4px', border: '1px solid #ccc' }} 
-          />
-          <button 
-            type="submit" 
-            disabled={cargando} 
-            style={{ padding: '12px', background: '#0B5FA5', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-            {cargando ? 'Ingresando...' : 'Iniciar Sesión'}
-          </button>
-        </form>
+        <Card>
+          <form onSubmit={iniciarSesion}>
+            <Input
+              label="Correo electrónico"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="tu@correo.com"
+              required
+            />
 
-        {error && <p style={{ color: 'red', textAlign: 'center', marginTop: '15px', fontSize: '13px' }}>{error}</p>}
+            <Input
+              label="Contraseña"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Tu contraseña"
+              required
+            />
 
-        <div style={{ textAlign: 'center', marginTop: '20px' }}>
-          <button 
-            type="button" 
-            onClick={() => setPantalla('forgot')} 
-            style={{ background: 'none', border: 'none', color: '#0B5FA5', cursor: 'pointer', fontSize: '13px', textDecoration: 'underline' }}
-          >
-            ¿Olvidaste tu contraseña?
-          </button>
-        </div>
+            <Boton
+              tipo="submit"
+              variante="primary"
+              disabled={cargando}
+              style={{ width: '100%', marginTop: '8px' }}
+            >
+              {cargando ? 'Ingresando...' : 'Iniciar Sesión'}
+            </Boton>
+          </form>
+
+          {error && (
+            <div className="alert alert-error" style={{ marginTop: '15px', marginBottom: 0 }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ textAlign: 'center', marginTop: '20px' }}>
+            <Boton
+              variante="outline"
+              tamano="sm"
+              onClick={() => setPantalla('forgot')}
+            >
+              ¿Olvidaste tu contraseña?
+            </Boton>
+          </div>
+        </Card>
       </div>
     </div>
   )
