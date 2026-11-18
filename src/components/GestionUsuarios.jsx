@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
+import { PageHeader, Card, Input, Select, Boton, Tabla, Badge, Spinner } from './ui'
 
 export default function GestionUsuarios() {
   const [usuarios, setUsuarios] = useState([])
@@ -17,11 +18,10 @@ export default function GestionUsuarios() {
   const [rol, setRol] = useState('admin_planta')
   const [idPlanta, setIdPlanta] = useState('')
   const [activo, setActivo] = useState(true)
-  
-  // NUEVO: Estado para los permisos (arreglo de strings)
+
+  // Permisos (arreglo de strings)
   const [permisos, setPermisos] = useState([])
 
-  // Lista de permisos disponibles en el sistema
   const permisosDisponibles = [
     { id: 'bitacora', label: 'Ver Bitácora de Auditoría' },
     { id: 'proyeccion', label: 'Ver Proyección de Demanda' },
@@ -65,22 +65,21 @@ export default function GestionUsuarios() {
     setRol('admin_planta')
     setIdPlanta(plantas[0]?.id_planta || '')
     setActivo(true)
-    setPermisos([]) // Limpiamos permisos
+    setPermisos([])
   }
 
   const editarUsuario = (u) => {
     setIdEditando(u.id_usuario)
     setEmail(u.email)
     setNombre(u.nombre_completo || '')
-    setPassword('') 
+    setPassword('')
     setRol(u.roles?.codigo?.toLowerCase() || 'admin_planta')
     setIdPlanta(u.plantas?.id_planta || plantas[0]?.id_planta || '')
     setActivo(u.activo)
-    setPermisos(u.permisos || []) // Cargamos sus permisos actuales
+    setPermisos(u.permisos || [])
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // Manejar el check/uncheck de permisos
   const togglePermiso = (permisoId) => {
     if (permisos.includes(permisoId)) {
       setPermisos(permisos.filter(p => p !== permisoId))
@@ -103,21 +102,20 @@ export default function GestionUsuarios() {
           id_planta: rol === 'admin_planta' ? idPlanta : null,
           activo: activo,
           password: password,
-          permisos: permisos // Enviamos los permisos
+          permisos: permisos
         }
       })
 
       if (error || (data && data.error)) {
         toast.error(data?.error || error.message)
       } else {
-        toast.success("Usuario actualizado correctamente")
+        toast.success('Usuario actualizado correctamente')
         limpiarFormulario()
         cargarDatos()
       }
     } else {
-      // ... (Lógica de creación existente) ...
       if (!password) {
-        toast.error("La contraseña es obligatoria para nuevos usuarios")
+        toast.error('La contraseña es obligatoria para nuevos usuarios')
         setGuardando(false)
         return
       }
@@ -149,73 +147,110 @@ export default function GestionUsuarios() {
   }
 
   return (
-    <div style={{ width: '95%', maxWidth: '1100px', margin: '20px auto', fontFamily: 'Arial', padding: '10px', boxSizing: 'border-box' }}>
-      
+    <div className="page-container" style={{ maxWidth: '1100px' }}>
+      <PageHeader titulo="Gestión de Usuarios" />
+
       {/* FORMULARIO */}
-      <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.1)', marginBottom: '30px' }}>
-        <h2 style={{ color: '#0B5FA5', marginTop: 0, textAlign: 'center' }}>
-          {idEditando ? '✏️ Editar Usuario' : '👤 Crear Nuevo Usuario'}
-        </h2>
-        
-        <form onSubmit={guardarUsuario} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', alignItems: 'end' }}>
-          
-          <div>
-            <label style={{ fontWeight: 'bold', fontSize: '14px' }}>Correo (Email):</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={idEditando !== null} required style={{ width: '100%', padding: '10px', marginTop: '5px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: idEditando ? '#f3f4f6' : 'white', color: 'black', boxSizing: 'border-box' }} />
+      <Card titulo={idEditando ? '✏️ Editar Usuario' : '👤 Crear Nuevo Usuario'}>
+        <form onSubmit={guardarUsuario}>
+          <div className="form-row">
+            <Input
+              label="Correo (Email)"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={idEditando !== null}
+              required
+            />
+            <Input
+              label="Nombre Completo"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              required
+            />
+            <Input
+              label={idEditando ? 'Contraseña (Opcional)' : 'Contraseña'}
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required={!idEditando}
+              minLength={6}
+              placeholder={idEditando ? 'Dejar en blanco para no cambiar' : ''}
+            />
           </div>
 
-          <div>
-            <label style={{ fontWeight: 'bold', fontSize: '14px' }}>Nombre Completo:</label>
-            <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} required style={{ width: '100%', padding: '10px', marginTop: '5px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: 'white', color: 'black', boxSizing: 'border-box' }} />
+          <div className="form-row">
+            <Select
+              label="Rol"
+              value={rol}
+              onChange={(e) => setRol(e.target.value)}
+              placeholder={null}
+              options={roles.map(r => ({
+                value: r.codigo.toLowerCase(),
+                label: r.nombre
+              }))}
+            />
+
+            {rol === 'admin_planta' && (
+              <Select
+                label="Planta"
+                value={idPlanta}
+                onChange={(e) => setIdPlanta(e.target.value)}
+                placeholder={null}
+                options={plantas.map(p => ({
+                  value: p.id_planta,
+                  label: p.nombre
+                }))}
+              />
+            )}
+
+            {idEditando && (
+              <Select
+                label="Estado"
+                value={activo ? 'true' : 'false'}
+                onChange={(e) => setActivo(e.target.value === 'true')}
+                placeholder={null}
+                options={[
+                  { value: 'true', label: 'Activo (Permitir acceso)' },
+                  { value: 'false', label: 'Inactivo (Bloquear acceso)' }
+                ]}
+              />
+            )}
           </div>
-
-          <div>
-            <label style={{ fontWeight: 'bold', fontSize: '14px' }}>Contraseña {idEditando && '(Opcional)'}:</label>
-            <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} required={!idEditando} minLength="6" placeholder={idEditando ? "Dejar en blanco para no cambiar" : ""} style={{ width: '100%', padding: '10px', marginTop: '5px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: 'white', color: 'black', boxSizing: 'border-box' }} />
-          </div>
-
-          <div>
-            <label style={{ fontWeight: 'bold', fontSize: '14px' }}>Rol:</label>
-            <select value={rol} onChange={(e) => setRol(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: 'white', color: 'black', boxSizing: 'border-box' }}>
-              {roles.map(r => (
-                <option key={r.id_rol} value={r.codigo.toLowerCase()}>{r.nombre}</option>
-              ))}
-            </select>
-          </div>
-
-          {rol === 'admin_planta' && (
-            <div>
-              <label style={{ fontWeight: 'bold', fontSize: '14px' }}>Planta:</label>
-              <select value={idPlanta} onChange={(e) => setIdPlanta(e.target.value)} style={{ width: '100%', padding: '10px', marginTop: '5px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: 'white', color: 'black', boxSizing: 'border-box' }}>
-                {plantas.map(p => (
-                  <option key={p.id_planta} value={p.id_planta}>{p.nombre}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {idEditando && (
-            <div>
-              <label style={{ fontWeight: 'bold', fontSize: '14px' }}>Estado:</label>
-              <select value={activo ? 'true' : 'false'} onChange={(e) => setActivo(e.target.value === 'true')} style={{ width: '100%', padding: '10px', marginTop: '5px', borderRadius: '4px', border: '1px solid #ccc', backgroundColor: 'white', color: 'black', boxSizing: 'border-box' }}>
-                <option value="true">Activo (Permitir acceso)</option>
-                <option value="false">Inactivo (Bloquear acceso)</option>
-              </select>
-            </div>
-          )}
 
           {/* SECCIÓN DE PERMISOS EXTRA (SOLO AL EDITAR) */}
           {idEditando && (
-            <div style={{ gridColumn: '1 / -1', backgroundColor: '#f9fafb', padding: '15px', borderRadius: '8px', border: '1px solid #e5e7eb', marginTop: '10px' }}>
-              <label style={{ fontWeight: 'bold', fontSize: '14px', display: 'block', marginBottom: '10px', color: '#0B5FA5' }}>
-                Conceder Permisos Especiales (Opcional):
+            <div style={{
+              backgroundColor: '#f9fafb',
+              padding: '15px',
+              borderRadius: '6px',
+              border: '1px solid var(--border-color)',
+              marginTop: '10px'
+            }}>
+              <label style={{
+                fontWeight: '600',
+                fontSize: '13px',
+                display: 'block',
+                marginBottom: '12px',
+                color: 'var(--primary-blue)'
+              }}>
+                Conceder Permisos Especiales (Opcional)
               </label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
                 {permisosDisponibles.map(p => (
-                  <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={permisos.includes(p.id)} 
+                  <label
+                    key={p.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '14px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={permisos.includes(p.id)}
                       onChange={() => togglePermiso(p.id)}
                       style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                     />
@@ -226,76 +261,78 @@ export default function GestionUsuarios() {
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: '10px', gridColumn: '1 / -1', marginTop: '10px' }}>
-            <button type="submit" disabled={guardando} style={{ flex: 1, padding: '12px', background: idEditando ? '#EAB308' : '#16A34A', color: idEditando ? 'black' : 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-              {guardando ? 'Guardando...' : (idEditando ? 'Actualizar Usuario y Permisos' : 'Crear Usuario')}
-            </button>
-            
+          <div className="form-actions">
             {idEditando && (
-              <button type="button" onClick={limpiarFormulario} style={{ padding: '12px 20px', background: '#6B7280', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+              <Boton
+                variante="secondary"
+                onClick={limpiarFormulario}
+                disabled={guardando}
+              >
                 Cancelar Edición
-              </button>
+              </Boton>
             )}
+            <Boton
+              tipo="submit"
+              variante={idEditando ? 'warning' : 'success'}
+              disabled={guardando}
+            >
+              {guardando
+                ? 'Guardando...'
+                : idEditando
+                  ? 'Actualizar Usuario y Permisos'
+                  : 'Crear Usuario'}
+            </Boton>
           </div>
         </form>
-      </div>
+      </Card>
 
       {/* TABLA DE USUARIOS */}
-      <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
-        <h3 style={{ padding: '20px', margin: 0, borderBottom: '1px solid #eee' }}>Listado de Usuarios</h3>
+      <Card titulo="Listado de Usuarios">
         {cargando ? (
-          <p style={{ padding: '20px', textAlign: 'center', color: '#666' }}>Cargando usuarios...</p>
+          <Spinner />
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-              <thead style={{ backgroundColor: '#f3f4f6', color: '#333' }}>
-                <tr style={{ textAlign: 'left' }}>
-                  <th style={{ padding: '12px' }}>Email</th>
-                  <th style={{ padding: '12px' }}>Nombre</th>
-                  <th style={{ padding: '12px' }}>Rol</th>
-                  <th style={{ padding: '12px' }}>Planta</th>
-                  <th style={{ padding: '12px', textAlign: 'center' }}>Estado</th>
-                  <th style={{ padding: '12px', textAlign: 'center' }}>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {usuarios.map((u) => (
-                  <tr key={u.id_usuario} style={{ borderBottom: '1px solid #eee', backgroundColor: u.activo ? 'white' : '#fef2f2' }}>
-                    <td style={{ padding: '12px', fontWeight: 'bold' }}>
-                      {u.email}
-                      {/* Mostramos un mini-indicador si tiene permisos extra */}
-                      {u.permisos && u.permisos.length > 0 && (
-                        <span title={`Permisos extra: ${u.permisos.join(', ')}`} style={{ marginLeft: '8px', cursor: 'help', fontSize: '16px' }}>⭐</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '12px' }}>{u.nombre_completo || '-'}</td>
-                    <td style={{ padding: '12px' }}>
-                      <span style={{ padding: '4px 8px', backgroundColor: '#E0E7FF', color: '#3730A3', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>
-                        {u.roles?.codigo || 'SIN ROL'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px' }}>{u.plantas?.nombre || 'Global'}</td>
-                    <td style={{ padding: '12px', textAlign: 'center' }}>
-                      <span style={{ 
-                        padding: '4px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold',
-                        backgroundColor: u.activo ? '#DCFCE7' : '#FEE2E2',
-                        color: u.activo ? '#166534' : '#991B1B'
-                      }}>
-                        {u.activo ? 'ACTIVO' : 'INACTIVO'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px', textAlign: 'center' }}>
-                      <button onClick={() => editarUsuario(u)} style={{ padding: '6px 12px', background: '#0B5FA5', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-                        ✏️ Editar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Tabla
+            columnas={['Email', 'Nombre', 'Rol', 'Planta', 'Estado', 'Acciones']}
+            hayDatos={usuarios.length > 0}
+            vacio="No hay usuarios registrados."
+          >
+            {usuarios.map((u) => (
+              <tr key={u.id_usuario} style={{ backgroundColor: u.activo ? 'white' : '#fef2f2' }}>
+                <td style={{ fontWeight: 'bold' }}>
+                  {u.email}
+                  {u.permisos && u.permisos.length > 0 && (
+                    <span
+                      title={`Permisos extra: ${u.permisos.join(', ')}`}
+                      style={{ marginLeft: '8px', cursor: 'help', fontSize: '16px' }}
+                    >
+                      ⭐
+                    </span>
+                  )}
+                </td>
+                <td>{u.nombre_completo || '-'}</td>
+                <td>
+                  <Badge variante="info">{u.roles?.codigo || 'SIN ROL'}</Badge>
+                </td>
+                <td>{u.plantas?.nombre || 'Global'}</td>
+                <td style={{ textAlign: 'center' }}>
+                  <Badge variante={u.activo ? 'success' : 'danger'}>
+                    {u.activo ? 'ACTIVO' : 'INACTIVO'}
+                  </Badge>
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  <Boton
+                    variante="primary"
+                    tamano="sm"
+                    onClick={() => editarUsuario(u)}
+                  >
+                    ✏️ Editar
+                  </Boton>
+                </td>
+              </tr>
+            ))}
+          </Tabla>
         )}
-      </div>
+      </Card>
     </div>
   )
 }
