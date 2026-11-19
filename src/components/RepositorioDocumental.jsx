@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
-import { PageHeader, Card, Input, Select, Boton } from './ui'
+import { PageHeader, Card, Input, Boton } from './ui'
 
 export default function RepositorioDocumental({ setPantalla }) {
-  // Vistas: 'menu', 'menu_subir', 'form_subir', 'visualizar'
   const [vista, setVista] = useState('menu') 
   
   // Estados para Subir
@@ -18,7 +17,6 @@ export default function RepositorioDocumental({ setPantalla }) {
   const [documentos, setDocumentos] = useState([])
   const [cargandoDocs, setCargandoDocs] = useState(false)
 
-  // Cargar documentos cuando se selecciona "Visualizar"
   useEffect(() => {
     if (vista === 'visualizar') {
       cargarDocumentos()
@@ -37,6 +35,31 @@ export default function RepositorioDocumental({ setPantalla }) {
     setCargandoDocs(false)
   }
 
+  // --- VALIDACIÓN DE ARCHIVOS ---
+  const manejarSeleccionArchivo = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    // Validar tamaño (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('El archivo supera el límite de 10MB')
+      e.target.value = '' // Limpiar input
+      return
+    }
+
+    // Validar formato (opcional, según tu necesidad)
+    const extensionesPermitidas = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'png', 'jpg', 'jpeg']
+    const extension = file.name.split('.').pop().toLowerCase()
+    if (!extensionesPermitidas.includes(extension)) {
+      toast.error('Formato no permitido. Usa PDF, Word, Excel o Imágenes.')
+      e.target.value = ''
+      return
+    }
+
+    setArchivo(file)
+  }
+
+  // --- SUBIR DOCUMENTO ---
   async function handleSubir(e) {
     e.preventDefault()
     if (!archivo) return toast.error('Selecciona un archivo')
@@ -44,68 +67,83 @@ export default function RepositorioDocumental({ setPantalla }) {
     
     setSubiendo(true)
     
-    const fileExt = archivo.name.split('.').pop()
-    const fileName = `${Date.now()}.${fileExt}`
-    const filePath = `${categoria}/${fileName}`
+    try {
+      const fileExt = archivo.name.split('.').pop()
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}` // Nombre único
+      const filePath = `${categoria}/${fileName}`
 
-    // 1. Subir a Storage
-    const { error: uploadError } = await supabase.storage
-      .from('documentos_sigmo')
-      .upload(filePath, archivo)
+      // 1. Subir a Storage
+      const { error: uploadError } = await supabase.storage
+        .from('documentos_sigmo')
+        .upload(filePath, archivo, {
+          cacheControl: '3600',
+          upsert: false
+        })
 
-    if (uploadError) {
-      toast.error('Error al subir: ' + uploadError.message)
-      setSubiendo(false)
-      return
-    }
+      if (uploadError) throw uploadError
 
-    // 2. Obtener URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('documentos_sigmo')
-      .getPublicUrl(filePath)
+      // 2. Obtener URL pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('documentos_sigmo')
+        .getPublicUrl(filePath)
 
-    // 3. Guardar en DB
-    const { error: dbError } = await supabase
-      .from('documentos')
-      .insert({
-        nombre: nombre || archivo.name,
-        categoria,
-        descripcion,
-        url: publicUrl,
-        subido_por: (await supabase.auth.getUser()).data.user.id
-      })
+      // 3. Obtener usuario actual
+      const { data: { user } } = await supabase.auth.getUser()
 
-    if (dbError) {
-      toast.error('Error al guardar en base de datos')
-    } else {
-      toast.success('Documento subido exitosamente')
+      // 4. Guardar en DB
+      const { error: dbError } = await supabase
+        .from('documentos')
+        .insert({
+          nombre: nombre.trim() || archivo.name,
+          categoria,
+          descripcion: descripcion.trim(),
+          url: publicUrl,
+          subido_por: user.id
+        })
+
+      if (dbError) throw dbError
+
+      // Éxito
+      toast.success('Documento subido correctamente')
       setArchivo(null)
       setNombre('')
       setDescripcion('')
       setCategoria('')
-      setVista('visualizar')
+      setVista('visualizar') // Ir a ver los archivos
+
+    } catch (error) {
+      console.error(error)
+      toast.error('Error al subir: ' + (error.message || 'Inténtalo de nuevo'))
+    } finally {
+      setSubiendo(false)
     }
-    setSubiendo(false)
   }
 
-  // Función para iniciar la subida con una categoría específica
   const iniciarSubida = (cat) => {
     setCategoria(cat)
     setVista('form_subir')
+  }
+
+  // Helper para formatear el peso del archivo
+  const formatBytes = (bytes, decimals = 2) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const dm = decimals < 0 ? 0 : decimals
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i]
   }
 
   // --- 1. MENÚ PRINCIPAL ---
   if (vista === 'menu') {
     return (
       <div className="page-container" style={{ maxWidth: '900px', marginTop: '50px' }}>
-        {/* Cabecera corregida para evitar solapamiento */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', flexWrap: 'wrap', gap: '15px' }}>
           <PageHeader titulo="Repositorio Documental" subtitulo="Gestiona los archivos de la plataforma" />
           <Boton variante="outline" onClick={() => setPantalla('')}>← Volver a SIGMO</Boton>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '25px', marginTop: '20px' }}>
-          
           <Card 
             style={{ textAlign: 'center', padding: '40px 20px', cursor: 'pointer', border: '2px solid transparent', transition: 'all 0.2s' }} 
             onClick={() => setVista('visualizar')}
@@ -132,7 +170,7 @@ export default function RepositorioDocumental({ setPantalla }) {
     )
   }
 
-  // --- 2. SUBMENÚ: ¿QUÉ TIPO DE DOCUMENTO VAS A SUBIR? ---
+  // --- 2. SUBMENÚ: CATEGORÍAS ---
   if (vista === 'menu_subir') {
     return (
       <div className="page-container" style={{ maxWidth: '1000px', marginTop: '50px' }}>
@@ -142,41 +180,35 @@ export default function RepositorioDocumental({ setPantalla }) {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
-          
-          {/* Operativos */}
           <Card style={{ textAlign: 'center', padding: '30px 15px', cursor: 'pointer' }} onClick={() => iniciarSubida('Operativos')}>
             <div style={{ fontSize: '40px', marginBottom: '10px' }}>📋</div>
-            <h4 style={{ color: 'var(--text-dark)', marginBottom: '5px' }}>Documentos Operativos</h4>
-            <p style={{ color: 'var(--text-light)', fontSize: '13px', margin: 0 }}>Partes diarios, SCOP, inventarios.</p>
+            <h4 style={{ color: 'var(--text-dark)', marginBottom: '5px' }}>Operativos</h4>
+            <p style={{ color: 'var(--text-light)', fontSize: '13px', margin: 0 }}>Partes diarios, inventarios.</p>
           </Card>
 
-          {/* Técnicos */}
           <Card style={{ textAlign: 'center', padding: '30px 15px', cursor: 'pointer' }} onClick={() => iniciarSubida('Técnicos')}>
             <div style={{ fontSize: '40px', marginBottom: '10px' }}>⚙️</div>
-            <h4 style={{ color: 'var(--text-dark)', marginBottom: '5px' }}>Documentos Técnicos</h4>
+            <h4 style={{ color: 'var(--text-dark)', marginBottom: '5px' }}>Técnicos</h4>
             <p style={{ color: 'var(--text-light)', fontSize: '13px', margin: 0 }}>Planos, manuales, certificados.</p>
           </Card>
 
-          {/* Guías */}
           <Card style={{ textAlign: 'center', padding: '30px 15px', cursor: 'pointer' }} onClick={() => iniciarSubida('Guías')}>
             <div style={{ fontSize: '40px', marginBottom: '10px' }}>🚚</div>
-            <h4 style={{ color: 'var(--text-dark)', marginBottom: '5px' }}>Registro de Guías</h4>
+            <h4 style={{ color: 'var(--text-dark)', marginBottom: '5px' }}>Guías</h4>
             <p style={{ color: 'var(--text-light)', fontSize: '13px', margin: 0 }}>Guías de remisión y transporte.</p>
           </Card>
 
-          {/* Otros */}
           <Card style={{ textAlign: 'center', padding: '30px 15px', cursor: 'pointer' }} onClick={() => iniciarSubida('Otros')}>
             <div style={{ fontSize: '40px', marginBottom: '10px' }}>📁</div>
-            <h4 style={{ color: 'var(--text-dark)', marginBottom: '5px' }}>Registro de Otros</h4>
-            <p style={{ color: 'var(--text-light)', fontSize: '13px', margin: 0 }}>Contratos, facturas, documentos varios.</p>
+            <h4 style={{ color: 'var(--text-dark)', marginBottom: '5px' }}>Otros</h4>
+            <p style={{ color: 'var(--text-light)', fontSize: '13px', margin: 0 }}>Contratos, facturas, varios.</p>
           </Card>
-
         </div>
       </div>
     )
   }
 
-  // --- 3. FORMULARIO DE SUBIDA (Recibe la categoría elegida) ---
+  // --- 3. FORMULARIO DE SUBIDA ---
   if (vista === 'form_subir') {
     return (
       <div className="page-container" style={{ maxWidth: '600px', marginTop: '50px' }}>
@@ -188,18 +220,49 @@ export default function RepositorioDocumental({ setPantalla }) {
         <Card>
           <form onSubmit={handleSubir} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
-            <div style={{ padding: '30px 20px', border: '2px dashed #cbd5e1', borderRadius: '8px', textAlign: 'center', backgroundColor: '#f8fafc', cursor: 'pointer', transition: 'all 0.2s' }} onClick={() => document.getElementById('file-upload').click()}>
-              <div style={{ fontSize: '30px', marginBottom: '10px' }}>☁️</div>
+            {/* ZONA DE CARGA DE ARCHIVO */}
+            <div 
+              style={{ 
+                padding: '30px 20px', 
+                border: archivo ? '2px solid var(--primary-green)' : '2px dashed #cbd5e1', 
+                borderRadius: '8px', 
+                textAlign: 'center', 
+                backgroundColor: archivo ? '#f0fdf4' : '#f8fafc', 
+                cursor: subiendo ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s'
+              }} 
+              onClick={() => !subiendo && document.getElementById('file-upload').click()}
+            >
+              <div style={{ fontSize: '35px', marginBottom: '10px' }}>
+                {archivo ? '✅' : '☁️'}
+              </div>
               <input 
                 type="file" 
-                onChange={(e) => setArchivo(e.target.files[0])} 
+                onChange={manejarSeleccionArchivo} 
                 style={{ display: 'none' }} 
                 id="file-upload"
+                disabled={subiendo}
               />
-              <span style={{ color: 'var(--primary-blue)', fontWeight: 'bold', fontSize: '15px' }}>
-                {archivo ? `✅ Archivo seleccionado: ${archivo.name}` : 'Haz clic aquí para buscar tu archivo'}
-              </span>
-              <p style={{ color: 'var(--text-light)', fontSize: '12px', marginTop: '5px', margin: 0 }}>PDF, Word, Excel, Imágenes (Max 10MB)</p>
+              
+              {archivo ? (
+                <div>
+                  <p style={{ color: 'var(--success-green)', fontWeight: 'bold', fontSize: '15px', margin: '0 0 5px 0' }}>
+                    {archivo.name}
+                  </p>
+                  <p style={{ color: 'var(--text-light)', fontSize: '13px', margin: 0 }}>
+                    Peso: {formatBytes(archivo.size)}
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <span style={{ color: 'var(--primary-blue)', fontWeight: 'bold', fontSize: '15px' }}>
+                    Haz clic aquí para buscar tu archivo
+                  </span>
+                  <p style={{ color: 'var(--text-light)', fontSize: '12px', marginTop: '5px', margin: 0 }}>
+                    PDF, Word, Excel, Imágenes (Máx. 10MB)
+                  </p>
+                </div>
+              )}
             </div>
 
             <Input 
@@ -207,6 +270,7 @@ export default function RepositorioDocumental({ setPantalla }) {
               value={nombre} 
               onChange={(e) => setNombre(e.target.value)} 
               placeholder="Si lo dejas vacío, usaremos el nombre del archivo" 
+              disabled={subiendo}
             />
 
             <Input 
@@ -214,14 +278,15 @@ export default function RepositorioDocumental({ setPantalla }) {
               value={descripcion} 
               onChange={(e) => setDescripcion(e.target.value)} 
               placeholder="Breve descripción del contenido" 
+              disabled={subiendo}
             />
 
             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-              <Boton variante="outline" onClick={() => setVista('menu_subir')} style={{ flex: 1 }}>
+              <Boton variante="outline" onClick={() => setVista('menu_subir')} style={{ flex: 1 }} disabled={subiendo}>
                 Cancelar
               </Boton>
-              <Boton tipo="submit" variante="primary" disabled={subiendo} style={{ flex: 2 }}>
-                {subiendo ? 'Subiendo...' : 'Confirmar Subida'}
+              <Boton tipo="submit" variante="primary" disabled={subiendo || !archivo} style={{ flex: 2 }}>
+                {subiendo ? '⏳ Subiendo archivo...' : 'Confirmar Subida'}
               </Boton>
             </div>
           </form>
@@ -230,7 +295,7 @@ export default function RepositorioDocumental({ setPantalla }) {
     )
   }
 
-  // --- 4. VISUALIZAR DOCUMENTOS (Tabla) ---
+  // --- 4. VISUALIZAR DOCUMENTOS ---
   if (vista === 'visualizar') {
     return (
       <div className="page-container" style={{ maxWidth: '1000px', marginTop: '50px' }}>
