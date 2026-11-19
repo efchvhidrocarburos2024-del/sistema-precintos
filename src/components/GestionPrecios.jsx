@@ -48,22 +48,46 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const puedeCargar = rolesCarga.includes(rol)
   const puedeGestionar = ['admin_sistema', 'jefe_pricing'].includes(rol)
 
+  // Función auxiliar para extraer fechas (YYYY-MM-DD)
+  const extraerFecha = (nombre) => {
+    if (!nombre) return '1900-01-01';
+    const regex = /(\d{4}[-_]\d{2}[-_]\d{2})|(\d{2}[-_]\d{2}[-_]\d{4})/;
+    const match = nombre.match(regex);
+    if (!match) return '1900-01-01';
+    
+    let fechaStr = match[0].replace(/_/g, '-');
+    if (fechaStr.indexOf('-') === 2) {
+      const [d, m, a] = fechaStr.split('-');
+      fechaStr = `${a}-${m}-${d}`;
+    }
+    return fechaStr;
+  };
+
   useEffect(() => {
     if (vista === 'visualizar' || vista === 'comparar') {
       fetchArchivos()
     }
   }, [vista])
 
-  // Autocompletado de selectores
+  // Autocompletado inteligente por fecha del DOCUMENTO (no de subida)
   useEffect(() => {
     if (vista === 'comparar' && archivos.length > 0) {
-      const ordenadosPorFecha = [...archivos].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      
-      if (!ordenadosPorFecha.find(a => a.id === idNuevo)) {
-        setIdNuevo(ordenadosPorFecha[0]?.id || '');
+      // Ordenamos estrictamente por la fecha en el nombre del archivo (mayor a menor)
+      const ordenados = [...archivos].sort((a, b) => {
+        const fA = extraerFecha(a.nombre_archivo);
+        const fB = extraerFecha(b.nombre_archivo);
+        return fB.localeCompare(fA); 
+      });
+
+      // El "Actual" es el más reciente por fecha del documento
+      if (ordenados.length >= 1) {
+        setIdNuevo(ordenados[0].id);
       }
-      if (!ordenadosPorFecha.find(a => a.id === idBase)) {
-        setIdBase(ordenadosPorFecha[1]?.id || '');
+      // El "Previo" es el segundo más reciente
+      if (ordenados.length >= 2) {
+        setIdBase(ordenados[1].id);
+      } else {
+        setIdBase('');
       }
     }
   }, [vista, archivos]);
@@ -152,7 +176,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
   };
 
   const generarComparacion = async () => {
-    if (!idBase || !idNuevo) return toast.error('Selecciona ambas listas para comparar');
+    if (!idBase || !idNuevo) return toast.error('Faltan listas para comparar. Asegúrate de tener al menos 2 listas subidas.');
     if (idBase === idNuevo) return toast.error('Las listas seleccionadas deben ser diferentes');
 
     setCargandoComparacion(true);
@@ -483,7 +507,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     if (!archivoExcel) return toast.error('No hay archivo seleccionado')
     setSubiendo(true)
     try {
-      // 1. Consultar directamente a la DB el vigente actual
       const { data: archivosDb, error: fetchError } = await supabase
         .from('precios_archivos')
         .select('*')
@@ -493,44 +516,23 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
       let debeSerVigente = false;
       const vigenteActual = archivosDb && archivosDb.length > 0 ? archivosDb[0] : null;
-
-      // 2. Extraer fechas de los nombres (YYYY-MM-DD, YYYY_MM_DD, DD-MM-YYYY)
-      const extraerFecha = (nombre) => {
-        const regex = /(\d{4}[-_]\d{2}[-_]\d{2})|(\d{2}[-_]\d{2}[-_]\d{4})/;
-        const match = nombre.match(regex);
-        if (!match) return null;
-        
-        let fechaStr = match[0].replace(/_/g, '-');
-        
-        // Si es DD-MM-YYYY, lo pasamos a YYYY-MM-DD
-        if (fechaStr.indexOf('-') === 2) {
-          const [d, m, a] = fechaStr.split('-');
-          fechaStr = `${a}-${m}-${d}`;
-        }
-        return fechaStr;
-      };
-
       const fechaNueva = extraerFecha(archivoExcel.name);
 
       if (!vigenteActual) {
-        debeSerVigente = true; // Si no hay vigente, este entra como vigente
+        debeSerVigente = true; 
       } else {
         const fechaVigente = extraerFecha(vigenteActual.nombre_archivo);
-
-        if (fechaNueva && fechaVigente) {
-          // Si la fecha nueva es mayor a la vigente, se vuelve vigente
+        if (fechaNueva !== '1900-01-01' && fechaVigente !== '1900-01-01') {
           if (fechaNueva > fechaVigente) {
             debeSerVigente = true;
           } else {
-            debeSerVigente = false; // Es más antigua, queda como histórico
+            debeSerVigente = false; 
           }
         } else {
-          // Si los archivos no tienen fecha en el nombre, el nuevo entra como histórico por seguridad
           debeSerVigente = false; 
         }
       }
 
-      // 3. Subir archivo
       const nombreLimpio = archivoExcel.name.replace(/\s+/g, '_')
       const fileName = `listas_precios/${Date.now()}_${nombreLimpio}`
       
@@ -540,12 +542,10 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const { data: { publicUrl } } = supabase.storage.from('documentos_sigmo').getPublicUrl(fileName)
       const { data: { user } } = await supabase.auth.getUser()
 
-      // 4. Si debe ser vigente, quitamos el vigente a los anteriores
       if (debeSerVigente) {
         await supabase.from('precios_archivos').update({ es_vigente: false }).eq('es_vigente', true)
       }
 
-      // 5. Insertar el nuevo registro
       const { error: dbError } = await supabase.from('precios_archivos').insert({
         nombre_archivo: archivoExcel.name,
         url_archivo: publicUrl,
@@ -707,6 +707,10 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
   // --- VISTA 4: COMPARATIVA DE PRECIOS ---
   if (vista === 'comparar') {
+    
+    const filePrevio = archivos.find(a => a.id === idBase);
+    const fileActual = archivos.find(a => a.id === idNuevo);
+
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
         {renderHeader()}
@@ -714,34 +718,35 @@ export default function GestionPrecios({ setPantalla, rol }) {
           
           <Card style={{ padding: '30px', marginBottom: '20px' }}>
             <h2 style={{ margin: '0 0 20px 0', color: 'var(--text-dark)', fontSize: '22px' }}>Configuración de la Comparación</h2>
+            
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '15px', alignItems: 'end' }}>
               
               <div>
                 <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Lista de Precios Previa</label>
-                <select value={idBase} onChange={(e) => setIdBase(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', color: '#000', backgroundColor: '#fff' }}>
-                  <option value="">Selecciona una lista...</option>
-                  {archivos.map(a => <option key={a.id} value={a.id}>{a.nombre_archivo}</option>)}
-                </select>
+                {/* BLOQUE DE SOLO LECTURA */}
+                <div style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', color: '#000', backgroundColor: '#f9fafb', minHeight: '42px' }}>
+                  {filePrevio ? filePrevio.nombre_archivo : 'No hay archivo previo'}
+                </div>
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Lista de Precios Actual</label>
-                <select value={idNuevo} onChange={(e) => setIdNuevo(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', color: '#000', backgroundColor: '#fff' }}>
-                  <option value="">Selecciona una lista...</option>
-                  {archivos.map(a => <option key={a.id} value={a.id}>{a.nombre_archivo}</option>)}
-                </select>
+                {/* BLOQUE DE SOLO LECTURA */}
+                <div style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', color: '#000', backgroundColor: '#f9fafb', minHeight: '42px' }}>
+                  {fileActual ? fileActual.nombre_archivo : 'No hay archivo actual'}
+                </div>
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Tipo de Precio (Hoja)</label>
-                <select value={hojaComparar} onChange={(e) => setHojaComparar(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold' }}>
+                <select value={hojaComparar} onChange={(e) => setHojaComparar(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold', height: '42px' }}>
                   <option value="Precio Base">Precio Base</option>
                   <option value="Precios Planta Sin IGV">Precios Planta Sin IGV</option>
                   <option value="Precios Planta Con IGV">Precios Planta Con IGV</option>
                 </select>
               </div>
 
-              <Boton variante="primary" onClick={generarComparacion} disabled={cargandoComparacion} style={{ height: '42px' }}>
+              <Boton variante="primary" onClick={generarComparacion} disabled={cargandoComparacion || !idBase || !idNuevo} style={{ height: '42px' }}>
                 {cargandoComparacion ? 'Comparando...' : '⚖️ Comparar Ahora'}
               </Boton>
             </div>
