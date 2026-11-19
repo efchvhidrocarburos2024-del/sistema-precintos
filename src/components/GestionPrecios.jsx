@@ -264,7 +264,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   };
 
-  // --- LÓGICA ACTUALIZADA PARA SOPORTAR "TODOS" ---
+  // --- LÓGICA ACTUALIZADA CON VALIDACIÓN (isFinite) ---
   const cargarTendencias = async () => {
     if (!plantaSeleccionada || !productoSeleccionado) return toast.error('Selecciona una planta y un producto');
     setCargandoTendencia(true);
@@ -279,35 +279,30 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const promesas = archivosProcesar.map(async (file) => {
         const data = await parseExcelFile(file.url_archivo, 'Precio Base');
         const idxPlanta = data.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
-        
-        // Si no es TODOS, buscamos el índice de la columna específica
         const idxProducto = productoSeleccionado !== 'TODOS' ? data.headers.findIndex(h => esMismoProducto(h, productoSeleccionado)) : -1;
 
         let sumaPrecios = 0;
         let conteo = 0;
 
         data.rows.forEach(fila => {
-          // Validar Planta
           const esPlantaMatch = plantaSeleccionada === 'TODOS' 
             ? esPlantaValida(fila[idxPlanta]) 
             : normalizarTexto(fila[idxPlanta]) === normalizarTexto(plantaSeleccionada);
 
           if (esPlantaMatch) {
             if (productoSeleccionado === 'TODOS') {
-              // Iterar por todos los productos válidos
               data.headers.forEach((h, i) => {
                 const hNorm = normalizarTexto(h);
                 if (hNorm.includes('PLANTAS') || hNorm.includes('CODIGO') || hNorm.includes('USO INTERNO') || !hNorm) return;
                 const valor = parseFloat(String(fila[i]).replace(',', '.'));
-                if (!isNaN(valor) && valor > 0) {
+                if (!isNaN(valor) && valor > 0 && isFinite(valor)) {
                   sumaPrecios += valor;
                   conteo++;
                 }
               });
             } else if (idxProducto !== -1) {
-              // Tomar solo el producto seleccionado
               const valor = parseFloat(String(fila[idxProducto]).replace(',', '.'));
-              if (!isNaN(valor) && valor > 0) {
+              if (!isNaN(valor) && valor > 0 && isFinite(valor)) {
                 sumaPrecios += valor;
                 conteo++;
               }
@@ -315,9 +310,11 @@ export default function GestionPrecios({ setPantalla, rol }) {
           }
         });
 
-        // Si encontramos datos, sacamos el promedio (ya sea de la planta, del producto, o de todo)
         if (conteo > 0) {
-          return { fecha: extraerFecha(file.nombre_archivo), precio: sumaPrecios / conteo };
+          const promedio = sumaPrecios / conteo;
+          if (isFinite(promedio)) {
+             return { fecha: extraerFecha(file.nombre_archivo), precio: promedio };
+          }
         }
         return null;
       });
@@ -347,14 +344,12 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   };
 
-  // --- POBLAR DROPDOWNS CON LA OPCIÓN "TODOS" ---
   useEffect(() => {
     if (vista === 'tendencias' && archivos.length > 0 && opcionesPlantas.length === 0) {
       parseExcelFile(archivos[0].url_archivo, 'Precio Base').then(data => {
         const idxP = data.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
         const plnts = data.rows.map(r => String(r[idxP]).trim()).filter(p => esPlantaValida(p));
         
-        // Agregamos 'TODOS' al inicio y ordenamos el resto
         setOpcionesPlantas(['TODOS', ...new Set(plnts)].sort((a,b) => a === 'TODOS' ? -1 : b === 'TODOS' ? 1 : a.localeCompare(b)));
         
         const prods = data.headers.map(h => String(h).trim()).filter(h => h && !normalizarTexto(h).includes('PLANTAS') && !normalizarTexto(h).includes('CODIGO') && !normalizarTexto(h).includes('USO INTERNO'));
@@ -726,24 +721,27 @@ export default function GestionPrecios({ setPantalla, rol }) {
             </div>
           )}
 
-          <Card style={{ padding: '30px', height: '450px' }}>
+          {/* --- CONTENEDOR DEL GRÁFICO CORREGIDO --- */}
+          <Card style={{ padding: '30px', height: '450px', display: 'flex', flexDirection: 'column' }}>
             {cargandoTendencia ? (
-              <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
                 <div style={{ fontSize: '40px', marginBottom: '10px' }}>⏳</div>
                 <p style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>Analizando historial de archivos...</p>
               </div>
             ) : datosTendencia.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={datosTendencia} margin={{ top: 20, right: 30, left: 20, bottom: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="fecha" tick={{ fontSize: 12, fill: '#64748b' }} tickMargin={10} />
-                  <YAxis domain={['auto', 'auto']} tickFormatter={(val) => val.toFixed(2)} tick={{ fontSize: 12, fill: '#64748b' }} width={60} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Line type="monotone" dataKey="precio" name={productoSeleccionado === 'TODOS' ? 'Promedio' : productoSeleccionado} stroke="#0B5FA5" strokeWidth={3} dot={{ r: 4, fill: '#0B5FA5', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
-                </LineChart>
-              </ResponsiveContainer>
+              <div style={{ width: '100%', height: '100%', minHeight: '350px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={datosTendencia} margin={{ top: 20, right: 30, left: 20, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="fecha" tick={{ fontSize: 12, fill: '#64748b' }} tickMargin={10} />
+                    <YAxis domain={['auto', 'auto']} tickFormatter={(val) => val.toFixed(2)} tick={{ fontSize: 12, fill: '#64748b' }} width={60} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Line type="monotone" dataKey="precio" name={productoSeleccionado === 'TODOS' ? 'Promedio' : productoSeleccionado} stroke="#0B5FA5" strokeWidth={3} dot={{ r: 4, fill: '#0B5FA5', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             ) : (
-              <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'var(--text-light)' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'var(--text-light)' }}>
                 <div style={{ fontSize: '50px', marginBottom: '15px' }}>📉</div>
                 <h3 style={{ margin: 0 }}>Sin datos para mostrar</h3>
                 <p>Selecciona una planta y un producto para generar el gráfico.</p>
@@ -801,7 +799,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
-  // --- VISTA COMPARAR (OPTIMIZADA SIN SCROLL) ---
   if (vista === 'comparar') {
     const filePrevio = archivos.find(a => a.id === idBase);
     const fileActual = archivos.find(a => a.id === idNuevo);
@@ -849,7 +846,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
             <Card style={{ padding: '20px' }}>
               <h2 style={{ margin: '0 0 15px 0', fontSize: '20px' }}>Variación - {hojaComparar}</h2>
               
-              {/* TABLA OPTIMIZADA (SIN SCROLL, ANCHO 100%, TABLE-LAYOUT FIXED) */}
               <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'center', tableLayout: 'fixed' }}>
                   <thead style={{ backgroundColor: '#1e293b', color: 'white' }}>
