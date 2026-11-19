@@ -32,7 +32,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
   // --- ESTADOS PARA COMPARACIÓN ---
   const [idBase, setIdBase] = useState('')
   const [idNuevo, setIdNuevo] = useState('')
-  const [hojaComparar, setHojaComparar] = useState('Precio Base') // 'Precio Base', 'Precios Planta Sin IGV', 'Precios Planta Con IGV'
+  const [hojaComparar, setHojaComparar] = useState('Precio Base')
   const [datosComparados, setDatosComparados] = useState(null)
   const [cargandoComparacion, setCargandoComparacion] = useState(false)
 
@@ -55,15 +55,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
   // Autocompletar selectores de comparación
   useEffect(() => {
     if (vista === 'comparar' && archivos.length > 0) {
-      // Ordenamos estrictamente por fecha de subida (created_at) para determinar el Actual y el Previo
       const ordenadosPorFecha = [...archivos].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      
-      if (!idNuevo && ordenadosPorFecha.length > 0) {
-        setIdNuevo(ordenadosPorFecha[0].id); // El más reciente
-      }
-      if (!idBase && ordenadosPorFecha.length > 1) {
-        setIdBase(ordenadosPorFecha[1].id); // El penúltimo
-      }
+      if (!idNuevo && ordenadosPorFecha.length > 0) setIdNuevo(ordenadosPorFecha[0].id);
+      if (!idBase && ordenadosPorFecha.length > 1) setIdBase(ordenadosPorFecha[1].id);
     }
   }, [vista, archivos]);
 
@@ -85,38 +79,25 @@ export default function GestionPrecios({ setPantalla, rol }) {
     setCargando(false)
   }
 
-  // --- LÓGICA DE COMPARACIÓN ---
+  // --- LÓGICA DE COMPARACIÓN INTELIGENTE ---
   const parseExcelFile = async (url, targetSheetName) => {
     const response = await fetch(url);
     const arrayBuffer = await response.arrayBuffer();
     const wb = XLSX.read(arrayBuffer, { type: 'array' });
     
-    // Buscar la hoja seleccionada (búsqueda flexible)
     const searchTerm = targetSheetName.toLowerCase().replace('precios planta ', '').replace('precio ', '');
     let sheetName = wb.SheetNames.find(name => name.toLowerCase().includes(searchTerm));
-    if (!sheetName) sheetName = wb.SheetNames[0]; // Si no la encuentra, toma la primera
+    if (!sheetName) sheetName = wb.SheetNames[0];
 
     const ws = wb.Sheets[sheetName];
     const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-    // Encontrar la fila de cabecera
     let headerIndex = data.findIndex(row => row.some(cell => String(cell).toUpperCase().includes('PLANTAS')));
     if (headerIndex === -1) headerIndex = 0;
 
-    const headers = data[headerIndex];
-    
-    // Detectar dinámicamente los índices de columnas clave
-    let colPlantaIndex = headers.findIndex(h => String(h).toUpperCase().includes('PLANTAS'));
-    if (colPlantaIndex === -1) colPlantaIndex = 1;
-    
-    let colCodigoIndex = headers.findIndex(h => String(h).toUpperCase().includes('CODIGO'));
-    if (colCodigoIndex === -1) colCodigoIndex = 0;
-
     return {
-      headers,
-      rows: data.slice(headerIndex + 1).filter(row => row.some(cell => cell !== '')),
-      colPlantaIndex,
-      colCodigoIndex
+      headers: data[headerIndex].map(h => String(h).trim()),
+      rows: data.slice(headerIndex + 1).filter(row => row.some(cell => cell !== ''))
     };
   };
 
@@ -134,54 +115,88 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const dataBase = await parseExcelFile(fileBase.url_archivo, hojaComparar);
       const dataNuevo = await parseExcelFile(fileNuevo.url_archivo, hojaComparar);
 
-      // Crear mapa de la data base usando el nombre de la planta
+      // Encontrar índices de columnas clave
+      const idxPlantaNew = dataNuevo.headers.findIndex(h => h.toUpperCase().includes('PLANTAS'));
+      const idxCodigoNew = dataNuevo.headers.findIndex(h => h.toUpperCase().includes('CODIGO'));
+      const idxPlantaBase = dataBase.headers.findIndex(h => h.toUpperCase().includes('PLANTAS'));
+
+      // Crear mapa de la data base
       const baseMap = {};
       dataBase.rows.forEach(row => {
-        const planta = String(row[dataBase.colPlantaIndex]).trim().toUpperCase();
-        if (planta && planta !== 'UNDEFINED' && planta !== '') baseMap[planta] = row;
+        const planta = String(row[idxPlantaBase]).trim().toUpperCase();
+        if (planta) baseMap[planta] = row;
       });
 
-      // Cruzar la data nueva con la base
-      const comparacion = dataNuevo.rows.map(nuevaRow => {
-        const planta = String(nuevaRow[dataNuevo.colPlantaIndex]).trim().toUpperCase();
-        const baseRow = baseMap[planta] || []; 
+      // Identificar columnas de productos (evitando las vacías o irrelevantes)
+      const columnasComparar = [];
+      dataNuevo.headers.forEach((h, i) => {
+        const headerStr = String(h).trim().toUpperCase();
+        if (headerStr && !headerStr.includes('PLANTAS') && !headerStr.includes('CODIGO') && !headerStr.includes('USO INTERNO') && !headerStr.includes('SOLES/GALON') && !headerStr.includes('VIGENTE') && !headerStr.includes('T.C') && !headerStr.includes('SI')) {
+          
+          // Buscar si esta columna existe en el archivo base
+          const baseColIndex = dataBase.headers.findIndex(baseH => String(baseH).trim().toUpperCase() === headerStr);
+          if (baseColIndex !== -1) {
+            columnasComparar.push({
+              titulo: String(h).trim(),
+              indexNuevo: i,
+              indexBase: baseColIndex
+            });
+          }
+        }
+      });
+
+      const comparacion = [];
+      dataNuevo.rows.forEach(nuevaRow => {
+        const planta = String(nuevaRow[idxPlantaNew]).trim().toUpperCase();
+        const codigo = idxCodigoNew !== -1 ? String(nuevaRow[idxCodigoNew]).trim() : '';
         
-        return {
-          planta,
-          baseRow,
-          nuevaRow
-        };
-      }).filter(item => item.planta && item.planta !== 'UNDEFINED');
+        if (!planta || planta === 'UNDEFINED' || planta === '') return;
+
+        const baseRow = baseMap[planta];
+        const variaciones = {};
+
+        if (baseRow) {
+          columnasComparar.forEach(col => {
+            const valNuevoStr = nuevaRow[col.indexNuevo];
+            const valBaseStr = baseRow[col.indexBase];
+
+            const valNuevo = parseFloat(String(valNuevoStr).replace(',', '.'));
+            const valBase = parseFloat(String(valBaseStr).replace(',', '.'));
+
+            if (!isNaN(valNuevo) && !isNaN(valBase)) {
+              variaciones[col.titulo] = valNuevo - valBase;
+            } else {
+              variaciones[col.titulo] = null;
+            }
+          });
+        }
+
+        comparacion.push({ codigo, planta, variaciones });
+      });
 
       setDatosComparados({
-        headers: dataNuevo.headers,
-        rows: comparacion,
-        colPlantaIndex: dataNuevo.colPlantaIndex,
-        colCodigoIndex: dataNuevo.colCodigoIndex
+        columnas: columnasComparar.map(c => c.titulo),
+        rows: comparacion
       });
 
     } catch (error) {
       console.error(error);
-      toast.error('Error al comparar los archivos: ' + error.message);
+      toast.error('Error al comparar: ' + error.message);
     } finally {
       setCargandoComparacion(false);
     }
   };
 
-  // --- LÓGICA DE FILTRADO ---
+  // --- LÓGICA DE FILTRADO Y GESTIÓN ---
   const archivosFiltrados = archivos.filter(file => {
     const coincideTexto = 
       file.nombre_archivo.toLowerCase().includes(filtroTexto.toLowerCase()) || 
       (file.subido_por && file.subido_por.toLowerCase().includes(filtroTexto.toLowerCase()));
 
     let coincideDesde = true;
-    if (fechaDesde) {
-      coincideDesde = new Date(file.created_at).setHours(0,0,0,0) >= new Date(fechaDesde).setHours(0,0,0,0);
-    }
+    if (fechaDesde) coincideDesde = new Date(file.created_at).setHours(0,0,0,0) >= new Date(fechaDesde).setHours(0,0,0,0);
     let coincideHasta = true;
-    if (fechaHasta) {
-      coincideHasta = new Date(file.created_at).setHours(23,59,59,999) <= new Date(fechaHasta).setHours(23,59,59,999);
-    }
+    if (fechaHasta) coincideHasta = new Date(file.created_at).setHours(23,59,59,999) <= new Date(fechaHasta).setHours(23,59,59,999);
 
     return coincideTexto && coincideDesde && coincideHasta;
   });
@@ -502,78 +517,56 @@ export default function GestionPrecios({ setPantalla, rol }) {
           {datosComparados && (
             <Card style={{ padding: '30px', overflow: 'hidden' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h2 style={{ margin: 0, color: 'var(--text-dark)', fontSize: '22px' }}>Resultados de la Comparación</h2>
+                {/* TÍTULO CAMBIADO A VARIACIÓN */}
+                <h2 style={{ margin: 0, color: 'var(--text-dark)', fontSize: '22px' }}>Variación</h2>
                 <div style={{ display: 'flex', gap: '15px', fontSize: '12px' }}>
-                  <span style={{ color: '#ef4444', fontWeight: 'bold' }}>🔴 Aumentó</span>
-                  <span style={{ color: '#10b981', fontWeight: 'bold' }}>🟢 Bajó</span>
+                  <span style={{ color: '#ef4444', fontWeight: 'bold' }}>🔴 Aumentó (+)</span>
+                  <span style={{ color: '#10b981', fontWeight: 'bold' }}>🟢 Bajó (-)</span>
                   <span style={{ color: '#6b7280', fontWeight: 'bold' }}>⚪ Sin cambios</span>
                 </div>
               </div>
 
               <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'center' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'center' }}>
                   <thead style={{ backgroundColor: '#1e293b', color: 'white', position: 'sticky', top: 0 }}>
                     <tr>
-                      {datosComparados.headers.map((h, i) => (
-                        <th key={i} style={{ padding: '12px 8px', borderBottom: '2px solid #0f172a', whiteSpace: (i === 0 || i === 1) ? 'nowrap' : 'normal', wordBreak: 'break-word' }}>
-                          {h || '-'}
+                      <th style={{ padding: '12px 8px', borderBottom: '2px solid #0f172a', whiteSpace: 'nowrap' }}>CÓDIGO</th>
+                      <th style={{ padding: '12px 8px', borderBottom: '2px solid #0f172a', whiteSpace: 'nowrap' }}>PLANTAS</th>
+                      {datosComparados.columnas.map((col, i) => (
+                        <th key={i} style={{ padding: '12px 8px', borderBottom: '2px solid #0f172a', wordBreak: 'break-word', minWidth: '80px' }}>
+                          {col}
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {datosComparados.rows.map((fila, rowIndex) => {
-                      if (fila.nuevaRow.includes('029') && fila.nuevaRow.includes('027')) return null;
-                      
-                      return (
-                        <tr key={rowIndex} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: rowIndex % 2 === 0 ? 'white' : '#f9fafb' }}>
-                          {fila.nuevaRow.map((cellNueva, cellIndex) => {
-                            const isPlanta = cellIndex === datosComparados.colPlantaIndex;
-                            const isCodigo = cellIndex === datosComparados.colCodigoIndex;
-                            
-                            const valBaseStr = fila.baseRow[cellIndex];
-                            const valNuevaStr = cellNueva;
+                    {datosComparados.rows.map((fila, rowIndex) => (
+                      <tr key={rowIndex} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: rowIndex % 2 === 0 ? 'white' : '#f9fafb' }}>
+                        <td style={{ padding: '10px 8px', color: 'var(--text-light)' }}>{fila.codigo}</td>
+                        <td style={{ padding: '10px 8px', fontWeight: 'bold', color: 'var(--text-dark)', whiteSpace: 'nowrap' }}>{fila.planta}</td>
+                        
+                        {datosComparados.columnas.map((col, colIndex) => {
+                          const diff = fila.variaciones[col];
+                          
+                          // SI NO HAY DATOS (PLANTA NUEVA O CELDA VACÍA)
+                          if (diff === null || diff === undefined) {
+                            return <td key={colIndex} style={{ padding: '10px 8px', color: '#9ca3af' }}>-</td>;
+                          }
 
-                            let displayValue = valNuevaStr === 0 || valNuevaStr === '0' ? '-' : valNuevaStr;
-                            let color = isPlanta ? 'var(--text-dark)' : 'var(--text-light)';
-
-                            if (!isPlanta && !isCodigo) { 
-                              const valBase = parseFloat(String(valBaseStr).replace(',', '.'));
-                              const valNueva = parseFloat(String(valNuevaStr).replace(',', '.'));
-
-                              if (!isNaN(valBase) && !isNaN(valNueva)) {
-                                const diff = valNueva - valBase;
-                                
-                                if (Math.abs(diff) > 0.0001) { // Usar margen de error para decimales
-                                  if (diff > 0) {
-                                    color = '#ef4444'; // Rojo
-                                    displayValue = `${valNueva.toFixed(3)} (+${diff.toFixed(3)})`;
-                                  } else {
-                                    color = '#10b981'; // Verde
-                                    displayValue = `${valNueva.toFixed(3)} (${diff.toFixed(3)})`;
-                                  }
-                                } else if (valNueva !== 0) {
-                                  color = '#4b5563'; // Gris oscuro (Sin cambios)
-                                  displayValue = `${valNueva.toFixed(3)}`;
-                                }
-                              }
+                          // SI HAY VARIACIÓN
+                          if (Math.abs(diff) > 0.0001) {
+                            if (diff > 0) {
+                              return <td key={colIndex} style={{ padding: '10px 8px', color: '#ef4444', fontWeight: 'bold' }}>+{diff.toFixed(3)}</td>;
+                            } else {
+                              return <td key={colIndex} style={{ padding: '10px 8px', color: '#10b981', fontWeight: 'bold' }}>{diff.toFixed(3)}</td>;
                             }
+                          }
 
-                            return (
-                              <td key={cellIndex} style={{ 
-                                padding: '8px 6px', 
-                                fontWeight: isPlanta ? 'bold' : 'normal',
-                                color: color,
-                                whiteSpace: (isPlanta || isCodigo) ? 'nowrap' : 'normal',
-                                wordBreak: 'break-word'
-                              }}>
-                                {displayValue}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      )
-                    })}
+                          // SI NO HAY CAMBIO
+                          return <td key={colIndex} style={{ padding: '10px 8px', color: '#6b7280' }}>0.000</td>;
+                        })}
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
