@@ -35,8 +35,8 @@ export default function RepositorioDocumental({ setPantalla }) {
     async function cargarCatalogos() {
       const [resPlantas, resProv, resProd] = await Promise.all([
         supabase.from('plantas').select('nombre, codigo').eq('activo', true).order('nombre'),
-        supabase.from('proveedores').select('nombre').eq('activo', true).order('nombre'),
-        // ACTUALIZADO: Traemos el código y el nombre
+        // ACTUALIZADO: Traemos el código del proveedor
+        supabase.from('proveedores').select('codigo, nombre').eq('activo', true).order('nombre'),
         supabase.from('productos').select('codigo, nombre').eq('activo', true).order('codigo')
       ])
       if (resPlantas.data) setListaPlantas(resPlantas.data)
@@ -219,13 +219,16 @@ export default function RepositorioDocumental({ setPantalla }) {
                     ...listaPlantas.map(p => ({ value: p.nombre, label: p.nombre }))
                   ]} />
                   
+                  {/* ACTUALIZADO: SELECT DE PROVEEDORES CON CÓDIGO */}
                   <Select label="Proveedor" value={proveedor} onChange={(e) => setProveedor(e.target.value)} options={[
                     { value: '', label: 'Seleccione...' },
-                    ...listaProveedores.map(p => ({ value: p.nombre, label: p.nombre }))
+                    ...listaProveedores.map(p => ({ 
+                      value: `${p.codigo} - ${p.nombre}`, 
+                      label: `${p.codigo} - ${p.nombre}` 
+                    }))
                   ]} />
                 </div>
 
-                {/* ACTUALIZADO: SELECT DE PRODUCTOS CON CÓDIGO Y NOMBRE */}
                 <Select label="Producto" value={producto} onChange={(e) => setProducto(e.target.value)} options={[
                   { value: '', label: 'Seleccione...' },
                   ...listaProductos.map(p => ({ 
