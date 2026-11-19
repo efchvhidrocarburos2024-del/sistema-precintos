@@ -6,7 +6,7 @@ import { PageHeader, Card, Input, Select, Boton } from './ui'
 export default function RepositorioDocumental({ setPantalla }) {
   const [vista, setVista] = useState('menu') 
   
-  // Estados del Formulario (Llenado dinámico)
+  // Estados del Formulario
   const [categoria, setCategoria] = useState('')
   const [archivo, setArchivo] = useState(null)
   const [nombre, setNombre] = useState('')
@@ -19,6 +19,11 @@ export default function RepositorioDocumental({ setPantalla }) {
   const [version, setVersion] = useState('')
   const [subiendo, setSubiendo] = useState(false)
 
+  // Estados para Catálogos (Datos maestros)
+  const [listaPlantas, setListaPlantas] = useState([])
+  const [listaProveedores, setListaProveedores] = useState([])
+  const [listaProductos, setListaProductos] = useState([])
+
   // Estados para Visualizar
   const [documentos, setDocumentos] = useState([])
   const [docSeleccionado, setDocSeleccionado] = useState(null)
@@ -26,6 +31,20 @@ export default function RepositorioDocumental({ setPantalla }) {
   const [filtroTexto, setFiltroTexto] = useState('')
 
   useEffect(() => {
+    // Cargar catálogos al montar el componente
+    async function cargarCatalogos() {
+      const [resPlantas, resProv, resProd] = await Promise.all([
+        supabase.from('plantas').select('nombre, codigo').eq('activo', true).order('nombre'),
+        supabase.from('proveedores').select('nombre').eq('activo', true).order('nombre'),
+        // ACTUALIZADO: Traemos el código y el nombre
+        supabase.from('productos').select('codigo, nombre').eq('activo', true).order('codigo')
+      ])
+      if (resPlantas.data) setListaPlantas(resPlantas.data)
+      if (resProv.data) setListaProveedores(resProv.data)
+      if (resProd.data) setListaProductos(resProd.data)
+    }
+    cargarCatalogos()
+
     if (vista === 'visualizar') {
       cargarDocumentos()
     }
@@ -41,7 +60,7 @@ export default function RepositorioDocumental({ setPantalla }) {
     if (error) toast.error('Error al cargar documentos')
     else {
       setDocumentos(data || [])
-      if (data && data.length > 0) setDocSeleccionado(data[0]) // Selecciona el primero por defecto
+      if (data && data.length > 0) setDocSeleccionado(data[0])
     }
     setCargandoDocs(false)
   }
@@ -98,7 +117,6 @@ export default function RepositorioDocumental({ setPantalla }) {
       if (dbError) throw dbError
 
       toast.success('Documento subido correctamente')
-      // Limpiar formulario
       setArchivo(null); setNombre(''); setDescripcion(''); setTipoDoc(''); setTerminal(''); setProveedor(''); setProducto(''); setVersion('');
       setVista('visualizar')
     } catch (error) {
@@ -166,7 +184,7 @@ export default function RepositorioDocumental({ setPantalla }) {
     )
   }
 
-  // --- RENDERIZADO: FORMULARIO DINÁMICO ---
+  // --- RENDERIZADO: FORMULARIO DINÁMICO CON CATÁLOGOS ---
   if (vista === 'form_subir') {
     return (
       <div className="page-container" style={{ maxWidth: '700px', marginTop: '50px' }}>
@@ -185,7 +203,7 @@ export default function RepositorioDocumental({ setPantalla }) {
               <span style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>{archivo ? archivo.name : 'Haz clic para buscar tu archivo'}</span>
             </div>
 
-            {/* CAMPOS DINÁMICOS SEGÚN CATEGORÍA */}
+            {/* CAMPOS DINÁMICOS CON CATÁLOGOS */}
             {categoria === 'Técnicos' && (
               <>
                 <Select label="Tipo de Documento" value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} required options={[
@@ -194,13 +212,27 @@ export default function RepositorioDocumental({ setPantalla }) {
                   { value: 'Ficha de datos de seguridad', label: 'Ficha de Datos de Seguridad' },
                   { value: 'Ficha de especificación técnica', label: 'Ficha de Especificación Técnica' }
                 ]} />
+                
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                   <Select label="Terminal" value={terminal} onChange={(e) => setTerminal(e.target.value)} options={[
-                    { value: '', label: 'Todas' }, { value: 'PAMPILLA', label: 'Pampilla' }, { value: 'CALLAO', label: 'Callao' }, { value: 'OTROS', label: 'Otros' }
+                    { value: '', label: 'Todas' },
+                    ...listaPlantas.map(p => ({ value: p.nombre, label: p.nombre }))
                   ]} />
-                  <Input label="Proveedor" value={proveedor} onChange={(e) => setProveedor(e.target.value)} placeholder="Ej. RELAPASA" />
+                  
+                  <Select label="Proveedor" value={proveedor} onChange={(e) => setProveedor(e.target.value)} options={[
+                    { value: '', label: 'Seleccione...' },
+                    ...listaProveedores.map(p => ({ value: p.nombre, label: p.nombre }))
+                  ]} />
                 </div>
-                <Input label="Producto" value={producto} onChange={(e) => setProducto(e.target.value)} placeholder="Ej. Diésel B5 S50" />
+
+                {/* ACTUALIZADO: SELECT DE PRODUCTOS CON CÓDIGO Y NOMBRE */}
+                <Select label="Producto" value={producto} onChange={(e) => setProducto(e.target.value)} options={[
+                  { value: '', label: 'Seleccione...' },
+                  ...listaProductos.map(p => ({ 
+                    value: `${p.codigo} - ${p.nombre}`, 
+                    label: `${p.codigo} - ${p.nombre}` 
+                  }))
+                ]} />
               </>
             )}
 
@@ -214,7 +246,8 @@ export default function RepositorioDocumental({ setPantalla }) {
                   { value: 'Criterios de carga por terminal', label: 'Criterios de carga por terminal' }
                 ]} />
                 <Select label="Terminal" value={terminal} onChange={(e) => setTerminal(e.target.value)} options={[
-                  { value: '', label: 'Todas' }, { value: 'PAMPILLA', label: 'Pampilla' }, { value: 'CALLAO', label: 'Callao' }
+                  { value: '', label: 'Todas' },
+                  ...listaPlantas.map(p => ({ value: p.nombre, label: p.nombre }))
                 ]} />
               </>
             )}
@@ -241,9 +274,8 @@ export default function RepositorioDocumental({ setPantalla }) {
     )
   }
 
-  // --- RENDERIZADO: VISOR DE DOCUMENTOS (ESTILO MASTER-DETAIL) ---
+  // --- RENDERIZADO: VISOR DE DOCUMENTOS ---
   if (vista === 'visualizar') {
-    // Filtrar documentos según el buscador
     const docsFiltrados = documentos.filter(d => 
       d.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) || 
       (d.tipo_documento && d.tipo_documento.toLowerCase().includes(filtroTexto.toLowerCase()))
@@ -251,23 +283,15 @@ export default function RepositorioDocumental({ setPantalla }) {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 40px)', padding: '20px' }}>
-        {/* Cabecera */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <PageHeader titulo="Visualizador de Documentos" subtitulo="Explora y previsualiza archivos" />
           <Boton variante="outline" onClick={() => setVista('menu')}>← Volver al menú</Boton>
         </div>
 
-        {/* Panel Dividido */}
         <div style={{ display: 'flex', gap: '20px', flex: 1, overflow: 'hidden' }}>
           
-          {/* PANEL IZQUIERDO: LISTA Y FILTROS */}
           <div style={{ width: '400px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            <Input 
-              placeholder="🔍 Buscar por nombre o tipo..." 
-              value={filtroTexto} 
-              onChange={(e) => setFiltroTexto(e.target.value)} 
-              label={null}
-            />
+            <Input placeholder="🔍 Buscar por nombre o tipo..." value={filtroTexto} onChange={(e) => setFiltroTexto(e.target.value)} label={null} />
             
             <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '5px' }}>
               {cargandoDocs ? (
@@ -278,12 +302,7 @@ export default function RepositorioDocumental({ setPantalla }) {
                 docsFiltrados.map(doc => (
                   <Card 
                     key={doc.id} 
-                    style={{ 
-                      padding: '15px', 
-                      cursor: 'pointer', 
-                      border: docSeleccionado?.id === doc.id ? '2px solid var(--primary-blue)' : '1px solid #eee',
-                      backgroundColor: docSeleccionado?.id === doc.id ? '#eff6ff' : 'white'
-                    }}
+                    style={{ padding: '15px', cursor: 'pointer', border: docSeleccionado?.id === doc.id ? '2px solid var(--primary-blue)' : '1px solid #eee', backgroundColor: docSeleccionado?.id === doc.id ? '#eff6ff' : 'white' }}
                     onClick={() => setDocSeleccionado(doc)}
                   >
                     <div style={{ display: 'flex', gap: '10px' }}>
@@ -302,7 +321,6 @@ export default function RepositorioDocumental({ setPantalla }) {
             </div>
           </div>
 
-          {/* PANEL DERECHO: VISOR DE PDF (Iframe) */}
           <div style={{ flex: 1, backgroundColor: '#525659', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             {docSeleccionado ? (
               <>
@@ -310,11 +328,7 @@ export default function RepositorioDocumental({ setPantalla }) {
                   <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{docSeleccionado.nombre}</span>
                   <a href={docSeleccionado.url} target="_blank" rel="noopener noreferrer" style={{ color: 'white', textDecoration: 'underline', fontSize: '13px' }}>Abrir en nueva pestaña ↗</a>
                 </div>
-                <iframe 
-                  src={`${docSeleccionado.url}#toolbar=1&navpanes=0`} 
-                  style={{ flex: 1, width: '100%', border: 'none' }} 
-                  title="Visor PDF"
-                />
+                <iframe src={`${docSeleccionado.url}#toolbar=1&navpanes=0`} style={{ flex: 1, width: '100%', border: 'none' }} title="Visor PDF" />
               </>
             ) : (
               <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white', flexDirection: 'column' }}>
