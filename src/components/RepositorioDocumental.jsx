@@ -17,6 +17,7 @@ export default function RepositorioDocumental({ setPantalla }) {
   const [proveedor, setProveedor] = useState('')
   const [producto, setProducto] = useState('')
   const [version, setVersion] = useState('')
+  const [buscandoVersion, setBuscandoVersion] = useState(false) // Nuevo estado
   const [subiendo, setSubiendo] = useState(false)
 
   // Estados para Catálogos (Datos maestros)
@@ -31,11 +32,9 @@ export default function RepositorioDocumental({ setPantalla }) {
   const [filtroTexto, setFiltroTexto] = useState('')
 
   useEffect(() => {
-    // Cargar catálogos al montar el componente
     async function cargarCatalogos() {
       const [resPlantas, resProv, resProd] = await Promise.all([
         supabase.from('plantas').select('nombre, codigo').eq('activo', true).order('nombre'),
-        // ACTUALIZADO: Traemos el código del proveedor
         supabase.from('proveedores').select('codigo, nombre').eq('activo', true).order('nombre'),
         supabase.from('productos').select('codigo, nombre').eq('activo', true).order('codigo')
       ])
@@ -49,6 +48,57 @@ export default function RepositorioDocumental({ setPantalla }) {
       cargarDocumentos()
     }
   }, [vista])
+
+  // --- LÓGICA DE AUTO-VERSIONADO ---
+  const handleTipoGuiaChange = async (e) => {
+    const nuevoTipo = e.target.value;
+    setTipoDoc(nuevoTipo);
+    
+    if (!nuevoTipo) {
+      setVersion('');
+      return;
+    }
+
+    setBuscandoVersion(true);
+    try {
+      // Buscar la última versión de este tipo de guía
+      const { data, error } = await supabase
+        .from('documentos')
+        .select('version')
+        .eq('categoria', 'Guías')
+        .eq('tipo_documento', nuevoTipo)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      if (data && data.length > 0 && data[0].version) {
+        // Extraer el número de la versión (ej. "V1.2" -> 1.2)
+        const versionStr = data[0].version.replace(/[^0-9.]/g, '');
+        const partes = versionStr.split('.');
+        
+        let major = parseInt(partes[0]) || 1;
+        let minor = parseInt(partes[1]) || 0;
+
+        // Incrementar versión (V1.0 -> V1.1)
+        minor += 1;
+        if (minor >= 10) {
+          major += 1;
+          minor = 0;
+        }
+
+        setVersion(`V${major}.${minor}`);
+      } else {
+        // Si es la primera vez que se sube esta guía
+        setVersion('V1.0');
+      }
+    } catch (error) {
+      console.error("Error al calcular versión:", error);
+      setVersion('V1.0'); // Fallback
+    } finally {
+      setBuscandoVersion(false);
+    }
+  };
 
   async function cargarDocumentos() {
     setCargandoDocs(true)
@@ -196,14 +246,12 @@ export default function RepositorioDocumental({ setPantalla }) {
         <Card>
           <form onSubmit={handleSubir} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
-            {/* Selector de archivo */}
             <div style={{ padding: '20px', border: archivo ? '2px solid var(--success-green)' : '2px dashed #cbd5e1', borderRadius: '8px', textAlign: 'center', cursor: 'pointer', backgroundColor: archivo ? '#f0fdf4' : '#f8fafc' }} onClick={() => document.getElementById('file-upload').click()}>
               <input type="file" onChange={manejarSeleccionArchivo} style={{ display: 'none' }} id="file-upload" />
               <div style={{ fontSize: '30px', marginBottom: '10px' }}>{archivo ? '✅' : '☁️'}</div>
               <span style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>{archivo ? archivo.name : 'Haz clic para buscar tu archivo'}</span>
             </div>
 
-            {/* CAMPOS DINÁMICOS CON CATÁLOGOS */}
             {categoria === 'Técnicos' && (
               <>
                 <Select label="Tipo de Documento" value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} required options={[
@@ -219,22 +267,15 @@ export default function RepositorioDocumental({ setPantalla }) {
                     ...listaPlantas.map(p => ({ value: p.nombre, label: p.nombre }))
                   ]} />
                   
-                  {/* ACTUALIZADO: SELECT DE PROVEEDORES CON CÓDIGO */}
                   <Select label="Proveedor" value={proveedor} onChange={(e) => setProveedor(e.target.value)} options={[
                     { value: '', label: 'Seleccione...' },
-                    ...listaProveedores.map(p => ({ 
-                      value: `${p.codigo} - ${p.nombre}`, 
-                      label: `${p.codigo} - ${p.nombre}` 
-                    }))
+                    ...listaProveedores.map(p => ({ value: `${p.codigo} - ${p.nombre}`, label: `${p.codigo} - ${p.nombre}` }))
                   ]} />
                 </div>
 
                 <Select label="Producto" value={producto} onChange={(e) => setProducto(e.target.value)} options={[
                   { value: '', label: 'Seleccione...' },
-                  ...listaProductos.map(p => ({ 
-                    value: `${p.codigo} - ${p.nombre}`, 
-                    label: `${p.codigo} - ${p.nombre}` 
-                  }))
+                  ...listaProductos.map(p => ({ value: `${p.codigo} - ${p.nombre}`, label: `${p.codigo} - ${p.nombre}` }))
                 ]} />
               </>
             )}
@@ -255,10 +296,31 @@ export default function RepositorioDocumental({ setPantalla }) {
               </>
             )}
 
+            {/* ACTUALIZADO: AUTO-VERSIONADO DE GUÍAS */}
             {categoria === 'Guías' && (
               <>
-                <Input label="Tipo de Guía" value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} placeholder="Ej. Guía para la Solicitud de Códigos" required />
-                <Input label="Versión" value={version} onChange={(e) => setVersion(e.target.value)} placeholder="Ej. V1.0" />
+                <Select 
+                  label="Tipo de Guía" 
+                  value={tipoDoc} 
+                  onChange={handleTipoGuiaChange} 
+                  required 
+                  options={[
+                    { value: '', label: 'Seleccione...' },
+                    { value: 'Guía para la Solicitud de Códigos', label: 'Guía para la Solicitud de Códigos' },
+                    { value: 'Guía de Anulación de Facturas', label: 'Guía de Anulación de Facturas' },
+                    { value: 'Guía de Reclamos', label: 'Guía de Reclamos' },
+                    { value: 'Otra Guía', label: 'Otra Guía' }
+                  ]} 
+                />
+                
+                {/* Bloqueamos el input para que el usuario no altere la versión calculada, o lo dejamos readonly */}
+                <Input 
+                  label={buscandoVersion ? "Calculando versión..." : "Versión (Autocalculada)"} 
+                  value={buscandoVersion ? "..." : version} 
+                  readOnly 
+                  placeholder="Se calculará automáticamente"
+                  style={{ backgroundColor: '#f3f4f6', cursor: 'not-allowed' }}
+                />
               </>
             )}
 
@@ -267,7 +329,7 @@ export default function RepositorioDocumental({ setPantalla }) {
 
             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
               <Boton variante="outline" onClick={() => setVista('menu_subir')} style={{ flex: 1 }} disabled={subiendo}>Cancelar</Boton>
-              <Boton tipo="submit" variante="primary" disabled={subiendo || !archivo} style={{ flex: 2 }}>
+              <Boton tipo="submit" variante="primary" disabled={subiendo || !archivo || buscandoVersion} style={{ flex: 2 }}>
                 {subiendo ? 'Subiendo...' : 'Confirmar y Subir'}
               </Boton>
             </div>
@@ -312,7 +374,7 @@ export default function RepositorioDocumental({ setPantalla }) {
                       <div style={{ fontSize: '24px' }}>📄</div>
                       <div>
                         <h4 style={{ margin: '0 0 5px 0', color: 'var(--text-dark)', fontSize: '14px' }}>{doc.nombre}</h4>
-                        <p style={{ margin: 0, fontSize: '12px', color: 'var(--primary-blue)', fontWeight: 'bold' }}>{doc.tipo_documento}</p>
+                        <p style={{ margin: 0, fontSize: '12px', color: 'var(--primary-blue)', fontWeight: 'bold' }}>{doc.tipo_documento} {doc.version ? `(${doc.version})` : ''}</p>
                         <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: 'var(--text-light)' }}>
                           {doc.terminal ? `${doc.terminal} | ` : ''} {doc.proveedor ? `${doc.proveedor} | ` : ''} {new Date(doc.created_at).toLocaleDateString()}
                         </p>
@@ -328,7 +390,7 @@ export default function RepositorioDocumental({ setPantalla }) {
             {docSeleccionado ? (
               <>
                 <div style={{ padding: '10px 20px', backgroundColor: '#323639', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{docSeleccionado.nombre}</span>
+                  <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{docSeleccionado.nombre} {docSeleccionado.version ? `- ${docSeleccionado.version}` : ''}</span>
                   <a href={docSeleccionado.url} target="_blank" rel="noopener noreferrer" style={{ color: 'white', textDecoration: 'underline', fontSize: '13px' }}>Abrir en nueva pestaña ↗</a>
                 </div>
                 <iframe src={`${docSeleccionado.url}#toolbar=1&navpanes=0`} style={{ flex: 1, width: '100%', border: 'none' }} title="Visor PDF" />
