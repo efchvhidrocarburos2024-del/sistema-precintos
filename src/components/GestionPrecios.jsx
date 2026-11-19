@@ -52,28 +52,30 @@ export default function GestionPrecios({ setPantalla, rol }) {
     
     setSubiendo(true)
     try {
-      // 1. Subir archivo a Supabase Storage (Bucket 'documentos')
+      // 1. Subir archivo a Supabase Storage (Bucket 'documentos_sigmo')
       const nombreLimpio = archivoExcel.name.replace(/\s+/g, '_')
-      const fileName = `${Date.now()}_${nombreLimpio}`
+      const fileName = `listas_precios/${Date.now()}_${nombreLimpio}` // Se guarda en la carpeta listas_precios
       
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('documentos')
+        .from('documentos_sigmo')
         .upload(fileName, archivoExcel)
 
       if (uploadError) throw uploadError
 
       // 2. Obtener la URL pública
       const { data: { publicUrl } } = supabase.storage
-        .from('documentos')
+        .from('documentos_sigmo')
         .getPublicUrl(fileName)
 
       // 3. Guardar registro en la base de datos
+      const { data: { user } } = await supabase.auth.getUser()
+
       const { error: dbError } = await supabase
         .from('precios_archivos')
         .insert({
           nombre_archivo: archivoExcel.name,
           url_archivo: publicUrl,
-          subido_por: rol // O podrías guardar el email
+          subido_por: user.email // Guardamos el correo para saber quién lo subió
         })
 
       if (dbError) throw dbError
@@ -215,7 +217,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
                       <td style={{ padding: '15px', fontWeight: 'bold', color: 'var(--text-dark)' }}>
                         📄 {file.nombre_archivo}
                       </td>
-                      <td style={{ padding: '15px', textTransform: 'uppercase', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-light)' }}>
+                      <td style={{ padding: '15px', fontSize: '12px', color: 'var(--text-light)' }}>
                         {file.subido_por || 'SISTEMA'}
                       </td>
                       <td style={{ padding: '15px', textAlign: 'center' }}>
