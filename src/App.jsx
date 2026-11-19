@@ -26,11 +26,23 @@ import RepositorioDocumental from './components/RepositorioDocumental'
 const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000;
 const TIEMPO_DE_AVISO = TIEMPO_INACTIVIDAD_TOTAL - (2 * 60 * 1000);
 
+// Estilos reutilizables para los botones de navegación
+const getNavBtnStyle = (isActive) => ({
+  padding: '8px 16px',
+  borderRadius: '8px',
+  border: 'none',
+  cursor: 'pointer',
+  fontWeight: '600',
+  fontSize: '14px',
+  backgroundColor: isActive ? '#eff6ff' : 'transparent', // Azul muy claro si está activo
+  color: isActive ? 'var(--primary-blue)' : '#4b5563', // Azul principal si está activo, gris si no
+  transition: 'all 0.2s',
+});
+
 // ============================================================================
 // COMPONENTE: LOBBY DE MÓDULOS (Pantalla Principal SIGMO)
 // ============================================================================
 function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
-  // Matriz de accesos
   const rolesPrecintos = ['admin_sistema', 'admin_planta', 'jefe_operaciones', 'analista_operaciones', 'auditor'];
   const rolesRepositorio = ['admin_sistema', 'admin_planta', 'jefe_operaciones', 'analista_operaciones', 'asesor_comercial', 'auditor'];
 
@@ -47,7 +59,7 @@ function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <span style={{ color: 'var(--text-dark)', fontWeight: '600', fontSize: '14px' }}>👤 {sesion.user.email} ({rol?.toUpperCase() || 'SIN ROL'})</span>
-          <button onClick={cerrarSesion} style={{ padding: '8px 16px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', color: '#374151' }}>
+          <button onClick={cerrarSesion} style={{ padding: '8px 16px', background: '#fee2e2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', color: '#991b1b' }}>
             Cerrar Sesión
           </button>
         </div>
@@ -124,8 +136,7 @@ function App() {
   const [permisos, setPermisos] = useState([])
   const [cargandoRol, setCargandoRol] = useState(true)
   const [esRecuperacion, setEsRecuperacion] = useState(false)
-  const [menuAbierto, setMenuAbierto] = useState(false)
-
+  
   const [mostrarAviso, setMostrarAviso] = useState(false)
   const timerRef = useRef(null)
   const avisoTimerRef = useRef(null)
@@ -231,7 +242,6 @@ function App() {
   // Funciones de Navegación
   const navegar = (pantallaDestino) => {
     setPantalla(pantallaDestino)
-    setMenuAbierto(false)
   }
 
   const tienePermiso = (permisoExtra, rolesPermitidos) => {
@@ -325,85 +335,84 @@ function App() {
         </div>
       )}
 
-      {/* NAVEGACIÓN DEL MÓDULO PRECINTOS */}
-      <nav className="nav-container">
-        {/* LOGO Y BOTÓN VOLVER */}
-        <div className="nav-logo" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button 
-            onClick={() => navegar('')} 
-            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
-            title="Volver al menú de módulos de SIGMO"
-          >
-            ← SIGMO
-          </button>
-          <span style={{ fontSize: '18px', fontWeight: 'bold', color: 'white' }}>Precintos</span>
-        </div>
+      {/* ======================================================== */}
+      {/* NUEVO DISEÑO DE NAVEGACIÓN (ESTILO BLANCO Y LIMPIO)      */}
+      {/* ======================================================== */}
+      <nav style={{ backgroundColor: 'white', borderBottom: '1px solid #e5e7eb', padding: '15px 30px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
         
-        <button className="btn-menu" onClick={() => setMenuAbierto(!menuAbierto)}>
-          {menuAbierto ? '✕' : '☰'}
-        </button>
+        {/* Fila Superior: Logo, Usuario y Acciones */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '15px' }}>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <button 
+              onClick={() => navegar('')} 
+              style={{ background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}
+            >
+              ← SIGMO
+            </button>
+            <span style={{ fontSize: '22px', fontWeight: '900', color: 'var(--primary-blue)' }}>Precintos</span>
+          </div>
 
-        <div className={`nav-buttons ${menuAbierto ? 'abierto' : ''}`}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <span style={{ fontSize: '13px', color: '#4b5563', fontWeight: '500' }}>👤 {sesion.user.email} ({rol ? rol.toUpperCase() : 'SIN ROL'})</span>
+            <button onClick={() => navegar('cambiar-password')} style={{ background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>Mi Perfil</button>
+            <button onClick={cerrarSesion} style={{ background: '#fee2e2', border: 'none', color: '#991b1b', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>Salir</button>
+          </div>
+        </div>
+
+        {/* Fila Inferior: Menú de Opciones (Pestañas tipo Pills) */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', width: '100%', borderTop: '1px solid #f3f4f6', paddingTop: '12px' }}>
           
           {tienePermiso('lotes', ['admin_sistema', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto']) && (
-            <button onClick={() => navegar('lotes')} className={`nav-btn ${pantalla === 'lotes' ? 'active' : ''}`}>Registro de Lotes</button>
+            <button onClick={() => navegar('lotes')} style={getNavBtnStyle(pantalla === 'lotes')}>Registro de Lotes</button>
           )}
           
           {tienePermiso('viajes', ['admin_sistema', 'admin_planta']) && (
             <>
-              <button onClick={() => navegar('admin')} className={`nav-btn ${pantalla === 'admin' ? 'active' : ''}`}>Registrar Viajes (SCOP)</button>
-              <button onClick={() => navegar('excepciones')} className={`nav-btn ${pantalla === 'excepciones' ? 'active' : ''}`}>Excepciones</button>
+              <button onClick={() => navegar('admin')} style={getNavBtnStyle(pantalla === 'admin')}>Registrar Viajes (SCOP)</button>
+              <button onClick={() => navegar('excepciones')} style={getNavBtnStyle(pantalla === 'excepciones')}>Excepciones</button>
             </>
           )}
 
           {tienePermiso('precintos', ['admin_sistema', 'admin_planta', 'analista_operaciones', 'jefe_operaciones', 'auditor', 'jefe_proyecto']) && (
-            <button onClick={() => navegar('precintos')} className={`nav-btn ${pantalla === 'precintos' ? 'active' : ''}`}>Precintos</button>
+            <button onClick={() => navegar('precintos')} style={getNavBtnStyle(pantalla === 'precintos')}>Precintos</button>
           )}
 
           {tienePermiso('dashboard', ['admin_sistema', 'auditor', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto', 'admin_planta']) && (
             <>
-              <button onClick={() => navegar('dashboard')} className={`nav-btn ${pantalla === 'dashboard' ? 'active' : ''}`}>Dashboard</button>
-              <button onClick={() => navegar('reportes')} className={`nav-btn ${pantalla === 'reportes' ? 'active' : ''}`}>Reportes</button>
+              <button onClick={() => navegar('dashboard')} style={getNavBtnStyle(pantalla === 'dashboard')}>Dashboard</button>
+              <button onClick={() => navegar('reportes')} style={getNavBtnStyle(pantalla === 'reportes')}>Reportes</button>
             </>
           )}
 
           {tienePermiso('conciliacion', ['admin_sistema', 'jefe_proyecto', 'analista_operaciones', 'jefe_operaciones']) && (
-            <button onClick={() => navegar('conciliacion')} className={`nav-btn ${pantalla === 'conciliacion' ? 'active' : ''}`}>Conciliación</button>
+            <button onClick={() => navegar('conciliacion')} style={getNavBtnStyle(pantalla === 'conciliacion')}>Conciliación</button>
           )}
 
           {tienePermiso('proyeccion', ['admin_sistema', 'jefe_proyecto', 'jefe_operaciones', 'analista_operaciones']) && (
-            <button onClick={() => navegar('proyeccion')} className={`nav-btn ${pantalla === 'proyeccion' ? 'active' : ''}`}>Proyección Demanda</button>
+            <button onClick={() => navegar('proyeccion')} style={getNavBtnStyle(pantalla === 'proyeccion')}>Proyección Demanda</button>
           )}
 
           {tienePermiso('bitacora', ['admin_sistema', 'auditor', 'jefe_operaciones', 'jefe_proyecto']) && (
-            <button onClick={() => navegar('bitacora')} className={`nav-btn ${pantalla === 'bitacora' ? 'active' : ''}`}>Bitácora</button>
+            <button onClick={() => navegar('bitacora')} style={getNavBtnStyle(pantalla === 'bitacora')}>Bitácora</button>
           )}
 
           {tienePermiso('usuarios', ['admin_sistema', 'jefe_proyecto']) && (
-            <button onClick={() => navegar('usuarios')} className={`nav-btn ${pantalla === 'usuarios' ? 'active' : ''}`}>Administrar Usuarios</button>
+            <button onClick={() => navegar('usuarios')} style={getNavBtnStyle(pantalla === 'usuarios')}>Administrar Usuarios</button>
           )}
 
           {tienePermiso('plantas', ['admin_sistema']) && (
-            <button onClick={() => navegar('plantas')} className={`nav-btn ${pantalla === 'plantas' ? 'active' : ''}`}>Config. Plantas</button>
+            <button onClick={() => navegar('plantas')} style={getNavBtnStyle(pantalla === 'plantas')}>Config. Plantas</button>
           )}
 
           {tienePermiso('respaldos', ['admin_sistema']) && (
-            <button onClick={() => navegar('respaldos')} className={`nav-btn ${pantalla === 'respaldos' ? 'active' : ''}`}>Respaldos</button>
+            <button onClick={() => navegar('respaldos')} style={getNavBtnStyle(pantalla === 'respaldos')}>Respaldos</button>
           )}
-        </div>
-
-        <div className="user-info">
-          <span>👤 {sesion.user.email} ({rol ? rol.toUpperCase() : 'SIN ROL'})</span>
-          
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button onClick={() => navegar('cambiar-password')} className="btn-profile">Mi Perfil</button>
-            <button onClick={cerrarSesion} className="btn-logout">Salir</button>
-          </div>
         </div>
       </nav>
 
+      {/* CONTENIDO DE LAS PANTALLAS DE PRECINTOS */}
       <div style={{ paddingTop: '20px', paddingBottom: '40px' }}>
-        {/* RENDERIZADO DE COMPONENTES DEL MÓDULO PRECINTOS */}
         {pantalla === 'lotes' && tienePermiso('lotes', ['admin_sistema', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto']) && <RegistroLotes />}
         {pantalla === 'admin' && tienePermiso('viajes', ['admin_sistema', 'admin_planta']) && <RegistroViajes />}
         {pantalla === 'excepciones' && tienePermiso('viajes', ['admin_sistema', 'admin_planta']) && <Excepciones />}
@@ -417,7 +426,6 @@ function App() {
         {pantalla === 'cambiar-password' && <CambiarPassword />}
         {pantalla === 'plantas' && tienePermiso('plantas', ['admin_sistema']) && <GestionPlantas />}
         {pantalla === 'respaldos' && tienePermiso('respaldos', ['admin_sistema']) && <PanelRespaldos />}
-
       </div>
     </div>
   )
