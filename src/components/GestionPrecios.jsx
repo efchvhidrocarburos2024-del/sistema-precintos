@@ -54,12 +54,11 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   }, [vista])
 
-  // Autocompletado mejorado (solo se dispara si cambian los archivos o la vista)
+  // Autocompletado de selectores
   useEffect(() => {
     if (vista === 'comparar' && archivos.length > 0) {
       const ordenadosPorFecha = [...archivos].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       
-      // Verificar si el ID actual es válido, si no, autocompletar
       if (!ordenadosPorFecha.find(a => a.id === idNuevo)) {
         setIdNuevo(ordenadosPorFecha[0]?.id || '');
       }
@@ -259,10 +258,11 @@ export default function GestionPrecios({ setPantalla, rol }) {
           const item = fila.variaciones[col];
           if (item === 'NUEVO') {
             row.push('NUEVO');
-          } else if (item && Math.abs(item.diff) > 0.0001) {
-            row.push(`${item.diff > 0 ? '+' : ''}${item.diff.toFixed(3)}`);
-          } else if (item && item.diff === 0) {
-            row.push('0.000');
+          } else if (item && Math.abs(item.diff) > 0.00001) {
+            // 4 DECIMALES
+            row.push(`${item.diff > 0 ? '+' : ''}${item.diff.toFixed(4)}`);
+          } else if (item && Math.abs(item.diff) <= 0.00001) {
+            row.push('0.0000');
           } else {
             row.push('-');
           }
@@ -305,10 +305,10 @@ export default function GestionPrecios({ setPantalla, rol }) {
           const item = fila.variaciones[col];
           if (item === 'NUEVO') {
             row.push('NUEVO');
-          } else if (item && Math.abs(item.diff) > 0.0001) {
-            row.push(`${item.diff > 0 ? '+' : ''}${item.diff.toFixed(3)}`);
-          } else if (item && item.diff === 0) {
-            row.push('0.000');
+          } else if (item && Math.abs(item.diff) > 0.00001) {
+            row.push(`${item.diff > 0 ? '+' : ''}${item.diff.toFixed(4)}`);
+          } else if (item && Math.abs(item.diff) <= 0.00001) {
+            row.push('0.0000');
           } else {
             row.push('-');
           }
@@ -325,7 +325,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
         headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
         alternateRowStyles: { fillColor: [249, 250, 251] },
         didParseCell: function (data) {
-          // Colorear celdas en el PDF
           if (data.section === 'body' && data.column.index > 1) {
             const text = data.cell.text[0];
             if (text && text.startsWith('+')) {
@@ -614,11 +613,24 @@ export default function GestionPrecios({ setPantalla, rol }) {
                       if (row.includes('029') && row.includes('027')) return null; 
                       return (
                         <tr key={rowIndex} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: rowIndex % 2 === 0 ? 'white' : '#f9fafb' }}>
-                          {row.map((cell, cellIndex) => (
-                            <td key={cellIndex} style={{ padding: '8px 6px', fontWeight: cellIndex === 1 ? 'bold' : 'normal', color: cellIndex === 1 ? 'var(--text-dark)' : 'var(--text-light)', whiteSpace: (cellIndex === 0 || cellIndex === 1) ? 'nowrap' : 'normal', wordBreak: 'break-word' }}>
-                              {cell === 0 || cell === '0' ? '-' : cell}
-                            </td>
-                          ))}
+                          {row.map((cell, cellIndex) => {
+                            // LÓGICA DE FORMATO A 4 DECIMALES EN LA PREVISUALIZACIÓN
+                            let displayValue = cell;
+                            if (cellIndex > 1) {
+                              const num = parseFloat(String(cell).replace(',', '.'));
+                              if (!isNaN(num) && String(cell).trim() !== '') {
+                                displayValue = num === 0 ? '-' : num.toFixed(4);
+                              }
+                            } else if (cell === 0 || cell === '0') {
+                              displayValue = '-';
+                            }
+
+                            return (
+                              <td key={cellIndex} style={{ padding: '8px 6px', fontWeight: cellIndex === 1 ? 'bold' : 'normal', color: cellIndex === 1 ? 'var(--text-dark)' : 'var(--text-light)', whiteSpace: (cellIndex === 0 || cellIndex === 1) ? 'nowrap' : 'normal', wordBreak: 'break-word' }}>
+                                {displayValue}
+                              </td>
+                            );
+                          })}
                         </tr>
                       )
                     })}
@@ -693,7 +705,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
                     <span style={{ color: '#6b7280', fontWeight: 'bold' }}>⚪ Sin cambios</span>
                   </div>
                   
-                  {/* BOTONES DE EXPORTACIÓN */}
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <Boton variante="danger" onClick={exportarComparacionPDF}>📄 PDF</Boton>
                     <Boton variante="success" onClick={exportarComparacionExcel}>⬇️ Excel</Boton>
@@ -731,15 +742,16 @@ export default function GestionPrecios({ setPantalla, rol }) {
                             return <td key={colIndex} style={{ padding: '10px 8px', color: '#9ca3af' }}>-</td>;
                           }
 
-                          if (Math.abs(item.diff) > 0.0001) {
+                          // MOSTRAR 4 DECIMALES EN LA VARIACIÓN
+                          if (Math.abs(item.diff) > 0.00001) {
                             if (item.diff > 0) {
-                              return <td key={colIndex} style={{ padding: '10px 8px', color: '#ef4444', fontWeight: 'bold' }}>+{item.diff.toFixed(3)}</td>;
+                              return <td key={colIndex} style={{ padding: '10px 8px', color: '#ef4444', fontWeight: 'bold' }}>+{item.diff.toFixed(4)}</td>;
                             } else {
-                              return <td key={colIndex} style={{ padding: '10px 8px', color: '#10b981', fontWeight: 'bold' }}>{item.diff.toFixed(3)}</td>;
+                              return <td key={colIndex} style={{ padding: '10px 8px', color: '#10b981', fontWeight: 'bold' }}>{item.diff.toFixed(4)}</td>;
                             }
                           }
 
-                          return <td key={colIndex} style={{ padding: '10px 8px', color: '#6b7280' }}>0.000</td>;
+                          return <td key={colIndex} style={{ padding: '10px 8px', color: '#6b7280' }}>0.0000</td>;
                         })}
                       </tr>
                     ))}
