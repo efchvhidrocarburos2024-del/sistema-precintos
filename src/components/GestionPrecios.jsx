@@ -52,13 +52,20 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   }, [vista])
 
+  // Autocompletar selectores de comparación (Previa y Actual)
   useEffect(() => {
     if (vista === 'comparar' && archivos.length > 0) {
       const ordenadosPorFecha = [...archivos].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      if (!idNuevo && ordenadosPorFecha.length > 0) setIdNuevo(ordenadosPorFecha[0].id);
-      if (!idBase && ordenadosPorFecha.length > 1) setIdBase(ordenadosPorFecha[1].id);
+      
+      // Si no hay nada seleccionado, autocompletar
+      if (!idNuevo && ordenadosPorFecha.length > 0) {
+        setIdNuevo(ordenadosPorFecha[0].id);
+      }
+      if (!idBase && ordenadosPorFecha.length > 1) {
+        setIdBase(ordenadosPorFecha[1].id);
+      }
     }
-  }, [vista, archivos]);
+  }, [vista, archivos, idBase, idNuevo]);
 
   async function fetchArchivos() {
     setCargando(true)
@@ -82,9 +89,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const normalizarTexto = (txt) => {
     if (!txt) return '';
     return String(txt)
-      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Quitar acentos
-      .replace(/\s+/g, ' ') // Quitar saltos de linea y espacios dobles
-      .replace(/N°/gi, 'N') // Corregir error de tipeo típico
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") 
+      .replace(/\s+/g, ' ') 
+      .replace(/N°/gi, 'N') 
       .trim()
       .toUpperCase();
   };
@@ -94,15 +101,19 @@ export default function GestionPrecios({ setPantalla, rol }) {
     const p2 = normalizarTexto(prod2);
     if (p1 === p2) return true;
     
-    // Mapeo flexible para las variaciones de nombres en tus Excel
+    // Reglas flexibles para emparejar nombres que vienen diferente en el Excel
     if (p1.includes('GASOLINA') && p2.includes('GASOLINA') && p1.includes('PREMIUM') && p2.includes('PREMIUM')) return true;
     if (p1.includes('GASOLINA') && p2.includes('GASOLINA') && p1.includes('REGULAR') && p2.includes('REGULAR')) return true;
     if (p1.includes('GASOHOL') && p2.includes('GASOHOL') && p1.includes('PREMIUM') && p2.includes('PREMIUM')) return true;
     if (p1.includes('GASOHOL') && p2.includes('GASOHOL') && p1.includes('REGULAR') && p2.includes('REGULAR')) return true;
+    
+    // Petróleos
     if (p1.includes('PETROLEO') && p2.includes('PETROLEO') && p1.includes('6') && p2.includes('6')) return true;
     if (p1.includes('PETROLEO') && p2.includes('PETROLEO') && p1.includes('500') && p2.includes('500')) return true;
-    if (p1.includes('DIESEL') && p2.includes('DIESEL') && p1.includes('B5') && p2.includes('B5') && p1.includes('S-50') && p2.includes('S-50') && !p1.includes('UV') && !p2.includes('UV')) return true;
+    
+    // Diésel (UV y no UV)
     if (p1.includes('DIESEL') && p2.includes('DIESEL') && p1.includes('UV') && p2.includes('UV')) return true;
+    if (p1.includes('DIESEL') && p2.includes('DIESEL') && !p1.includes('UV') && !p2.includes('UV') && p1.includes('B5') && p2.includes('B5')) return true;
 
     return false;
   };
@@ -111,7 +122,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     const n = normalizarTexto(nombre);
     if (n.length < 3) return false;
     if (n.includes('*')) return false;
-    if (!isNaN(Number(n))) return false; // Filtrar IDs numéricos
+    if (!isNaN(Number(n))) return false; 
     if (n.includes('TOTAL') || n.includes('IGV') || n.includes('ISC') || n.includes('RODAJE') || n.includes('INCREMENTO') || n.includes('INCLUSION') || n.includes('DISMINUCION')) return false;
     return true;
   };
@@ -170,21 +181,12 @@ export default function GestionPrecios({ setPantalla, rol }) {
       dataNuevo.headers.forEach((h, i) => {
         const hNorm = normalizarTexto(h);
         
-        // Excluir columnas que no son productos
         if (
-          !hNorm || 
-          hNorm.includes('PLANTAS') || 
-          hNorm.includes('CODIGO') || 
-          hNorm.includes('USO INTERNO') || 
-          hNorm.includes('SOLES/GALON') || 
-          hNorm.includes('VIGENTE') || 
-          hNorm.includes('T.C') || 
-          hNorm.includes('IGV') || 
-          hNorm.includes('ISC') || 
-          hNorm.includes('RODAJE') || 
-          hNorm.includes('FISE') ||
-          hNorm === 'SI' ||
-          hNorm === '-'
+          !hNorm || hNorm.includes('PLANTAS') || hNorm.includes('CODIGO') || 
+          hNorm.includes('USO INTERNO') || hNorm.includes('SOLES/GALON') || 
+          hNorm.includes('VIGENTE') || hNorm.includes('T.C') || hNorm.includes('IGV') || 
+          hNorm.includes('ISC') || hNorm.includes('RODAJE') || hNorm.includes('FISE') ||
+          hNorm === 'SI' || hNorm === '-'
         ) return;
 
         // Buscar esta columna en el archivo base de forma flexible
@@ -216,8 +218,13 @@ export default function GestionPrecios({ setPantalla, rol }) {
             const valNuevo = parseFloat(String(valNuevoStr).replace(',', '.'));
             const valBase = parseFloat(String(valBaseStr).replace(',', '.'));
 
-            if (!isNaN(valNuevo) && !isNaN(valBase)) {
+            if (!isNaN(valNuevo) && !isNaN(valBase) && valNuevo > 0 && valBase > 0) {
+              // Si ambos tienen precio (mayor a 0), calculamos la variación
               variaciones[col.titulo] = valNuevo - valBase;
+            } else if (!isNaN(valNuevo) && valNuevo > 0 && (isNaN(valBase) || valBase === 0)) {
+              // Si en la lista anterior no había precio (0 o vacío), pero ahora sí.
+              // Lo mostramos como "nuevo" o simplemente no mostramos variación falsa.
+              variaciones[col.titulo] = 'NUEVO';
             } else {
               variaciones[col.titulo] = null;
             }
@@ -542,7 +549,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
               
               <div>
                 <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Lista de Precios Previa</label>
-                <select value={idBase} onChange={(e) => setIdBase(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}>
+                <select value={idBase} onChange={(e) => setIdBase(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', color: '#1e293b' }}>
                   <option value="">Selecciona una lista...</option>
                   {archivos.map(a => <option key={a.id} value={a.id}>{a.nombre_archivo}</option>)}
                 </select>
@@ -550,7 +557,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
               <div>
                 <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Lista de Precios Actual</label>
-                <select value={idNuevo} onChange={(e) => setIdNuevo(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}>
+                <select value={idNuevo} onChange={(e) => setIdNuevo(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', color: '#1e293b' }}>
                   <option value="">Selecciona una lista...</option>
                   {archivos.map(a => <option key={a.id} value={a.id}>{a.nombre_archivo}</option>)}
                 </select>
@@ -558,7 +565,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
               <div>
                 <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Tipo de Precio (Hoja)</label>
-                <select value={hojaComparar} onChange={(e) => setHojaComparar(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#eff6ff' }}>
+                <select value={hojaComparar} onChange={(e) => setHojaComparar(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#eff6ff', color: '#1e293b', fontWeight: 'bold' }}>
                   <option value="Precio Base">Precio Base</option>
                   <option value="Precios Planta Sin IGV">Precios Planta Sin IGV</option>
                   <option value="Precios Planta Con IGV">Precios Planta Con IGV</option>
@@ -574,7 +581,10 @@ export default function GestionPrecios({ setPantalla, rol }) {
           {datosComparados && (
             <Card style={{ padding: '30px', overflow: 'hidden' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h2 style={{ margin: 0, color: 'var(--text-dark)', fontSize: '22px' }}>Variación</h2>
+                {/* TÍTULO DINÁMICO CON EL NOMBRE DE LA HOJA */}
+                <h2 style={{ margin: 0, color: 'var(--text-dark)', fontSize: '22px' }}>
+                  Variación - {hojaComparar}
+                </h2>
                 <div style={{ display: 'flex', gap: '15px', fontSize: '12px' }}>
                   <span style={{ color: '#ef4444', fontWeight: 'bold' }}>🔴 Aumentó (+)</span>
                   <span style={{ color: '#10b981', fontWeight: 'bold' }}>🟢 Bajó (-)</span>
@@ -604,6 +614,10 @@ export default function GestionPrecios({ setPantalla, rol }) {
                         {datosComparados.columnas.map((col, colIndex) => {
                           const diff = fila.variaciones[col];
                           
+                          if (diff === 'NUEVO') {
+                             return <td key={colIndex} style={{ padding: '10px 8px', color: '#3b82f6', fontWeight: 'bold', fontSize: '11px' }}>NUEVO</td>;
+                          }
+
                           if (diff === null || diff === undefined) {
                             return <td key={colIndex} style={{ padding: '10px 8px', color: '#9ca3af' }}>-</td>;
                           }
