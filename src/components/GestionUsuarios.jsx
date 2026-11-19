@@ -11,12 +11,21 @@ export default function GestionUsuarios({ setPantalla }) {
   const [plantas, setPlantas] = useState([])
   const [cargando, setCargando] = useState(true)
 
-  // Estados del Modal
-  const [modalAbierto, setModalAbierto] = useState(false)
+  // --- ESTADOS PARA EDITAR ---
+  const [modalEditarAbierto, setModalEditarAbierto] = useState(false)
   const [usuarioEditando, setUsuarioEditando] = useState(null)
   const [formRol, setFormRol] = useState('')
   const [formPlanta, setFormPlanta] = useState('')
   const [formActivo, setFormActivo] = useState(true)
+
+  // --- ESTADOS PARA CREAR ---
+  const [modalCrearAbierto, setModalCrearAbierto] = useState(false)
+  const [nuevoEmail, setNuevoEmail] = useState('')
+  const [nuevaPassword, setNuevaPassword] = useState('')
+  const [nuevoRol, setNuevoRol] = useState('')
+  const [nuevaPlanta, setNuevaPlanta] = useState('')
+  const [creando, setCreando] = useState(false)
+
   const [guardando, setGuardando] = useState(false)
 
   useEffect(() => {
@@ -26,7 +35,6 @@ export default function GestionUsuarios({ setPantalla }) {
   async function cargarDatos() {
     setCargando(true)
     
-    // Cargar usuarios con sus roles y plantas
     const { data: usrs, error: errUsrs } = await supabase
       .from('usuarios')
       .select(`
@@ -38,7 +46,6 @@ export default function GestionUsuarios({ setPantalla }) {
       `)
       .order('email')
 
-    // Cargar catálogos
     const { data: rls } = await supabase.from('roles').select('*').order('nombre')
     const { data: plnts } = await supabase.from('plantas').select('*').eq('activo', true).order('nombre')
 
@@ -55,25 +62,25 @@ export default function GestionUsuarios({ setPantalla }) {
     setCargando(false)
   }
 
-  const abrirModal = (usuario) => {
+  // --- LÓGICA DE EDICIÓN ---
+  const abrirModalEditar = (usuario) => {
     setUsuarioEditando(usuario)
     setFormRol(usuario.roles?.id_rol || '')
     setFormPlanta(usuario.plantas?.id_planta || '')
     setFormActivo(usuario.activo !== false)
-    setModalAbierto(true)
+    setModalEditarAbierto(true)
   }
 
-  const cerrarModal = () => {
-    setModalAbierto(false)
+  const cerrarModalEditar = () => {
+    setModalEditarAbierto(false)
     setUsuarioEditando(null)
   }
 
-  async function guardarCambios(e) {
+  async function guardarCambiosEdicion(e) {
     e.preventDefault()
     if (!formRol) return toast.error('Debes seleccionar un rol')
     
     setGuardando(true)
-    
     try {
       const { error } = await supabase
         .from('usuarios')
@@ -87,7 +94,7 @@ export default function GestionUsuarios({ setPantalla }) {
       if (error) throw error
 
       toast.success('Usuario actualizado correctamente')
-      cerrarModal()
+      cerrarModalEditar()
       cargarDatos()
     } catch (error) {
       toast.error('Error: ' + error.message)
@@ -96,13 +103,56 @@ export default function GestionUsuarios({ setPantalla }) {
     }
   }
 
-  // Función para obtener el nombre del rol seleccionado en el form
-  const rolSeleccionadoCodigo = roles.find(r => r.id_rol === formRol)?.codigo
+  // --- LÓGICA DE CREACIÓN (EDGE FUNCTION) ---
+  const cerrarModalCrear = () => {
+    setModalCrearAbierto(false)
+    setNuevoEmail('')
+    setNuevaPassword('')
+    setNuevoRol('')
+    setNuevaPlanta('')
+  }
+
+  async function crearUsuario(e) {
+    e.preventDefault()
+    if (!nuevoEmail || !nuevaPassword || !nuevoRol) return toast.error('Completa los campos requeridos')
+    if (nuevaPassword.length < 6) return toast.error('La contraseña debe tener al menos 6 caracteres')
+
+    setCreando(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: {
+          email: nuevoEmail,
+          password: nuevaPassword,
+          id_rol: nuevoRol,
+          id_planta: nuevaPlanta || null,
+          activo: true
+        }
+      })
+
+      // Supabase Functions devuelve el error en 'error' si falla la petición HTTP
+      if (error) throw new Error(error.message)
+      
+      // Si la función devuelve un JSON con campo 'error', lo lanzamos
+      if (data && data.error) throw new Error(data.error)
+
+      toast.success('Usuario creado exitosamente')
+      cerrarModalCrear()
+      cargarDatos()
+    } catch (error) {
+      console.error(error)
+      toast.error('Error al crear usuario: ' + error.message)
+    } finally {
+      setCreando(false)
+    }
+  }
+
+  // Variables para saber qué rol se está seleccionando en los forms
+  const rolEdicionCodigo = roles.find(r => r.id_rol === formRol)?.codigo
+  const rolCreacionCodigo = roles.find(r => r.id_rol === nuevoRol)?.codigo
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
       
-      {/* Header Unificado */}
       <header style={{ padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <button onClick={() => setPantalla('precintos_menu')} style={btnHeaderStyle}>← Volver al Menú</button>
@@ -117,8 +167,10 @@ export default function GestionUsuarios({ setPantalla }) {
             <h2 style={{ color: 'var(--text-dark)', fontSize: '22px', margin: 0 }}>Directorio de Usuarios</h2>
             <p style={{ color: 'var(--text-light)', margin: '5px 0 0 0', fontSize: '14px' }}>Administra los roles y accesos al sistema SIGMO.</p>
           </div>
-          {/* Nota: La creación de usuarios en Auth requiere un flujo aparte (Dashboard o RPC) */}
-          <Boton variante="outline" onClick={cargarDatos}>🔄 Refrescar</Boton>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <Boton variante="outline" onClick={cargarDatos}>🔄 Refrescar</Boton>
+            <Boton variante="primary" onClick={() => setModalCrearAbierto(true)}>+ Nuevo Usuario</Boton>
+          </div>
         </div>
 
         <Card style={{ padding: 0, overflow: 'hidden' }}>
@@ -162,7 +214,7 @@ export default function GestionUsuarios({ setPantalla }) {
                         </span>
                       </td>
                       <td style={{ padding: '15px', textAlign: 'center' }}>
-                        <Boton variante="outline" tamano="sm" onClick={() => abrirModal(u)}>✏️ Editar</Boton>
+                        <Boton variante="outline" tamano="sm" onClick={() => abrirModalEditar(u)}>✏️ Editar</Boton>
                       </td>
                     </tr>
                   ))}
@@ -173,58 +225,54 @@ export default function GestionUsuarios({ setPantalla }) {
         </Card>
       </main>
 
-      {/* MODAL PARA EDITAR USUARIO */}
-      {modalAbierto && (
+      {/* MODAL: EDITAR USUARIO */}
+      {modalEditarAbierto && (
         <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '450px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
             <h3 style={{ margin: '0 0 5px 0', color: 'var(--text-dark)', fontSize: '20px' }}>Editar Usuario</h3>
             <p style={{ margin: '0 0 20px 0', color: 'var(--text-light)', fontSize: '14px' }}>{usuarioEditando?.email}</p>
             
-            <form onSubmit={guardarCambios} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <form onSubmit={guardarCambiosEdicion} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <Select label="Rol del Usuario" value={formRol} onChange={(e) => setFormRol(e.target.value)} required options={[{ value: '', label: 'Seleccione...' }, ...roles.map(r => ({ value: r.id_rol, label: r.nombre }))]} />
               
-              <Select 
-                label="Rol del Usuario" 
-                value={formRol} 
-                onChange={(e) => setFormRol(e.target.value)} 
-                required 
-                options={[
-                  { value: '', label: 'Seleccione un rol...' },
-                  ...roles.map(r => ({ value: r.id_rol, label: r.nombre }))
-                ]} 
-              />
-
-              {/* Solo mostrar selector de planta si el rol es admin_planta */}
-              {rolSeleccionadoCodigo === 'admin_planta' && (
-                <Select 
-                  label="Planta Asignada (Requerido)" 
-                  value={formPlanta} 
-                  onChange={(e) => setFormPlanta(e.target.value)} 
-                  required
-                  options={[
-                    { value: '', label: 'Seleccione una planta...' },
-                    ...plantas.map(p => ({ value: p.id_planta, label: p.nombre }))
-                  ]} 
-                />
+              {rolEdicionCodigo === 'admin_planta' && (
+                <Select label="Planta Asignada (Requerido)" value={formPlanta} onChange={(e) => setFormPlanta(e.target.value)} required options={[{ value: '', label: 'Seleccione...' }, ...plantas.map(p => ({ value: p.id_planta, label: p.nombre }))]} />
               )}
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '5px' }}>
-                <input 
-                  type="checkbox" 
-                  id="checkActivo" 
-                  checked={formActivo} 
-                  onChange={(e) => setFormActivo(e.target.checked)} 
-                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                />
-                <label htmlFor="checkActivo" style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-dark)', cursor: 'pointer' }}>
-                  Usuario Activo (Puede iniciar sesión)
-                </label>
+                <input type="checkbox" id="editActivo" checked={formActivo} onChange={(e) => setFormActivo(e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
+                <label htmlFor="editActivo" style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-dark)', cursor: 'pointer' }}>Usuario Activo</label>
               </div>
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                <Boton variante="outline" onClick={cerrarModal} style={{ flex: 1 }} disabled={guardando}>Cancelar</Boton>
-                <Boton tipo="submit" variante="primary" style={{ flex: 2 }} disabled={guardando}>
-                  {guardando ? 'Guardando...' : 'Guardar Cambios'}
-                </Boton>
+                <Boton variante="outline" onClick={cerrarModalEditar} style={{ flex: 1 }} disabled={guardando}>Cancelar</Boton>
+                <Boton tipo="submit" variante="primary" style={{ flex: 2 }} disabled={guardando}>{guardando ? 'Guardando...' : 'Guardar Cambios'}</Boton>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CREAR USUARIO (Edge Function) */}
+      {modalCrearAbierto && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '450px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ margin: '0 0 20px 0', color: 'var(--text-dark)', fontSize: '20px' }}>Crear Nuevo Usuario</h3>
+            
+            <form onSubmit={crearUsuario} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <Input label="Correo Electrónico" type="email" value={nuevoEmail} onChange={(e) => setNuevoEmail(e.target.value)} placeholder="ejemplo@petroamerica.com.pe" required />
+              
+              <Input label="Contraseña Temporal" type="text" value={nuevaPassword} onChange={(e) => setNuevaPassword(e.target.value)} placeholder="Mínimo 6 caracteres" required />
+              
+              <Select label="Rol del Usuario" value={nuevoRol} onChange={(e) => setNuevoRol(e.target.value)} required options={[{ value: '', label: 'Seleccione un rol...' }, ...roles.map(r => ({ value: r.id_rol, label: r.nombre }))]} />
+              
+              {rolCreacionCodigo === 'admin_planta' && (
+                <Select label="Planta Asignada (Requerido)" value={nuevaPlanta} onChange={(e) => setNuevaPlanta(e.target.value)} required options={[{ value: '', label: 'Seleccione una planta...' }, ...plantas.map(p => ({ value: p.id_planta, label: p.nombre }))]} />
+              )}
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                <Boton variante="outline" onClick={cerrarModalCrear} style={{ flex: 1 }} disabled={creando}>Cancelar</Boton>
+                <Boton tipo="submit" variante="success" style={{ flex: 2 }} disabled={creando}>{creando ? 'Creando...' : 'Crear Usuario'}</Boton>
               </div>
             </form>
           </div>
