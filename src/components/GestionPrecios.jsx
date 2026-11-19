@@ -44,7 +44,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   }, [vista])
 
-  // --- LÓGICA DE ORDENAMIENTO ---
+  // --- LÓGICA DE ORDENAMIENTO (CORREGIDA) ---
   async function fetchArchivos() {
     setCargando(true)
     const { data, error } = await supabase
@@ -56,25 +56,12 @@ export default function GestionPrecios({ setPantalla, rol }) {
     } else {
       let lista = data || []
 
-      // Ordenar de forma inteligente:
-      // 1. El vigente siempre arriba.
-      // 2. La fecha del documento (extraída del nombre YYYY-MM-DD) más reciente.
-      // 3. Si no hay fecha en el nombre, usar la fecha de subida (created_at).
+      // Ordenar: 
+      // 1. El VIGENTE siempre arriba.
+      // 2. Si hay varios históricos, el más recién subido (created_at) va primero.
       lista.sort((a, b) => {
-        // Prioridad 1: Vigente
         if (a.es_vigente && !b.es_vigente) return -1;
         if (!a.es_vigente && b.es_vigente) return 1;
-
-        // Prioridad 2: Extraer fecha del nombre (ej. "Precios para Planta 2026-11-18.xlsx")
-        const matchA = a.nombre_archivo.match(/(\d{4}-\d{2}-\d{2})/);
-        const matchB = b.nombre_archivo.match(/(\d{4}-\d{2}-\d{2})/);
-
-        if (matchA && matchB) {
-          // Si ambos tienen fecha, ordenar de más reciente a más antiguo
-          return matchB[0].localeCompare(matchA[0]);
-        }
-
-        // Prioridad 3: Si no tienen fecha en el nombre, ordenar por created_at (más nuevo primero)
         return new Date(b.created_at) - new Date(a.created_at);
       });
 
@@ -83,7 +70,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     setCargando(false)
   }
 
-  // --- LÓGICA: MARCAR COMO VIGENTE ---
+  // --- LÓGICA: MARCAR COMO VIGENTE MANUALMENTE ---
   const marcarComoVigente = async (id) => {
     try {
       await supabase.from('precios_archivos').update({ es_vigente: false }).eq('es_vigente', true)
@@ -231,32 +218,36 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const nombreLimpio = archivoExcel.name.replace(/\s+/g, '_')
       const fileName = `listas_precios/${Date.now()}_${nombreLimpio}`
       
+      // 1. Subir al Storage
       const { error: uploadError } = await supabase.storage
         .from('documentos_sigmo')
         .upload(fileName, archivoExcel)
 
       if (uploadError) throw uploadError
 
+      // 2. Obtener URL Pública
       const { data: { publicUrl } } = supabase.storage
         .from('documentos_sigmo')
         .getPublicUrl(fileName)
 
       const { data: { user } } = await supabase.auth.getUser()
 
-      const esPrimeraLista = archivos.length === 0
+      // 3. Antes de insertar, quitamos el vigente a TODOS los anteriores
+      await supabase.from('precios_archivos').update({ es_vigente: false }).eq('es_vigente', true)
 
+      // 4. Insertar la nueva lista como VIGENTE por defecto
       const { error: dbError } = await supabase
         .from('precios_archivos')
         .insert({
           nombre_archivo: archivoExcel.name,
           url_archivo: publicUrl,
           subido_por: user.email,
-          es_vigente: esPrimeraLista
+          es_vigente: true // <-- SIEMPRE SERÁ VIGENTE AL SUBIR
         })
 
       if (dbError) throw dbError
 
-      toast.success('Lista de precios subida exitosamente')
+      toast.success('Lista de precios subida y marcada como VIGENTE')
       limpiarPrevisualizacion()
       setVista('menu')
     } catch (error) {
