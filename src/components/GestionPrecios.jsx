@@ -25,8 +25,8 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [previewHeaders, setPreviewHeaders] = useState([])
   
   // Estados para T.C y FISE
-  const [tipoCambio, setTipoCambio] = useState(null)
-  const [valorFise, setValorFise] = useState(null)
+  const [tipoCambio, setTipoCambio] = useState('')
+  const [valorFise, setValorFise] = useState('')
 
   // Roles permitidos para subir
   const rolesCarga = ['admin_sistema', 'analista_comercial', 'jefe_pricing']
@@ -53,14 +53,26 @@ export default function GestionPrecios({ setPantalla, rol }) {
     setCargando(false)
   }
 
+  // Calcular FISE dinámicamente cuando cambia el T.C manual
+  const handleTCChange = (e) => {
+    const val = e.target.value;
+    setTipoCambio(val);
+    if (!isNaN(parseFloat(val)) && parseFloat(val) > 0) {
+      const fiseCalculado = (1 / 42) * parseFloat(val);
+      setValorFise(fiseCalculado.toFixed(4));
+    } else {
+      setValorFise('');
+    }
+  }
+
   // --- LÓGICA DE PREVISUALIZACIÓN DE EXCEL ---
   const handleFileChange = (e) => {
     const file = e.target.files[0]
     if (!file) return
 
     setArchivoExcel(file)
-    setTipoCambio(null)
-    setValorFise(null)
+    setTipoCambio('')
+    setValorFise('')
 
     const reader = new FileReader()
     reader.onload = (evt) => {
@@ -68,50 +80,53 @@ export default function GestionPrecios({ setPantalla, rol }) {
         const bstr = evt.target.result
         const wb = XLSX.read(bstr, { type: 'binary' })
         
-        const wsname = wb.SheetNames[0]
-        const ws = wb.Sheets[wsname]
-        
-        const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
-
-        // 1. BUSCAR T.C Y FISE (en las primeras 15 filas)
+        // 1. BUSCAR T.C Y FISE EN TODAS LAS HOJAS
         let tcEncontrado = null
         let fiseEncontrado = null
 
-        for (let i = 0; i < Math.min(15, data.length); i++) {
-          const row = data[i]
-          for (let j = 0; j < row.length; j++) {
-            const cellValue = String(row[j]).trim().toUpperCase()
-            
-            // Buscar T.C o T/C
-            if (cellValue === 'T.C' || cellValue === 'T/C' || cellValue.includes('TIPO DE CAMBIO')) {
-              // El valor suele estar en la celda de la derecha
-              if (row[j + 1] && !isNaN(row[j + 1])) tcEncontrado = parseFloat(row[j + 1])
-            }
-            // Buscar FISE
-            if (cellValue === 'FISE') {
-              if (row[j + 1] && !isNaN(row[j + 1])) fiseEncontrado = parseFloat(row[j + 1])
+        wb.SheetNames.forEach(sheetName => {
+          const ws = wb.Sheets[sheetName]
+          const sheetData = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+          
+          for (let i = 0; i < Math.min(20, sheetData.length); i++) {
+            const row = sheetData[i]
+            for (let j = 0; j < row.length; j++) {
+              const cellValue = String(row[j]).trim().toUpperCase()
+              
+              // Buscar T.C o T/C
+              if (cellValue === 'T.C' || cellValue === 'T/C' || cellValue.includes('TIPO DE CAMBIO')) {
+                const possibleNum = parseFloat(String(row[j + 1]).replace(',', '.'));
+                if (!isNaN(possibleNum)) tcEncontrado = possibleNum;
+              }
+              // Buscar FISE
+              if (cellValue === 'FISE') {
+                const possibleNum = parseFloat(String(row[j + 1]).replace(',', '.'));
+                if (!isNaN(possibleNum)) fiseEncontrado = possibleNum;
+              }
             }
           }
-        }
+        })
 
-        // Calcular FISE si no viene en el excel y tenemos T.C
         if (tcEncontrado) {
           setTipoCambio(tcEncontrado)
-          if (!fiseEncontrado) {
+          if (fiseEncontrado) {
+            setValorFise(fiseEncontrado.toFixed(4))
+          } else {
+            // Si no viene el FISE, se calcula automáticamente
             const fiseCalculado = (1 / 42) * tcEncontrado
             setValorFise(fiseCalculado.toFixed(4))
-          } else {
-            setValorFise(fiseEncontrado.toFixed(4))
           }
         }
 
-        // 2. BUSCAR LA TABLA DE DATOS
+        // 2. BUSCAR LA TABLA DE DATOS (En la primera hoja)
+        const wsname = wb.SheetNames[0]
+        const ws = wb.Sheets[wsname]
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+
         let headerIndex = data.findIndex(row => row.includes('PLANTAS'))
         if (headerIndex === -1) headerIndex = 0
 
         const headers = data[headerIndex]
-        
-        // Filtramos los datos desde la cabecera en adelante
         const rows = data.slice(headerIndex + 1).filter(row => row.some(cell => cell !== ''))
 
         setPreviewHeaders(headers)
@@ -130,8 +145,8 @@ export default function GestionPrecios({ setPantalla, rol }) {
     setArchivoExcel(null)
     setPreviewData([])
     setPreviewHeaders([])
-    setTipoCambio(null)
-    setValorFise(null)
+    setTipoCambio('')
+    setValorFise('')
     const fileInput = document.getElementById('file-upload-precios')
     if (fileInput) fileInput.value = ''
   }
@@ -266,28 +281,46 @@ export default function GestionPrecios({ setPantalla, rol }) {
                 <h2 style={{ margin: 0, color: 'var(--text-dark)', fontSize: '22px' }}>Paso 2: Previsualización</h2>
               </div>
 
-              {/* FRANJA DE T.C Y FISE */}
-              {(tipoCambio || valorFise) && (
-                <div style={{ display: 'flex', gap: '20px', backgroundColor: '#f3f4f6', padding: '12px 20px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #e5e7eb' }}>
-                  {tipoCambio && (
-                    <div style={{ fontSize: '14px', color: 'var(--text-dark)' }}>
-                      <strong>T.C:</strong> <span style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>{tipoCambio}</span>
-                    </div>
-                  )}
-                  {valorFise && (
-                    <div style={{ fontSize: '14px', color: 'var(--text-dark)' }}>
-                      <strong>FISE:</strong> <span style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>{valorFise}</span>
-                    </div>
-                  )}
+              {/* FRANJA DE T.C Y FISE CON EDICIÓN MANUAL */}
+              <div style={{ display: 'flex', gap: '20px', backgroundColor: '#f3f4f6', padding: '12px 20px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #e5e7eb', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-dark)' }}>T.C (Tipo de Cambio):</label>
+                  <input 
+                    type="number" 
+                    step="0.001"
+                    value={tipoCambio} 
+                    onChange={handleTCChange} 
+                    placeholder="Ej. 3.415"
+                    style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #d1d5db', width: '100px', fontSize: '14px' }}
+                  />
                 </div>
-              )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-dark)' }}>FISE (Calculado):</label>
+                  <input 
+                    type="text" 
+                    value={valorFise} 
+                    readOnly 
+                    placeholder="0.0000"
+                    style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #d1d5db', width: '100px', backgroundColor: '#e5e7eb', fontSize: '14px', color: 'var(--primary-blue)', fontWeight: 'bold' }}
+                  />
+                </div>
+                <span style={{ fontSize: '12px', color: 'var(--text-light)', fontStyle: 'italic' }}>
+                  * Si el archivo no trae el T.C, puedes ingresarlo aquí y el FISE se calculará.
+                </span>
+              </div>
 
               <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'center' }}>
                   <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white', position: 'sticky', top: 0 }}>
                     <tr>
                       {previewHeaders.map((h, i) => (
-                        <th key={i} style={{ padding: '10px 8px', borderBottom: '2px solid #1e40af', wordBreak: 'break-word' }}>
+                        <th key={i} style={{ 
+                          padding: '10px 8px', 
+                          borderBottom: '2px solid #1e40af', 
+                          // Código y Plantas no se rompen
+                          whiteSpace: (i === 0 || i === 1) ? 'nowrap' : 'normal', 
+                          wordBreak: 'break-word' 
+                        }}>
                           {h || '-'}
                         </th>
                       ))}
@@ -308,6 +341,8 @@ export default function GestionPrecios({ setPantalla, rol }) {
                                 padding: '8px 6px', 
                                 fontWeight: isPlanta ? 'bold' : 'normal',
                                 color: isPlanta ? 'var(--text-dark)' : 'var(--text-light)',
+                                // Código y Plantas no se rompen
+                                whiteSpace: (cellIndex === 0 || cellIndex === 1) ? 'nowrap' : 'normal',
                                 wordBreak: 'break-word'
                               }}>
                                 {displayValue}
