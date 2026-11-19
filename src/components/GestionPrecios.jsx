@@ -32,6 +32,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
   // --- ESTADOS PARA COMPARACIÓN ---
   const [idBase, setIdBase] = useState('')
   const [idNuevo, setIdNuevo] = useState('')
+  const [hojaComparar, setHojaComparar] = useState('Precio Base') // 'Precio Base', 'Precios Planta Sin IGV', 'Precios Planta Con IGV'
   const [datosComparados, setDatosComparados] = useState(null)
   const [cargandoComparacion, setCargandoComparacion] = useState(false)
 
@@ -50,6 +51,21 @@ export default function GestionPrecios({ setPantalla, rol }) {
       fetchArchivos()
     }
   }, [vista])
+
+  // Autocompletar selectores de comparación
+  useEffect(() => {
+    if (vista === 'comparar' && archivos.length > 0) {
+      // Ordenamos estrictamente por fecha de subida (created_at) para determinar el Actual y el Previo
+      const ordenadosPorFecha = [...archivos].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      
+      if (!idNuevo && ordenadosPorFecha.length > 0) {
+        setIdNuevo(ordenadosPorFecha[0].id); // El más reciente
+      }
+      if (!idBase && ordenadosPorFecha.length > 1) {
+        setIdBase(ordenadosPorFecha[1].id); // El penúltimo
+      }
+    }
+  }, [vista, archivos]);
 
   async function fetchArchivos() {
     setCargando(true)
@@ -70,19 +86,37 @@ export default function GestionPrecios({ setPantalla, rol }) {
   }
 
   // --- LÓGICA DE COMPARACIÓN ---
-  const parseExcelFile = async (url) => {
+  const parseExcelFile = async (url, targetSheetName) => {
     const response = await fetch(url);
     const arrayBuffer = await response.arrayBuffer();
     const wb = XLSX.read(arrayBuffer, { type: 'array' });
-    const ws = wb.Sheets[wb.SheetNames[0]];
+    
+    // Buscar la hoja seleccionada (búsqueda flexible)
+    const searchTerm = targetSheetName.toLowerCase().replace('precios planta ', '').replace('precio ', '');
+    let sheetName = wb.SheetNames.find(name => name.toLowerCase().includes(searchTerm));
+    if (!sheetName) sheetName = wb.SheetNames[0]; // Si no la encuentra, toma la primera
+
+    const ws = wb.Sheets[sheetName];
     const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-    let headerIndex = data.findIndex(row => row.includes('PLANTAS'));
+    // Encontrar la fila de cabecera
+    let headerIndex = data.findIndex(row => row.some(cell => String(cell).toUpperCase().includes('PLANTAS')));
     if (headerIndex === -1) headerIndex = 0;
 
+    const headers = data[headerIndex];
+    
+    // Detectar dinámicamente los índices de columnas clave
+    let colPlantaIndex = headers.findIndex(h => String(h).toUpperCase().includes('PLANTAS'));
+    if (colPlantaIndex === -1) colPlantaIndex = 1;
+    
+    let colCodigoIndex = headers.findIndex(h => String(h).toUpperCase().includes('CODIGO'));
+    if (colCodigoIndex === -1) colCodigoIndex = 0;
+
     return {
-      headers: data[headerIndex],
-      rows: data.slice(headerIndex + 1).filter(row => row.some(cell => cell !== ''))
+      headers,
+      rows: data.slice(headerIndex + 1).filter(row => row.some(cell => cell !== '')),
+      colPlantaIndex,
+      colCodigoIndex
     };
   };
 
@@ -97,31 +131,33 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const fileBase = archivos.find(a => a.id === idBase);
       const fileNuevo = archivos.find(a => a.id === idNuevo);
 
-      const dataBase = await parseExcelFile(fileBase.url_archivo);
-      const dataNuevo = await parseExcelFile(fileNuevo.url_archivo);
+      const dataBase = await parseExcelFile(fileBase.url_archivo, hojaComparar);
+      const dataNuevo = await parseExcelFile(fileNuevo.url_archivo, hojaComparar);
 
-      // Crear un mapa de la data base para búsqueda rápida por nombre de planta
+      // Crear mapa de la data base usando el nombre de la planta
       const baseMap = {};
       dataBase.rows.forEach(row => {
-        const planta = String(row[1]).trim().toUpperCase();
-        if (planta) baseMap[planta] = row;
+        const planta = String(row[dataBase.colPlantaIndex]).trim().toUpperCase();
+        if (planta && planta !== 'UNDEFINED' && planta !== '') baseMap[planta] = row;
       });
 
       // Cruzar la data nueva con la base
       const comparacion = dataNuevo.rows.map(nuevaRow => {
-        const planta = String(nuevaRow[1]).trim().toUpperCase();
-        const baseRow = baseMap[planta] || []; // Si la planta es nueva, devuelve array vacío
+        const planta = String(nuevaRow[dataNuevo.colPlantaIndex]).trim().toUpperCase();
+        const baseRow = baseMap[planta] || []; 
         
         return {
-          planta: nuevaRow[1],
+          planta,
           baseRow,
           nuevaRow
         };
-      }).filter(item => item.planta); // Omitir filas sin nombre de planta
+      }).filter(item => item.planta && item.planta !== 'UNDEFINED');
 
       setDatosComparados({
         headers: dataNuevo.headers,
-        rows: comparacion
+        rows: comparacion,
+        colPlantaIndex: dataNuevo.colPlantaIndex,
+        colCodigoIndex: dataNuevo.colCodigoIndex
       });
 
     } catch (error) {
@@ -429,23 +465,35 @@ export default function GestionPrecios({ setPantalla, rol }) {
         <main style={{ flex: 1, padding: '40px 20px', maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
           
           <Card style={{ padding: '30px', marginBottom: '20px' }}>
-            <h2 style={{ margin: '0 0 20px 0', color: 'var(--text-dark)', fontSize: '22px' }}>Selecciona las listas a comparar</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '15px', alignItems: 'end' }}>
+            <h2 style={{ margin: '0 0 20px 0', color: 'var(--text-dark)', fontSize: '22px' }}>Configuración de la Comparación</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '15px', alignItems: 'end' }}>
+              
               <div>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Lista Base (Antigua)</label>
+                <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Lista de Precios Previa</label>
                 <select value={idBase} onChange={(e) => setIdBase(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}>
                   <option value="">Selecciona una lista...</option>
                   {archivos.map(a => <option key={a.id} value={a.id}>{a.nombre_archivo}</option>)}
                 </select>
               </div>
+
               <div>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Lista Nueva (Reciente)</label>
+                <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Lista de Precios Actual</label>
                 <select value={idNuevo} onChange={(e) => setIdNuevo(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}>
                   <option value="">Selecciona una lista...</option>
                   {archivos.map(a => <option key={a.id} value={a.id}>{a.nombre_archivo}</option>)}
                 </select>
               </div>
-              <Boton variante="primary" onClick={generarComparacion} disabled={cargandoComparacion}>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Tipo de Precio (Hoja)</label>
+                <select value={hojaComparar} onChange={(e) => setHojaComparar(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#eff6ff' }}>
+                  <option value="Precio Base">Precio Base</option>
+                  <option value="Precios Planta Sin IGV">Precios Planta Sin IGV</option>
+                  <option value="Precios Planta Con IGV">Precios Planta Con IGV</option>
+                </select>
+              </div>
+
+              <Boton variante="primary" onClick={generarComparacion} disabled={cargandoComparacion} style={{ height: '42px' }}>
                 {cargandoComparacion ? 'Comparando...' : '⚖️ Comparar Ahora'}
               </Boton>
             </div>
@@ -480,28 +528,34 @@ export default function GestionPrecios({ setPantalla, rol }) {
                       return (
                         <tr key={rowIndex} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: rowIndex % 2 === 0 ? 'white' : '#f9fafb' }}>
                           {fila.nuevaRow.map((cellNueva, cellIndex) => {
-                            const isPlanta = cellIndex === 1;
+                            const isPlanta = cellIndex === datosComparados.colPlantaIndex;
+                            const isCodigo = cellIndex === datosComparados.colCodigoIndex;
+                            
                             const valBaseStr = fila.baseRow[cellIndex];
                             const valNuevaStr = cellNueva;
 
-                            const valBase = parseFloat(String(valBaseStr).replace(',', '.')) || 0;
-                            const valNueva = parseFloat(String(valNuevaStr).replace(',', '.')) || 0;
+                            let displayValue = valNuevaStr === 0 || valNuevaStr === '0' ? '-' : valNuevaStr;
+                            let color = isPlanta ? 'var(--text-dark)' : 'var(--text-light)';
 
-                            let diff = 0;
-                            let color = 'var(--text-light)';
-                            let text = valNueva === 0 ? '-' : valNueva;
+                            if (!isPlanta && !isCodigo) { 
+                              const valBase = parseFloat(String(valBaseStr).replace(',', '.'));
+                              const valNueva = parseFloat(String(valNuevaStr).replace(',', '.'));
 
-                            if (cellIndex > 1) { // Solo evaluar columnas de precios
-                              diff = valNueva - valBase;
-                              if (diff > 0) {
-                                color = '#ef4444'; // Rojo
-                                text = `${valNueva.toFixed(3)} (+${diff.toFixed(3)})`;
-                              } else if (diff < 0) {
-                                color = '#10b981'; // Verde
-                                text = `${valNueva.toFixed(3)} (${diff.toFixed(3)})`;
-                              } else if (diff === 0 && valNueva !== 0) {
-                                color = '#4b5563'; // Gris oscuro (Sin cambios)
-                                text = `${valNueva.toFixed(3)}`;
+                              if (!isNaN(valBase) && !isNaN(valNueva)) {
+                                const diff = valNueva - valBase;
+                                
+                                if (Math.abs(diff) > 0.0001) { // Usar margen de error para decimales
+                                  if (diff > 0) {
+                                    color = '#ef4444'; // Rojo
+                                    displayValue = `${valNueva.toFixed(3)} (+${diff.toFixed(3)})`;
+                                  } else {
+                                    color = '#10b981'; // Verde
+                                    displayValue = `${valNueva.toFixed(3)} (${diff.toFixed(3)})`;
+                                  }
+                                } else if (valNueva !== 0) {
+                                  color = '#4b5563'; // Gris oscuro (Sin cambios)
+                                  displayValue = `${valNueva.toFixed(3)}`;
+                                }
                               }
                             }
 
@@ -509,11 +563,11 @@ export default function GestionPrecios({ setPantalla, rol }) {
                               <td key={cellIndex} style={{ 
                                 padding: '8px 6px', 
                                 fontWeight: isPlanta ? 'bold' : 'normal',
-                                color: isPlanta ? 'var(--text-dark)' : color,
-                                whiteSpace: (cellIndex === 0 || cellIndex === 1) ? 'nowrap' : 'normal',
+                                color: color,
+                                whiteSpace: (isPlanta || isCodigo) ? 'nowrap' : 'normal',
                                 wordBreak: 'break-word'
                               }}>
-                                {isPlanta ? cellNueva : text}
+                                {displayValue}
                               </td>
                             );
                           })}
