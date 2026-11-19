@@ -17,10 +17,10 @@ export default function RepositorioDocumental({ setPantalla }) {
   const [proveedor, setProveedor] = useState('')
   const [producto, setProducto] = useState('')
   const [version, setVersion] = useState('')
-  const [buscandoVersion, setBuscandoVersion] = useState(false) // Nuevo estado
+  const [buscandoVersion, setBuscandoVersion] = useState(false)
   const [subiendo, setSubiendo] = useState(false)
 
-  // Estados para Catálogos (Datos maestros)
+  // Estados para Catálogos
   const [listaPlantas, setListaPlantas] = useState([])
   const [listaProveedores, setListaProveedores] = useState([])
   const [listaProductos, setListaProductos] = useState([])
@@ -49,7 +49,7 @@ export default function RepositorioDocumental({ setPantalla }) {
     }
   }, [vista])
 
-  // --- LÓGICA DE AUTO-VERSIONADO ---
+  // --- AUTO-VERSIONADO DE GUÍAS ---
   const handleTipoGuiaChange = async (e) => {
     const nuevoTipo = e.target.value;
     setTipoDoc(nuevoTipo);
@@ -61,7 +61,6 @@ export default function RepositorioDocumental({ setPantalla }) {
 
     setBuscandoVersion(true);
     try {
-      // Buscar la última versión de este tipo de guía
       const { data, error } = await supabase
         .from('documentos')
         .select('version')
@@ -73,14 +72,12 @@ export default function RepositorioDocumental({ setPantalla }) {
       if (error) throw error;
 
       if (data && data.length > 0 && data[0].version) {
-        // Extraer el número de la versión (ej. "V1.2" -> 1.2)
         const versionStr = data[0].version.replace(/[^0-9.]/g, '');
         const partes = versionStr.split('.');
         
         let major = parseInt(partes[0]) || 1;
         let minor = parseInt(partes[1]) || 0;
 
-        // Incrementar versión (V1.0 -> V1.1)
         minor += 1;
         if (minor >= 10) {
           major += 1;
@@ -89,12 +86,11 @@ export default function RepositorioDocumental({ setPantalla }) {
 
         setVersion(`V${major}.${minor}`);
       } else {
-        // Si es la primera vez que se sube esta guía
         setVersion('V1.0');
       }
     } catch (error) {
       console.error("Error al calcular versión:", error);
-      setVersion('V1.0'); // Fallback
+      setVersion('V1.0');
     } finally {
       setBuscandoVersion(false);
     }
@@ -296,7 +292,6 @@ export default function RepositorioDocumental({ setPantalla }) {
               </>
             )}
 
-            {/* ACTUALIZADO: AUTO-VERSIONADO DE GUÍAS */}
             {categoria === 'Guías' && (
               <>
                 <Select 
@@ -305,15 +300,16 @@ export default function RepositorioDocumental({ setPantalla }) {
                   onChange={handleTipoGuiaChange} 
                   required 
                   options={[
-                    { value: '', label: 'Seleccione...' },
-                    { value: 'Guía para la Solicitud de Códigos', label: 'Guía para la Solicitud de Códigos' },
-                    { value: 'Guía de Anulación de Facturas', label: 'Guía de Anulación de Facturas' },
-                    { value: 'Guía de Reclamos', label: 'Guía de Reclamos' },
-                    { value: 'Otra Guía', label: 'Otra Guía' }
+                    { value: '', label: 'Seleccione una guía...' },
+                    { value: 'Guía para la Solicitud de Códigos de Anulación de Facturas', label: 'Guía para la Solicitud de Códigos de Anulación de Facturas' },
+                    { value: 'Guía de uso – Generación de pedidos en el aplicativo', label: 'Guía de uso – Generación de pedidos en el aplicativo' },
+                    { value: 'Guía de Procedimiento para la Emisión de la GRE en el Portal SUNAT', label: 'Guía de Procedimiento para la Emisión de la GRE en el Portal SUNAT' },
+                    { value: 'Guía para informe de levantamiento de observación - Terminal Pampilla', label: 'Guía para informe de levantamiento de observación - Terminal Pampilla' },
+                    { value: 'Guía Básica del SCOP', label: 'Guía Básica del SCOP' },
+                    { value: 'Guía de procedimiento para anular un SCOP entre mayoristas en la plataforma virtual de Osinergmin', label: 'Guía de procedimiento para anular un SCOP entre mayoristas en la plataforma virtual de Osinergmin' }
                   ]} 
                 />
                 
-                {/* Bloqueamos el input para que el usuario no altere la versión calculada, o lo dejamos readonly */}
                 <Input 
                   label={buscandoVersion ? "Calculando versión..." : "Versión (Autocalculada)"} 
                   value={buscandoVersion ? "..." : version} 
