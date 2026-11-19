@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import * as XLSX from 'xlsx' // <-- NUEVA LIBRERÍA PARA LEER EXCEL
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
 import { Card, Boton } from './ui'
@@ -15,9 +16,14 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [archivos, setArchivos] = useState([])
   const [cargando, setCargando] = useState(false)
   
-  // Estados de carga
+  // --- ESTADOS PARA SUBIDA Y PREVISUALIZACIÓN ---
   const [archivoExcel, setArchivoExcel] = useState(null)
   const [subiendo, setSubiendo] = useState(false)
+  
+  // Estados para la tabla de previsualización
+  const [previewData, setPreviewData] = useState([])
+  const [previewHeaders, setPreviewHeaders] = useState([])
+  const [previewCodes, setPreviewCodes] = useState([]) // Para la fila de códigos (029, 027...)
 
   // Roles permitidos para subir
   const rolesCarga = ['admin_sistema', 'analista_comercial', 'jefe_pricing']
@@ -46,28 +52,78 @@ export default function GestionPrecios({ setPantalla, rol }) {
     setCargando(false)
   }
 
-  async function handleSubirArchivo(e) {
-    e.preventDefault()
-    if (!archivoExcel) return toast.error('Por favor, selecciona un archivo Excel')
+  // --- LÓGICA DE PREVISUALIZACIÓN DE EXCEL ---
+  const handleFileChange = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    setArchivoExcel(file)
+
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target.result
+        const wb = XLSX.read(bstr, { type: 'binary' })
+        
+        // Tomamos la primera hoja (Precio Base)
+        const wsname = wb.SheetNames[0]
+        const ws = wb.Sheets[wsname]
+        
+        // Convertimos a matriz (array de arrays)
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+
+        // Buscamos la fila que contiene "PLANTAS" para usarla como cabecera
+        let headerIndex = data.findIndex(row => row.includes('PLANTAS'))
+        if (headerIndex === -1) headerIndex = 0 // Si no lo encuentra, asume la primera fila
+
+        const headers = data[headerIndex]
+        const codes = data[headerIndex + 1] || [] // La siguiente fila suele tener los códigos
+        
+        // Extraemos los datos, omitiendo filas vacías
+        const rows = data.slice(headerIndex + 1).filter(row => row.some(cell => cell !== ''))
+
+        setPreviewHeaders(headers)
+        setPreviewCodes(codes)
+        setPreviewData(rows)
+        toast.success('Archivo leído. Revisa la previsualización.')
+      } catch (error) {
+        console.error(error)
+        toast.error('Error al leer el archivo Excel')
+        limpiarPrevisualizacion()
+      }
+    }
+    reader.readAsBinaryString(file)
+  }
+
+  const limpiarPrevisualizacion = () => {
+    setArchivoExcel(null)
+    setPreviewData([])
+    setPreviewHeaders([])
+    setPreviewCodes([])
+    // Limpiamos el input file visualmente
+    const fileInput = document.getElementById('file-upload-precios')
+    if (fileInput) fileInput.value = ''
+  }
+
+  // --- LÓGICA DE SUBIDA REAL A SUPABASE ---
+  async function handleSubirArchivo() {
+    if (!archivoExcel) return toast.error('No hay archivo seleccionado')
     
     setSubiendo(true)
     try {
-      // 1. Subir archivo a Supabase Storage (Bucket 'documentos_sigmo')
       const nombreLimpio = archivoExcel.name.replace(/\s+/g, '_')
-      const fileName = `listas_precios/${Date.now()}_${nombreLimpio}` // Se guarda en la carpeta listas_precios
+      const fileName = `listas_precios/${Date.now()}_${nombreLimpio}`
       
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('documentos_sigmo')
         .upload(fileName, archivoExcel)
 
       if (uploadError) throw uploadError
 
-      // 2. Obtener la URL pública
       const { data: { publicUrl } } = supabase.storage
         .from('documentos_sigmo')
         .getPublicUrl(fileName)
 
-      // 3. Guardar registro en la base de datos
       const { data: { user } } = await supabase.auth.getUser()
 
       const { error: dbError } = await supabase
@@ -75,13 +131,13 @@ export default function GestionPrecios({ setPantalla, rol }) {
         .insert({
           nombre_archivo: archivoExcel.name,
           url_archivo: publicUrl,
-          subido_por: user.email // Guardamos el correo para saber quién lo subió
+          subido_por: user.email
         })
 
       if (dbError) throw dbError
 
-      toast.success('Lista de precios cargada exitosamente')
-      setArchivoExcel(null)
+      toast.success('Lista de precios subida exitosamente')
+      limpiarPrevisualizacion()
       setVista('menu')
     } catch (error) {
       console.error(error)
@@ -128,7 +184,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
               <div onClick={() => setVista('cargar')} style={cardStyle} onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary-blue)'} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}>
                 <div style={{ fontSize: '50px', marginBottom: '15px' }}>📤</div>
                 <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Cargar Nueva Lista</h3>
-                <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Sube archivos Excel al sistema.</p>
+                <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Sube y previsualiza archivos Excel.</p>
               </div>
             )}
           </div>
@@ -137,7 +193,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
-  // --- VISTA 2: CARGAR ARCHIVO ---
+  // --- VISTA 2: CARGAR ARCHIVO CON PREVISUALIZACIÓN ---
   if (vista === 'cargar') {
     if (!puedeCargar) {
       return (
@@ -153,30 +209,96 @@ export default function GestionPrecios({ setPantalla, rol }) {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
         {renderHeader()}
-        <main style={{ flex: 1, padding: '40px 20px', maxWidth: '600px', margin: '0 auto', width: '100%' }}>
-          <Card style={{ padding: '40px' }}>
-            <h2 style={{ margin: '0 0 10px 0', color: 'var(--text-dark)', fontSize: '22px' }}>Cargar Nueva Lista</h2>
-            <p style={{ color: 'var(--text-light)', marginBottom: '30px', fontSize: '14px' }}>Sube un archivo en formato Excel (.xlsx, .xls) para actualizar el repositorio.</p>
+        <main style={{ flex: 1, padding: '40px 20px', maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
+          
+          <Card style={{ padding: '30px', marginBottom: '20px' }}>
+            <h2 style={{ margin: '0 0 15px 0', color: 'var(--text-dark)', fontSize: '22px' }}>Paso 1: Seleccionar Archivo</h2>
             
-            <form onSubmit={handleSubirArchivo} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div style={{ border: '2px dashed #d1d5db', borderRadius: '8px', padding: '30px', textAlign: 'center', backgroundColor: '#f9fafb' }}>
-                <input 
-                  type="file" 
-                  accept=".xlsx, .xls, .csv" 
-                  onChange={(e) => setArchivoExcel(e.target.files[0])}
-                  style={{ display: 'block', margin: '0 auto', fontSize: '14px' }}
-                />
-                {archivoExcel && <p style={{ marginTop: '15px', color: 'var(--primary-blue)', fontWeight: 'bold' }}>Archivo seleccionado: {archivoExcel.name}</p>}
-              </div>
-              
-              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                <Boton variante="outline" onClick={() => setVista('menu')} style={{ flex: 1 }} disabled={subiendo}>Cancelar</Boton>
-                <Boton tipo="submit" variante="primary" style={{ flex: 2 }} disabled={subiendo || !archivoExcel}>
-                  {subiendo ? 'Subiendo archivo...' : 'Subir Archivo Excel'}
-                </Boton>
-              </div>
-            </form>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', padding: '20px', border: '2px dashed #cbd5e1', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
+              <input 
+                type="file" 
+                id="file-upload-precios"
+                accept=".xlsx, .xls" 
+                onChange={handleFileChange}
+                style={{ fontSize: '14px' }}
+              />
+              {archivoExcel && (
+                <span style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>
+                  ✅ {archivoExcel.name}
+                </span>
+              )}
+            </div>
           </Card>
+
+          {/* TABLA DE PREVISUALIZACIÓN */}
+          {previewData.length > 0 && (
+            <Card style={{ padding: '30px', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h2 style={{ margin: 0, color: 'var(--text-dark)', fontSize: '22px' }}>Paso 2: Previsualización (Precio Base)</h2>
+              </div>
+
+              <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px', maxHeight: '500px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left', minWidth: '1000px' }}>
+                  <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white', position: 'sticky', top: 0 }}>
+                    <tr>
+                      {previewHeaders.map((h, i) => (
+                        <th key={i} style={{ padding: '12px', borderBottom: '2px solid #1e40af', whiteSpace: 'nowrap' }}>
+                          {h || '-'}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewData.map((row, rowIndex) => {
+                      // Omitimos la fila de códigos si se coló en los datos
+                      if (row.includes('029') && row.includes('027')) return null; 
+                      
+                      return (
+                        <tr key={rowIndex} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: rowIndex % 2 === 0 ? 'white' : '#f9fafb' }}>
+                          {row.map((cell, cellIndex) => {
+                            // Formatear celdas: si es 0, mostrar un guion
+                            const displayValue = cell === 0 || cell === '0' ? '-' : cell;
+                            
+                            // Resaltar la columna de PLANTAS (índice 1)
+                            const isPlanta = cellIndex === 1;
+
+                            return (
+                              <td key={cellIndex} style={{ 
+                                padding: '10px 12px', 
+                                fontWeight: isPlanta ? 'bold' : 'normal',
+                                color: isPlanta ? 'var(--text-dark)' : 'var(--text-light)',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {displayValue}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* BOTONES DE ACCIÓN (LIMPIAR / CALCULAR/SUBIR) */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '25px' }}>
+                <button 
+                  onClick={limpiarPrevisualizacion}
+                  style={{ padding: '10px 25px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}
+                >
+                  LIMPIAR
+                </button>
+                <button 
+                  onClick={handleSubirArchivo}
+                  disabled={subiendo}
+                  style={{ padding: '10px 25px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: subiendo ? 'not-allowed' : 'pointer', fontSize: '14px' }}
+                >
+                  {subiendo ? 'SUBIENDO...' : 'CONFIRMAR Y SUBIR'}
+                </button>
+              </div>
+            </Card>
+          )}
+
         </main>
       </div>
     )
