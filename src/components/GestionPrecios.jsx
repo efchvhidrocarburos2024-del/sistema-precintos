@@ -44,17 +44,41 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   }, [vista])
 
+  // --- LÓGICA DE ORDENAMIENTO ---
   async function fetchArchivos() {
     setCargando(true)
     const { data, error } = await supabase
       .from('precios_archivos')
       .select('*')
-      .order('created_at', { ascending: false })
 
     if (error) {
       toast.error('Error al cargar los archivos')
     } else {
-      setArchivos(data || [])
+      let lista = data || []
+
+      // Ordenar de forma inteligente:
+      // 1. El vigente siempre arriba.
+      // 2. La fecha del documento (extraída del nombre YYYY-MM-DD) más reciente.
+      // 3. Si no hay fecha en el nombre, usar la fecha de subida (created_at).
+      lista.sort((a, b) => {
+        // Prioridad 1: Vigente
+        if (a.es_vigente && !b.es_vigente) return -1;
+        if (!a.es_vigente && b.es_vigente) return 1;
+
+        // Prioridad 2: Extraer fecha del nombre (ej. "Precios para Planta 2026-11-18.xlsx")
+        const matchA = a.nombre_archivo.match(/(\d{4}-\d{2}-\d{2})/);
+        const matchB = b.nombre_archivo.match(/(\d{4}-\d{2}-\d{2})/);
+
+        if (matchA && matchB) {
+          // Si ambos tienen fecha, ordenar de más reciente a más antiguo
+          return matchB[0].localeCompare(matchA[0]);
+        }
+
+        // Prioridad 3: Si no tienen fecha en el nombre, ordenar por created_at (más nuevo primero)
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
+
+      setArchivos(lista);
     }
     setCargando(false)
   }
@@ -84,17 +108,14 @@ export default function GestionPrecios({ setPantalla, rol }) {
     setEliminando(true)
 
     try {
-      // Extraer ruta del storage (ej: listas_precios/1712_archivo.xlsx)
       const urlParts = archivoAEliminar.url_archivo.split('/documentos_sigmo/')
       const filePath = urlParts[1]
 
       if (filePath) {
-        // 1. Borrar archivo físico
         const { error: storageError } = await supabase.storage.from('documentos_sigmo').remove([filePath])
         if (storageError) console.error('Error al borrar de storage:', storageError)
       }
 
-      // 2. Borrar registro de la base de datos
       const { error: dbError } = await supabase.from('precios_archivos').delete().eq('id', archivoAEliminar.id)
       if (dbError) throw dbError
 
@@ -208,17 +229,14 @@ export default function GestionPrecios({ setPantalla, rol }) {
     setSubiendo(true)
     try {
       const nombreLimpio = archivoExcel.name.replace(/\s+/g, '_')
-      // RUTA CLAVE: Se guarda dentro de la carpeta listas_precios/
       const fileName = `listas_precios/${Date.now()}_${nombreLimpio}`
       
-      // 1. Subir al Storage
       const { error: uploadError } = await supabase.storage
         .from('documentos_sigmo')
         .upload(fileName, archivoExcel)
 
       if (uploadError) throw uploadError
 
-      // 2. Obtener URL Pública
       const { data: { publicUrl } } = supabase.storage
         .from('documentos_sigmo')
         .getPublicUrl(fileName)
@@ -227,7 +245,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
       const esPrimeraLista = archivos.length === 0
 
-      // 3. Guardar en Base de Datos
       const { error: dbError } = await supabase
         .from('precios_archivos')
         .insert({
