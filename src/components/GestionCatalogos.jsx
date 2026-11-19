@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
-import { PageHeader, Card, Input, Boton } from './ui'
+import { Card, Input, Boton } from './ui'
 
 const cardStyle = {
   backgroundColor: 'white', borderRadius: '12px', padding: '30px 20px', textAlign: 'center',
@@ -125,21 +125,32 @@ export default function GestionCatalogos({ setPantalla }) {
             <h2 style={{ color: 'var(--text-dark)', fontSize: '24px', marginBottom: '10px' }}>¿Qué catálogo deseas gestionar?</h2>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+            
             <div onClick={() => setVista('proveedores')} style={cardStyle} onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary-blue)'} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>🏢</div>
               <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Proveedores</h3>
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Gestión de empresas proveedoras.</p>
             </div>
+
             <div onClick={() => setVista('productos')} style={cardStyle} onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary-blue)'} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>🛢️</div>
               <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Productos</h3>
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Listado de combustibles y derivados.</p>
             </div>
+
             <div onClick={() => setVista('plantas')} style={cardStyle} onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary-blue)'} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>🏭</div>
               <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Plantas / Terminales</h3>
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Administración de terminales de despacho.</p>
             </div>
+
+            {/* NUEVA TARJETA: ADMINISTRAR USUARIOS */}
+            <div onClick={() => setPantalla('usuarios')} style={cardStyle} onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary-blue)'} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}>
+              <div style={{ fontSize: '50px', marginBottom: '15px' }}>👥</div>
+              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Administrar Usuarios</h3>
+              <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Gestión de accesos y roles del sistema.</p>
+            </div>
+
           </div>
         </main>
       </div>

@@ -155,7 +155,8 @@ export default function GestionUsuarios({ setPantalla }) {
       
       <header style={{ padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <button onClick={() => setPantalla('precintos_menu')} style={btnHeaderStyle}>← Volver al Menú</button>
+          {/* BOTÓN ACTUALIZADO PARA VOLVER A CATÁLOGOS */}
+          <button onClick={() => setPantalla('catalogos')} style={btnHeaderStyle}>← Volver a Catálogos</button>
           <h1 style={{ margin: 0, color: 'var(--primary-blue)', fontSize: '28px', fontWeight: '900' }}>Gestión de Usuarios</h1>
         </div>
       </header>

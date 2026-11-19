@@ -22,7 +22,7 @@ import Bitacora from './components/Bitacora'
 import GestionPlantas from './components/GestionPlantas'
 import PanelRespaldos from './components/PanelRespaldos'
 import RepositorioDocumental from './components/RepositorioDocumental'
-import GestionCatalogos from './components/GestionCatalogos' // <-- NUEVO MÓDULO
+import GestionCatalogos from './components/GestionCatalogos'
 
 const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000;
 const TIEMPO_DE_AVISO = TIEMPO_INACTIVIDAD_TOTAL - (2 * 60 * 1000);
@@ -111,7 +111,7 @@ function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>⚙️</div>
               <h3 style={{ color: 'var(--primary-blue)', marginBottom: '15px', fontSize: '20px' }}>Catálogos Maestros</h3>
               <p style={{ color: 'var(--text-light)', marginBottom: '25px', fontSize: '14px', lineHeight: '1.5' }}>
-                Administra proveedores, productos y terminales del sistema.
+                Administra proveedores, productos, terminales y usuarios.
               </p>
               <button style={{ width: '100%', padding: '12px', borderRadius: '6px', border: 'none', background: 'var(--primary-blue)', color: 'white', fontWeight: 'bold', fontSize: '15px' }}>
                 Entrar al Módulo
@@ -157,7 +157,7 @@ function MenuPrecintos({ setPantalla, rol, permisos }) {
     { id: 'conciliacion', titulo: 'Conciliación', icono: '🤝', desc: 'Cruce de información de viajes.', permiso: 'conciliacion', roles: ['admin_sistema', 'jefe_proyecto', 'analista_operaciones', 'jefe_operaciones'] },
     { id: 'proyeccion', titulo: 'Proyección Demanda', icono: '🔮', desc: 'Estimación de uso futuro.', permiso: 'proyeccion', roles: ['admin_sistema', 'jefe_proyecto', 'jefe_operaciones', 'analista_operaciones'] },
     { id: 'bitacora', titulo: 'Bitácora', icono: '📋', desc: 'Historial de acciones del sistema.', permiso: 'bitacora', roles: ['admin_sistema', 'auditor', 'jefe_operaciones', 'jefe_proyecto'] },
-    { id: 'usuarios', titulo: 'Administrar Usuarios', icono: '👥', desc: 'Gestión de accesos y roles.', permiso: 'usuarios', roles: ['admin_sistema', 'jefe_proyecto'] },
+    // NOTA: La tarjeta de 'usuarios' ha sido removida de aquí.
     { id: 'plantas', titulo: 'Config. Plantas', icono: '🏭', desc: 'Administración de terminales.', permiso: 'plantas', roles: ['admin_sistema'] },
     { id: 'respaldos', titulo: 'Respaldos', icono: '💾', desc: 'Gestión de copias de seguridad.', permiso: 'respaldos', roles: ['admin_sistema'] },
   ]
@@ -368,9 +368,12 @@ function App() {
 
       {/* 4. MÓDULO CATÁLOGOS MAESTROS */}
       {pantalla === 'catalogos' && <GestionCatalogos setPantalla={setPantalla} />}
+      
+      {/* 5. GESTIÓN DE USUARIOS (INDEPENDIENTE, SE ABRE DESDE CATÁLOGOS) */}
+      {pantalla === 'usuarios' && <GestionUsuarios setPantalla={setPantalla} />}
 
-      {/* 5. VISTAS INTERNAS DE PRECINTOS (CON HEADER DE VOLVER) */}
-      {pantalla !== '' && pantalla !== 'precintos_menu' && pantalla !== 'repositorio' && pantalla !== 'catalogos' && (
+      {/* 6. VISTAS INTERNAS DE PRECINTOS (CON HEADER DE VOLVER) */}
+      {pantalla !== '' && pantalla !== 'precintos_menu' && pantalla !== 'repositorio' && pantalla !== 'catalogos' && pantalla !== 'usuarios' && (
         <div style={{ minHeight: '100vh' }}>
           {/* Header Común para todas las vistas de Precintos */}
           <nav style={{ backgroundColor: 'white', borderBottom: '1px solid #e5e7eb', padding: '15px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
@@ -400,7 +403,6 @@ function App() {
             {pantalla === 'dashboard' && tienePermiso('dashboard', ['admin_sistema', 'auditor', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto', 'admin_planta']) && <Dashboard />}
             {pantalla === 'reportes' && tienePermiso('dashboard', ['admin_sistema', 'auditor', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto', 'admin_planta']) && <Reportes />}
             {pantalla === 'bitacora' && tienePermiso('bitacora', ['admin_sistema', 'auditor', 'jefe_operaciones', 'jefe_proyecto']) && <Bitacora />}
-            {pantalla === 'usuarios' && tienePermiso('usuarios', ['admin_sistema', 'jefe_proyecto']) && <GestionUsuarios />}
             {pantalla === 'conciliacion' && tienePermiso('conciliacion', ['admin_sistema', 'jefe_proyecto', 'analista_operaciones', 'jefe_operaciones']) && <Conciliacion />}
             {pantalla === 'proyeccion' && tienePermiso('proyeccion', ['admin_sistema', 'jefe_proyecto', 'jefe_operaciones', 'analista_operaciones']) && <ProyeccionDemanda />}
             {pantalla === 'cambiar-password' && <CambiarPassword />}
