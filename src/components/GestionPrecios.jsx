@@ -28,9 +28,15 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [tipoCambio, setTipoCambio] = useState('')
   const [valorFise, setValorFise] = useState('')
 
-  // Roles permitidos para subir
+  // Estados para Modal de Eliminación
+  const [modalEliminarAbierto, setModalEliminarAbierto] = useState(false)
+  const [archivoAEliminar, setArchivoAEliminar] = useState(null)
+  const [eliminando, setEliminando] = useState(false)
+
+  // Roles permitidos
   const rolesCarga = ['admin_sistema', 'analista_comercial', 'jefe_pricing']
   const puedeCargar = rolesCarga.includes(rol)
+  const puedeGestionar = ['admin_sistema', 'jefe_pricing'].includes(rol) // Roles que pueden borrar o hacer vigente
 
   useEffect(() => {
     if (vista === 'visualizar') {
@@ -53,7 +59,61 @@ export default function GestionPrecios({ setPantalla, rol }) {
     setCargando(false)
   }
 
-  // Calcular FISE dinámicamente cuando cambia el T.C manual
+  // --- LÓGICA: MARCAR COMO VIGENTE ---
+  const marcarComoVigente = async (id) => {
+    try {
+      // 1. Quitar el vigente a todos
+      await supabase.from('precios_archivos').update({ es_vigente: false }).eq('es_vigente', true)
+      // 2. Poner el vigente al seleccionado
+      const { error } = await supabase.from('precios_archivos').update({ es_vigente: true }).eq('id', id)
+      
+      if (error) throw error
+      toast.success('Lista marcada como VIGENTE')
+      fetchArchivos()
+    } catch (error) {
+      toast.error('Error al actualizar: ' + error.message)
+    }
+  }
+
+  // --- LÓGICA: ELIMINAR ARCHIVO ---
+  const abrirModalEliminar = (file) => {
+    setArchivoAEliminar(file)
+    setModalEliminarAbierto(true)
+  }
+
+  const confirmarEliminar = async () => {
+    if (!archivoAEliminar) return
+    setEliminando(true)
+
+    try {
+      // 1. Extraer el path del archivo desde la URL pública
+      // La URL es algo como: https://.../documentos_sigmo/listas_precios/1712_archivo.xlsx
+      const urlParts = archivoAEliminar.url_archivo.split('/documentos_sigmo/')
+      const filePath = urlParts[1]
+
+      // 2. Borrar del Storage
+      if (filePath) {
+        const { error: storageError } = await supabase.storage.from('documentos_sigmo').remove([filePath])
+        if (storageError) console.error('Error al borrar de storage:', storageError)
+      }
+
+      // 3. Borrar de la Base de Datos
+      const { error: dbError } = await supabase.from('precios_archivos').delete().eq('id', archivoAEliminar.id)
+      if (dbError) throw dbError
+
+      toast.success('Lista eliminada permanentemente')
+      setModalEliminarAbierto(false)
+      setArchivoAEliminar(null)
+      fetchArchivos()
+    } catch (error) {
+      console.error(error)
+      toast.error('Error al eliminar: ' + error.message)
+    } finally {
+      setEliminando(false)
+    }
+  }
+
+  // Calcular FISE dinámicamente
   const handleTCChange = (e) => {
     const val = e.target.value;
     setTipoCambio(val);
@@ -65,7 +125,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   }
 
-  // --- LÓGICA DE PREVISUALIZACIÓN DE EXCEL ---
   const handleFileChange = (e) => {
     const file = e.target.files[0]
     if (!file) return
@@ -80,7 +139,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
         const bstr = evt.target.result
         const wb = XLSX.read(bstr, { type: 'binary' })
         
-        // 1. BUSCAR T.C Y FISE EN TODAS LAS HOJAS
+        // Buscar T.C y FISE
         let tcEncontrado = null
         let fiseEncontrado = null
 
@@ -93,12 +152,10 @@ export default function GestionPrecios({ setPantalla, rol }) {
             for (let j = 0; j < row.length; j++) {
               const cellValue = String(row[j]).trim().toUpperCase()
               
-              // Buscar T.C o T/C
               if (cellValue === 'T.C' || cellValue === 'T/C' || cellValue.includes('TIPO DE CAMBIO')) {
                 const possibleNum = parseFloat(String(row[j + 1]).replace(',', '.'));
                 if (!isNaN(possibleNum)) tcEncontrado = possibleNum;
               }
-              // Buscar FISE
               if (cellValue === 'FISE') {
                 const possibleNum = parseFloat(String(row[j + 1]).replace(',', '.'));
                 if (!isNaN(possibleNum)) fiseEncontrado = possibleNum;
@@ -112,13 +169,12 @@ export default function GestionPrecios({ setPantalla, rol }) {
           if (fiseEncontrado) {
             setValorFise(fiseEncontrado.toFixed(4))
           } else {
-            // Si no viene el FISE, se calcula automáticamente
             const fiseCalculado = (1 / 42) * tcEncontrado
             setValorFise(fiseCalculado.toFixed(4))
           }
         }
 
-        // 2. BUSCAR LA TABLA DE DATOS (En la primera hoja)
+        // Buscar Tabla
         const wsname = wb.SheetNames[0]
         const ws = wb.Sheets[wsname]
         const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
@@ -171,12 +227,16 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
       const { data: { user } } = await supabase.auth.getUser()
 
+      // Si es la primera lista, se marca como vigente automáticamente
+      const esPrimeraLista = archivos.length === 0
+
       const { error: dbError } = await supabase
         .from('precios_archivos')
         .insert({
           nombre_archivo: archivoExcel.name,
           url_archivo: publicUrl,
-          subido_por: user.email
+          subido_por: user.email,
+          es_vigente: esPrimeraLista
         })
 
       if (dbError) throw dbError
@@ -273,15 +333,12 @@ export default function GestionPrecios({ setPantalla, rol }) {
             </div>
           </Card>
 
-          {/* TABLA DE PREVISUALIZACIÓN ADAPTABLE */}
           {previewData.length > 0 && (
             <Card style={{ padding: '30px', overflow: 'hidden' }}>
-              
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <h2 style={{ margin: 0, color: 'var(--text-dark)', fontSize: '22px' }}>Paso 2: Previsualización</h2>
               </div>
 
-              {/* FRANJA DE T.C Y FISE CON EDICIÓN MANUAL */}
               <div style={{ display: 'flex', gap: '20px', backgroundColor: '#f3f4f6', padding: '12px 20px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #e5e7eb', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <label style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-dark)' }}>T.C (Tipo de Cambio):</label>
@@ -304,9 +361,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
                     style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #d1d5db', width: '100px', backgroundColor: '#e5e7eb', fontSize: '14px', color: 'var(--primary-blue)', fontWeight: 'bold' }}
                   />
                 </div>
-                <span style={{ fontSize: '12px', color: 'var(--text-light)', fontStyle: 'italic' }}>
-                  * Si el archivo no trae el T.C, puedes ingresarlo aquí y el FISE se calculará.
-                </span>
               </div>
 
               <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
@@ -317,7 +371,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
                         <th key={i} style={{ 
                           padding: '10px 8px', 
                           borderBottom: '2px solid #1e40af', 
-                          // Código y Plantas no se rompen
                           whiteSpace: (i === 0 || i === 1) ? 'nowrap' : 'normal', 
                           wordBreak: 'break-word' 
                         }}>
@@ -329,19 +382,16 @@ export default function GestionPrecios({ setPantalla, rol }) {
                   <tbody>
                     {previewData.map((row, rowIndex) => {
                       if (row.includes('029') && row.includes('027')) return null; 
-                      
                       return (
                         <tr key={rowIndex} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: rowIndex % 2 === 0 ? 'white' : '#f9fafb' }}>
                           {row.map((cell, cellIndex) => {
                             const displayValue = cell === 0 || cell === '0' ? '-' : cell;
                             const isPlanta = cellIndex === 1;
-
                             return (
                               <td key={cellIndex} style={{ 
                                 padding: '8px 6px', 
                                 fontWeight: isPlanta ? 'bold' : 'normal',
                                 color: isPlanta ? 'var(--text-dark)' : 'var(--text-light)',
-                                // Código y Plantas no se rompen
                                 whiteSpace: (cellIndex === 0 || cellIndex === 1) ? 'nowrap' : 'normal',
                                 wordBreak: 'break-word'
                               }}>
@@ -373,16 +423,16 @@ export default function GestionPrecios({ setPantalla, rol }) {
               </div>
             </Card>
           )}
-
         </main>
       </div>
     )
   }
 
+  // --- VISTA VISUALIZAR (CON TABLA DE GESTIÓN) ---
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
       {renderHeader()}
-      <main style={{ flex: 1, padding: '40px 20px', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
+      <main style={{ flex: 1, padding: '40px 20px', maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h2 style={{ color: 'var(--text-dark)', fontSize: '22px', margin: 0 }}>Listas de Precios Disponibles</h2>
           <Boton variante="outline" onClick={fetchArchivos}>🔄 Refrescar</Boton>
@@ -401,12 +451,13 @@ export default function GestionPrecios({ setPantalla, rol }) {
                     <th style={{ padding: '15px' }}>FECHA</th>
                     <th style={{ padding: '15px' }}>NOMBRE DEL ARCHIVO</th>
                     <th style={{ padding: '15px' }}>SUBIDO POR</th>
-                    <th style={{ padding: '15px', textAlign: 'center' }}>ACCIÓN</th>
+                    <th style={{ padding: '15px', textAlign: 'center' }}>ESTADO</th>
+                    <th style={{ padding: '15px', textAlign: 'center' }}>ACCIONES</th>
                   </tr>
                 </thead>
                 <tbody>
                   {archivos.map((file) => (
-                    <tr key={file.id} style={{ borderBottom: '1px solid #eee' }}>
+                    <tr key={file.id} style={{ borderBottom: '1px solid #eee', backgroundColor: file.es_vigente ? '#f0fdf4' : 'white' }}>
                       <td style={{ padding: '15px', color: 'var(--text-light)' }}>
                         {new Date(file.created_at).toLocaleDateString()} {new Date(file.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </td>
@@ -417,9 +468,37 @@ export default function GestionPrecios({ setPantalla, rol }) {
                         {file.subido_por || 'SISTEMA'}
                       </td>
                       <td style={{ padding: '15px', textAlign: 'center' }}>
-                        <a href={file.url_archivo} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                          <Boton variante="success" tamano="sm">⬇️ Descargar</Boton>
-                        </a>
+                        {file.es_vigente ? (
+                          <span style={{ padding: '4px 10px', backgroundColor: '#DCFCE7', color: '#166534', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>
+                            🟢 VIGENTE
+                          </span>
+                        ) : (
+                          <span style={{ padding: '4px 10px', backgroundColor: '#F3F4F6', color: '#6B7280', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>
+                            HISTÓRICO
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '15px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                          
+                          <a href={file.url_archivo} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                            <Boton variante="outline" tamano="sm" style={{ color: 'var(--primary-blue)' }}>⬇️</Boton>
+                          </a>
+
+                          {/* BOTÓN HACER VIGENTE (Solo roles autorizados y si no es vigente ya) */}
+                          {puedeGestionar && !file.es_vigente && (
+                            <Boton variante="success" tamano="sm" onClick={() => marcarComoVigente(file.id)} title="Marcar como vigente">
+                              ✅
+                            </Boton>
+                          )}
+
+                          {/* BOTÓN ELIMINAR (Solo roles autorizados) */}
+                          {puedeGestionar && (
+                            <Boton variante="danger" tamano="sm" onClick={() => abrirModalEliminar(file)} title="Eliminar lista">
+                              🗑️
+                            </Boton>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -429,6 +508,26 @@ export default function GestionPrecios({ setPantalla, rol }) {
           )}
         </Card>
       </main>
+
+      {/* MODAL DE CONFIRMACIÓN DE ELIMINACIÓN */}
+      {modalEliminarAbierto && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '450px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ margin: '0 0 10px 0', color: 'var(--danger-red)', fontSize: '22px' }}>⚠️ Confirmar Eliminación</h3>
+            <p style={{ color: 'var(--text-dark)', marginBottom: '20px', fontSize: '14px', lineHeight: '1.5' }}>
+              ¿Estás seguro que deseas eliminar permanentemente la lista <strong>{archivoAEliminar?.nombre_archivo}</strong>?<br/><br/>
+              Esta acción borrará el archivo del almacenamiento y no se podrá recuperar.
+            </p>
+            
+            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+              <Boton variante="outline" onClick={() => setModalEliminarAbierto(false)} style={{ flex: 1 }} disabled={eliminando}>Cancelar</Boton>
+              <Boton variante="danger" onClick={confirmarEliminar} style={{ flex: 2 }} disabled={eliminando}>
+                {eliminando ? 'Eliminando...' : 'Sí, Eliminar'}
+              </Boton>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
