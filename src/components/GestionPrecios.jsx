@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import * as XLSX from 'xlsx'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
 import { Card, Boton } from './ui'
@@ -52,19 +54,20 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   }, [vista])
 
-  // Autocompletar selectores de comparación (Previa y Actual)
+  // Autocompletado mejorado (solo se dispara si cambian los archivos o la vista)
   useEffect(() => {
     if (vista === 'comparar' && archivos.length > 0) {
       const ordenadosPorFecha = [...archivos].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       
-      if (!idNuevo && ordenadosPorFecha.length > 0) {
-        setIdNuevo(ordenadosPorFecha[0].id); // El más reciente
+      // Verificar si el ID actual es válido, si no, autocompletar
+      if (!ordenadosPorFecha.find(a => a.id === idNuevo)) {
+        setIdNuevo(ordenadosPorFecha[0]?.id || '');
       }
-      if (!idBase && ordenadosPorFecha.length > 1) {
-        setIdBase(ordenadosPorFecha[1].id); // El anterior al más reciente
+      if (!ordenadosPorFecha.find(a => a.id === idBase)) {
+        setIdBase(ordenadosPorFecha[1]?.id || '');
       }
     }
-  }, [vista, archivos, idBase, idNuevo]);
+  }, [vista, archivos]);
 
   async function fetchArchivos() {
     setCargando(true)
@@ -100,30 +103,21 @@ export default function GestionPrecios({ setPantalla, rol }) {
     const p2 = normalizarTexto(prod2);
     if (p1 === p2) return true;
     
-    // 1. Gasolinas
     if (p1.includes('GASOLINA') && p2.includes('GASOLINA') && p1.includes('PREMIUM') && p2.includes('PREMIUM')) return true;
     if (p1.includes('GASOLINA') && p2.includes('GASOLINA') && p1.includes('REGULAR') && p2.includes('REGULAR')) return true;
-    
-    // 2. Gasoholes
     if (p1.includes('GASOHOL') && p2.includes('GASOHOL') && p1.includes('PREMIUM') && p2.includes('PREMIUM')) return true;
     if (p1.includes('GASOHOL') && p2.includes('GASOHOL') && p1.includes('REGULAR') && p2.includes('REGULAR')) return true;
-    
-    // 3. Petróleos
     if (p1.includes('PETROLEO') && p2.includes('PETROLEO') && p1.includes('6') && p2.includes('6')) return true;
     if (p1.includes('PETROLEO') && p2.includes('PETROLEO') && p1.includes('500') && p2.includes('500')) return true;
     
-    // 4. Diésel 2
     if (p1.includes('DIESEL') && p2.includes('DIESEL') && p1.includes('2 S-50') && p2.includes('2 S-50')) {
       if (p1.includes('UV') && p2.includes('UV')) return true;
       if (!p1.includes('UV') && !p2.includes('UV')) return true;
     }
-
-    // 5. Diésel B5
     if (p1.includes('DIESEL') && p2.includes('DIESEL') && p1.includes('B5 S-50') && p2.includes('B5 S-50')) {
       if (p1.includes('UV') && p2.includes('UV')) return true;
       if (!p1.includes('UV') && !p2.includes('UV')) return true;
     }
-
     return false;
   };
 
@@ -132,7 +126,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     if (n.length < 3) return false;
     if (n.includes('*')) return false;
     if (!isNaN(Number(n))) return false; 
-    // Filtrar fechas (evita que la fila "18/11/2026" se tome como planta)
     if (n.match(/\d{4}-\d{2}-\d{2}/) || n.match(/\d{2}\/\d{2}\/\d{4}/)) return false; 
     if (n.includes('TOTAL') || n.includes('IGV') || n.includes('ISC') || n.includes('RODAJE') || n.includes('INCREMENTO') || n.includes('INCLUSION') || n.includes('DISMINUCION')) return false;
     return true;
@@ -173,12 +166,10 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const dataBase = await parseExcelFile(fileBase.url_archivo, hojaComparar);
       const dataNuevo = await parseExcelFile(fileNuevo.url_archivo, hojaComparar);
 
-      // Encontrar índices de columnas clave
       const idxPlantaNew = dataNuevo.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
       const idxCodigoNew = dataNuevo.headers.findIndex(h => normalizarTexto(h).includes('CODIGO'));
       const idxPlantaBase = dataBase.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
 
-      // Crear mapa de la data base
       const baseMap = {};
       dataBase.rows.forEach(row => {
         const planta = normalizarTexto(row[idxPlantaBase]);
@@ -187,11 +178,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
         }
       });
 
-      // Identificar columnas de productos válidas
       const columnasComparar = [];
       dataNuevo.headers.forEach((h, i) => {
         const hNorm = normalizarTexto(h);
-        
         if (
           !hNorm || hNorm.includes('PLANTAS') || hNorm.includes('CODIGO') || 
           hNorm.includes('USO INTERNO') || hNorm.includes('SOLES/GALON') || 
@@ -200,22 +189,16 @@ export default function GestionPrecios({ setPantalla, rol }) {
           hNorm === 'SI' || hNorm === '-'
         ) return;
 
-        // Buscar esta columna en el archivo base de forma estricta
         const baseColIndex = dataBase.headers.findIndex(baseH => esMismoProducto(baseH, h));
         
         if (baseColIndex !== -1) {
-          columnasComparar.push({
-            titulo: h, 
-            indexNuevo: i,
-            indexBase: baseColIndex
-          });
+          columnasComparar.push({ titulo: h, indexNuevo: i, indexBase: baseColIndex });
         }
       });
 
       const comparacion = [];
       dataNuevo.rows.forEach(nuevaRow => {
         const planta = normalizarTexto(nuevaRow[idxPlantaNew]);
-        
         if (!esPlantaValida(planta)) return;
 
         const baseRow = baseMap[planta];
@@ -230,7 +213,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
             const valBase = parseFloat(String(valBaseStr).replace(',', '.'));
 
             if (!isNaN(valNuevo) && !isNaN(valBase) && valNuevo > 0 && valBase > 0) {
-              variaciones[col.titulo] = valNuevo - valBase;
+              variaciones[col.titulo] = {
+                diff: valNuevo - valBase
+              };
             } else if (!isNaN(valNuevo) && valNuevo > 0 && (isNaN(valBase) || valBase === 0)) {
               variaciones[col.titulo] = 'NUEVO';
             } else {
@@ -256,6 +241,114 @@ export default function GestionPrecios({ setPantalla, rol }) {
       toast.error('Error al comparar: ' + error.message);
     } finally {
       setCargandoComparacion(false);
+    }
+  };
+
+  // --- LÓGICA: EXPORTAR A EXCEL ---
+  const exportarComparacionExcel = () => {
+    if (!datosComparados) return;
+
+    try {
+      const headerRow = ['CÓDIGO', 'PLANTAS', ...datosComparados.columnas];
+      const excelData = [headerRow];
+
+      datosComparados.rows.forEach(fila => {
+        const row = [fila.codigo, fila.planta];
+        
+        datosComparados.columnas.forEach(col => {
+          const item = fila.variaciones[col];
+          if (item === 'NUEVO') {
+            row.push('NUEVO');
+          } else if (item && Math.abs(item.diff) > 0.0001) {
+            row.push(`${item.diff > 0 ? '+' : ''}${item.diff.toFixed(3)}`);
+          } else if (item && item.diff === 0) {
+            row.push('0.000');
+          } else {
+            row.push('-');
+          }
+        });
+        
+        excelData.push(row);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(excelData);
+      ws['!cols'] = headerRow.map((_, i) => ({ wch: i < 2 ? 15 : 20 }));
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Variación');
+      
+      const fileName = `Variacion_${hojaComparar}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      
+      toast.success('Excel descargado correctamente');
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al exportar: ' + error.message);
+    }
+  };
+
+  // --- LÓGICA: EXPORTAR A PDF ---
+  const exportarComparacionPDF = () => {
+    if (!datosComparados) return;
+
+    try {
+      const doc = new jsPDF('landscape');
+      
+      doc.setFontSize(18);
+      doc.text(`Variación - ${hojaComparar}`, 14, 22);
+      
+      const head = [['CÓDIGO', 'PLANTAS', ...datosComparados.columnas]];
+      const body = datosComparados.rows.map(fila => {
+        const row = [fila.codigo, fila.planta];
+        
+        datosComparados.columnas.forEach(col => {
+          const item = fila.variaciones[col];
+          if (item === 'NUEVO') {
+            row.push('NUEVO');
+          } else if (item && Math.abs(item.diff) > 0.0001) {
+            row.push(`${item.diff > 0 ? '+' : ''}${item.diff.toFixed(3)}`);
+          } else if (item && item.diff === 0) {
+            row.push('0.000');
+          } else {
+            row.push('-');
+          }
+        });
+        
+        return row;
+      });
+
+      autoTable(doc, {
+        head: head,
+        body: body,
+        startY: 30,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        didParseCell: function (data) {
+          // Colorear celdas en el PDF
+          if (data.section === 'body' && data.column.index > 1) {
+            const text = data.cell.text[0];
+            if (text && text.startsWith('+')) {
+              data.cell.styles.textColor = [239, 68, 68]; // Rojo
+              data.cell.styles.fontStyle = 'bold';
+            } else if (text && text.startsWith('-')) {
+              data.cell.styles.textColor = [16, 185, 129]; // Verde
+              data.cell.styles.fontStyle = 'bold';
+            } else if (text === 'NUEVO') {
+              data.cell.styles.textColor = [59, 130, 246]; // Azul
+              data.cell.styles.fontStyle = 'bold';
+            }
+          }
+        }
+      });
+
+      const fileName = `Variacion_${hojaComparar}_${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+      
+      toast.success('PDF descargado correctamente');
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al exportar PDF: ' + error.message);
     }
   };
 
@@ -592,10 +685,19 @@ export default function GestionPrecios({ setPantalla, rol }) {
                 <h2 style={{ margin: 0, color: 'var(--text-dark)', fontSize: '22px' }}>
                   Variación - {hojaComparar}
                 </h2>
-                <div style={{ display: 'flex', gap: '15px', fontSize: '12px' }}>
-                  <span style={{ color: '#ef4444', fontWeight: 'bold' }}>🔴 Aumentó (+)</span>
-                  <span style={{ color: '#10b981', fontWeight: 'bold' }}>🟢 Bajó (-)</span>
-                  <span style={{ color: '#6b7280', fontWeight: 'bold' }}>⚪ Sin cambios</span>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                  <div style={{ display: 'flex', gap: '15px', fontSize: '12px' }}>
+                    <span style={{ color: '#ef4444', fontWeight: 'bold' }}>🔴 Aumentó (+)</span>
+                    <span style={{ color: '#10b981', fontWeight: 'bold' }}>🟢 Bajó (-)</span>
+                    <span style={{ color: '#6b7280', fontWeight: 'bold' }}>⚪ Sin cambios</span>
+                  </div>
+                  
+                  {/* BOTONES DE EXPORTACIÓN */}
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <Boton variante="danger" onClick={exportarComparacionPDF}>📄 PDF</Boton>
+                    <Boton variante="success" onClick={exportarComparacionExcel}>⬇️ Excel</Boton>
+                  </div>
                 </div>
               </div>
 
@@ -619,21 +721,21 @@ export default function GestionPrecios({ setPantalla, rol }) {
                         <td style={{ padding: '10px 8px', fontWeight: 'bold', color: 'var(--text-dark)', whiteSpace: 'nowrap' }}>{fila.planta}</td>
                         
                         {datosComparados.columnas.map((col, colIndex) => {
-                          const diff = fila.variaciones[col];
+                          const item = fila.variaciones[col];
                           
-                          if (diff === 'NUEVO') {
+                          if (item === 'NUEVO') {
                              return <td key={colIndex} style={{ padding: '10px 8px', color: '#3b82f6', fontWeight: 'bold', fontSize: '11px' }}>NUEVO</td>;
                           }
 
-                          if (diff === null || diff === undefined) {
+                          if (!item) {
                             return <td key={colIndex} style={{ padding: '10px 8px', color: '#9ca3af' }}>-</td>;
                           }
 
-                          if (Math.abs(diff) > 0.0001) {
-                            if (diff > 0) {
-                              return <td key={colIndex} style={{ padding: '10px 8px', color: '#ef4444', fontWeight: 'bold' }}>+{diff.toFixed(3)}</td>;
+                          if (Math.abs(item.diff) > 0.0001) {
+                            if (item.diff > 0) {
+                              return <td key={colIndex} style={{ padding: '10px 8px', color: '#ef4444', fontWeight: 'bold' }}>+{item.diff.toFixed(3)}</td>;
                             } else {
-                              return <td key={colIndex} style={{ padding: '10px 8px', color: '#10b981', fontWeight: 'bold' }}>{diff.toFixed(3)}</td>;
+                              return <td key={colIndex} style={{ padding: '10px 8px', color: '#10b981', fontWeight: 'bold' }}>{item.diff.toFixed(3)}</td>;
                             }
                           }
 
