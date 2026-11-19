@@ -26,7 +26,7 @@ import RepositorioDocumental from './components/RepositorioDocumental'
 const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000;
 const TIEMPO_DE_AVISO = TIEMPO_INACTIVIDAD_TOTAL - (2 * 60 * 1000);
 
-// Estilos para las tarjetas del menú
+// Estilos reutilizables para las tarjetas
 const cardStyle = {
   backgroundColor: 'white',
   borderRadius: '12px',
@@ -117,7 +117,7 @@ function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
 }
 
 // ============================================================================
-// COMPONENTE: MENÚ INTERNO DEL MÓDULO PRECINTOS
+// COMPONENTE: MENÚ INTERNO DEL MÓDULO PRECINTOS (TARJETAS)
 // ============================================================================
 function MenuPrecintos({ setPantalla, rol, permisos }) {
   const tienePermiso = (permisoExtra, rolesPermitidos) => {
@@ -340,13 +340,13 @@ function App() {
       {/* 1. LOBBY PRINCIPAL */}
       {pantalla === '' && <LobbyModulos sesion={sesion} cerrarSesion={cerrarSesion} setPantalla={setPantalla} rol={rol} />}
 
-      {/* 2. SUB-MENÚ DE PRECINTOS (NUEVO DISEÑO) */}
+      {/* 2. SUB-MENÚ DE PRECINTOS (TARJETAS) */}
       {pantalla === 'precintos_menu' && <MenuPrecintos setPantalla={setPantalla} rol={rol} permisos={permisos} />}
 
       {/* 3. MÓDULO REPOSITORIO */}
       {pantalla === 'repositorio' && <RepositorioDocumental setPantalla={setPantalla} rol={rol} />}
 
-      {/* 4. VISTAS INTERNAS DE PRECINTOS */}
+      {/* 4. VISTAS INTERNAS DE PRECINTOS (CON HEADER DE VOLVER) */}
       {pantalla !== '' && pantalla !== 'precintos_menu' && pantalla !== 'repositorio' && (
         <div style={{ minHeight: '100vh' }}>
           {/* Header Común para todas las vistas de Precintos */}
