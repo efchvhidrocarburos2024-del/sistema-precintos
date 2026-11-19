@@ -18,7 +18,6 @@ const COLORS = ['#0B5FA5', '#10b981', '#ef4444', '#f59e0b', '#8b5cf6', '#ec4899'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
-    // Ordenar de mayor a menor precio para fácil lectura
     const sortedPayload = [...payload].sort((a, b) => b.value - a.value);
     
     return (
@@ -268,7 +267,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   };
 
-  // --- LÓGICA DE TENDENCIAS (MEJORADA) ---
+  // --- LÓGICA DE TENDENCIAS ---
   const cargarTendencias = async () => {
     if (!plantaSeleccionada || !productoSeleccionado) return toast.error('Selecciona una planta y un producto');
     setCargandoTendencia(true);
@@ -320,7 +319,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
             });
           }
         } else if (plantaSeleccionada === 'TODOS' && productoSeleccionado === 'TODOS') {
-          // Si ambos son TODOS, graficamos el promedio de cada planta
           data.rows.forEach(fila => {
             const nombrePlanta = String(fila[idxPlanta]).trim();
             if (esPlantaValida(nombrePlanta)) {
@@ -359,14 +357,12 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const lineasArray = Array.from(nombresLineas);
       setLineasDinamicas(lineasArray);
 
-      // --- CÁLCULO DE MÉTRICAS INTELIGENTE ---
       if (lineasArray.length > 0) {
         let actual = 0, min = Infinity, max = -Infinity, variacion = 0;
         let labelReferencia = '';
 
         if (plantaSeleccionada === 'TODOS' && productoSeleccionado === 'TODOS') {
           labelReferencia = 'Promedio Global (Plantas)';
-          // Calcular el promedio de todos los valores en cada fecha
           const promediosPorFecha = datosArray.map(d => {
             const vals = Object.entries(d).filter(([k, v]) => k !== 'fecha' && v !== undefined).map(([_, v]) => v);
             return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : undefined;
@@ -375,13 +371,11 @@ export default function GestionPrecios({ setPantalla, rol }) {
           if (promediosPorFecha.length > 0) {
             actual = promediosPorFecha[promediosPorFecha.length - 1];
             variacion = promediosPorFecha.length > 1 ? actual - promediosPorFecha[promediosPorFecha.length - 2] : 0;
-            // El min y max se calculan sobre todos los valores individuales
             const allVals = datosArray.flatMap(d => Object.entries(d).filter(([k, v]) => k !== 'fecha' && v !== undefined).map(([_, v]) => v));
             min = Math.min(...allVals);
             max = Math.max(...allVals);
           }
         } else {
-          // Si hay un filtro específico (o es de 1 sola línea), calculamos sobre esa línea
           const primeraLinea = lineasArray[0];
           labelReferencia = primeraLinea;
           const precios = datosArray.map(d => d[primeraLinea]).filter(v => v !== undefined);
@@ -429,6 +423,56 @@ export default function GestionPrecios({ setPantalla, rol }) {
     XLSX.utils.book_append_sheet(wb, ws, 'Tendencia');
     XLSX.writeFile(wb, `Tendencia_${hojaTendencia}.xlsx`);
     toast.success('Datos exportados a Excel');
+  };
+
+  // --- VISUALIZAR EXCEL COMO PDF ---
+  const verComoPDF = async (file) => {
+    const toastId = toast.loading('Generando vista PDF, por favor espera...');
+    try {
+      const response = await fetch(file.url_archivo);
+      const arrayBuffer = await response.arrayBuffer();
+      const wb = XLSX.read(arrayBuffer, { type: 'array' });
+      
+      const doc = new jsPDF('landscape'); // Horizontal para que quepan las columnas
+      
+      wb.SheetNames.forEach((sheetName, index) => {
+        if (index > 0) doc.addPage();
+        
+        doc.setFontSize(14);
+        doc.setTextColor(11, 95, 165); // Azul corporativo
+        doc.text(`Archivo: ${file.nombre_archivo}`, 14, 15);
+        
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Hoja: ${sheetName}`, 14, 22);
+        
+        const ws = wb.Sheets[sheetName];
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        
+        // Limpiar filas vacías para que no se vea feo en el PDF
+        const cleanData = data.filter(row => row.some(cell => String(cell).trim() !== ''));
+        
+        if (cleanData.length > 0) {
+          autoTable(doc, {
+            head: [cleanData[0].map(c => String(c))],
+            body: cleanData.slice(1).map(row => row.map(c => String(c))),
+            startY: 28,
+            styles: { fontSize: 7, cellPadding: 1.5 },
+            theme: 'grid',
+            headStyles: { fillColor: [11, 95, 165] } // Cabecera azul
+          });
+        }
+      });
+
+      // Abrir en una nueva pestaña
+      const blobUrl = doc.output('bloburl');
+      window.open(blobUrl, '_blank');
+      
+      toast.success('Vista PDF generada', { id: toastId });
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al generar PDF: ' + error.message, { id: toastId });
+    }
   };
 
   // --- GESTIÓN DE ARCHIVOS ---
@@ -535,7 +579,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     setSubiendo(true)
     
     try {
-      // --- VALIDACIÓN DE DUPLICADOS ---
       const nombreNormalizado = archivoExcel.name.trim();
       const fechaNueva = extraerFecha(archivoExcel.name);
 
@@ -550,7 +593,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
           throw new Error(`Ya existe una lista registrada para la fecha ${fechaNueva} ("${existeFecha[0].nombre_archivo}"). Elimine la anterior si desea reemplazarla.`);
         }
       }
-      // --- FIN VALIDACIÓN ---
 
       const { data: archivosDb } = await supabase.from('precios_archivos').select('*').eq('es_vigente', true)
       let debeSerVigente = false;
@@ -1039,9 +1081,23 @@ export default function GestionPrecios({ setPantalla, rol }) {
                   </td>
                   <td style={{ padding: '15px', textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                      <a href={file.url_archivo} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}><Boton variante="outline" tamano="sm">⬇️</Boton></a>
-                      {puedeGestionar && !file.es_vigente && <Boton variante="success" tamano="sm" onClick={() => marcarComoVigente(file.id, file.nombre_archivo)}>✅</Boton>}
-                      {puedeGestionar && <Boton variante="danger" tamano="sm" onClick={() => { setArchivoAEliminar(file); setModalEliminarAbierto(true); }}>🗑️</Boton>}
+                      
+                      {/* NUEVO BOTÓN PARA VER EN PDF */}
+                      <Boton variante="outline" tamano="sm" onClick={() => verComoPDF(file)} title="Visualizar en PDF" style={{ color: '#0B5FA5', borderColor: '#0B5FA5' }}>
+                        👁️
+                      </Boton>
+
+                      {/* Botón de descarga original */}
+                      <a href={file.url_archivo} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+                        <Boton variante="outline" tamano="sm" title="Descargar Excel">⬇️</Boton>
+                      </a>
+
+                      {puedeGestionar && !file.es_vigente && (
+                        <Boton variante="success" tamano="sm" onClick={() => marcarComoVigente(file.id, file.nombre_archivo)} title="Marcar como Vigente">✅</Boton>
+                      )}
+                      {puedeGestionar && (
+                        <Boton variante="danger" tamano="sm" onClick={() => { setArchivoAEliminar(file); setModalEliminarAbierto(true); }} title="Eliminar">🗑️</Boton>
+                      )}
                     </div>
                   </td>
                 </tr>
