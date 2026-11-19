@@ -280,7 +280,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     setErrorTendencia('');
 
     try {
-      // Tomamos hasta los últimos 15 archivos ordenados por fecha
       const archivosProcesar = archivos.slice(0, 15).reverse(); 
       
       if (archivosProcesar.length < 2) {
@@ -310,7 +309,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const resultados = await Promise.all(promesas);
       const tendencia = resultados.filter(r => r !== null);
       
-      // Ordenar por fecha
       tendencia.sort((a, b) => a.fecha.localeCompare(b.fecha));
 
       if (tendencia.length < 2) {
@@ -319,7 +317,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
       setDatosTendencia(tendencia);
 
-      // Calcular Métricas
       const precios = tendencia.map(t => t.precio);
       const actual = precios[precios.length - 1];
       const anterior = precios[precios.length - 2];
@@ -667,14 +664,16 @@ export default function GestionPrecios({ setPantalla, rol }) {
             <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: '200px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Planta</label>
-                <select value={plantaSeleccionada} onChange={(e) => setPlantaSeleccionada(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#fff' }}>
+                {/* SELECTOR NEGRO */}
+                <select value={plantaSeleccionada} onChange={(e) => setPlantaSeleccionada(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold' }}>
                   <option value="">Seleccione...</option>
                   {opcionesPlantas.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
               <div style={{ flex: 1, minWidth: '200px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Producto</label>
-                <select value={productoSeleccionado} onChange={(e) => setProductoSeleccionado(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#fff' }}>
+                {/* SELECTOR NEGRO */}
+                <select value={productoSeleccionado} onChange={(e) => setProductoSeleccionado(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold' }}>
                   <option value="">Seleccione...</option>
                   {opcionesProductos.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
@@ -685,7 +684,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
             </div>
           </Card>
 
-          {/* ÁREA DE MÉTRICAS Y GRÁFICO */}
           {errorTendencia && (
             <Card style={{ padding: '20px', backgroundColor: '#fef2f2', border: '1px solid #f87171', marginBottom: '20px' }}>
               <p style={{ margin: 0, color: '#991b1b', fontWeight: 'bold' }}>⚠️ {errorTendencia}</p>
@@ -715,9 +713,10 @@ export default function GestionPrecios({ setPantalla, rol }) {
             </div>
           )}
 
-          <Card style={{ padding: '30px', height: '450px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          {/* CONTENEDOR DEL GRÁFICO ARREGLADO (SIN FLEX Y CON ALTURA FIJA) */}
+          <Card style={{ padding: '30px', height: '450px' }}>
             {cargandoTendencia ? (
-              <div style={{ textAlign: 'center' }}>
+              <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
                 <div style={{ fontSize: '40px', marginBottom: '10px', animation: 'spin 2s linear infinite' }}>⏳</div>
                 <p style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>Analizando historial de archivos...</p>
               </div>
@@ -732,7 +731,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div style={{ textAlign: 'center', color: 'var(--text-light)' }}>
+              <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'var(--text-light)' }}>
                 <div style={{ fontSize: '50px', marginBottom: '15px' }}>📉</div>
                 <h3 style={{ margin: 0 }}>Sin datos para mostrar</h3>
                 <p>Selecciona una planta y un producto para generar el gráfico.</p>
