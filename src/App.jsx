@@ -23,7 +23,7 @@ import GestionPlantas from './components/GestionPlantas'
 import PanelRespaldos from './components/PanelRespaldos'
 import RepositorioDocumental from './components/RepositorioDocumental'
 import GestionCatalogos from './components/GestionCatalogos'
-import GestionPrecios from './components/GestionPrecios' // <-- NUEVO IMPORT
+import GestionPrecios from './components/GestionPrecios'
 
 const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000;
 const TIEMPO_DE_AVISO = TIEMPO_INACTIVIDAD_TOTAL - (2 * 60 * 1000);
@@ -119,7 +119,7 @@ function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
             </div>
           )}
 
-          {/* MÓDULO 4: LISTA DE PRECIOS (NUEVO - Visible para todos) */}
+          {/* MÓDULO 4: LISTA DE PRECIOS */}
           <div style={{ ...cardStyle, borderColor: 'var(--primary-blue)' }} onClick={() => setPantalla('precios_menu')}>
             <div style={{ fontSize: '50px', marginBottom: '15px' }}>💰</div>
             <h3 style={{ color: 'var(--primary-blue)', marginBottom: '15px', fontSize: '20px' }}>Lista de Precios</h3>
@@ -213,54 +213,117 @@ function App() {
   const timerRef = useRef(null)
   const avisoTimerRef = useRef(null)
 
+  // Lógica de Autenticación
   useEffect(() => {
     if (window.location.hash.includes('type=recovery') || window.location.search.includes('type=recovery')) {
       setEsRecuperacion(true)
     }
-    supabase.auth.getSession().then(({ data: { session } }) => { setSesion(session) })
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSesion(session)
+    })
+
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSesion(session)
-      if (_event === 'PASSWORD_RECOVERY') setEsRecuperacion(true)
+      if (_event === 'PASSWORD_RECOVERY') {
+        setEsRecuperacion(true)
+      }
     })
+
     return () => authListener.subscription.unsubscribe()
   }, [])
 
+  // Lógica de Roles y Permisos con CACHÉ (Optimizado)
   useEffect(() => {
     if (!sesion) {
-      setRol(null); setPermisos([]); setCargandoRol(false); return
+      setRol(null)
+      setPermisos([])
+      setCargandoRol(false)
+      sessionStorage.removeItem('sigmo_rol')
+      sessionStorage.removeItem('sigmo_permisos')
+      return
     }
+
+    // Si ya tenemos los datos en la memoria del navegador, los usamos inmediatamente
+    const cachedRol = sessionStorage.getItem('sigmo_rol')
+    const cachedPermisos = sessionStorage.getItem('sigmo_permisos')
+
+    if (cachedRol) {
+      setRol(cachedRol)
+      setPermisos(JSON.parse(cachedPermisos || '[]'))
+      setCargandoRol(false)
+      return 
+    }
+
+    // Si no están en caché (es la primera vez), consultamos a Supabase
     async function obtenerRolUsuario() {
       setCargandoRol(true)
-      const { data, error } = await supabase.from('usuarios').select(`roles ( codigo ), permisos`).eq('id_usuario', sesion.user.id).single()
-      if (error || !data) {
-        setRol('auditor'); setPermisos([])
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select(`roles ( codigo ), permisos`)
+        .eq('id_usuario', sesion.user.id)
+        .single()
+
+      if (error) {
+        console.error('Error al obtener rol:', error)
+        setRol('auditor')
+        setPermisos([])
+      } else if (data) {
+        const nuevoRol = data.roles?.codigo?.toLowerCase() || 'auditor'
+        const nuevosPermisos = data.permisos || []
+        
+        setRol(nuevoRol)
+        setPermisos(nuevosPermisos)
+        
+        // Guardar en la memoria temporal
+        sessionStorage.setItem('sigmo_rol', nuevoRol)
+        sessionStorage.setItem('sigmo_permisos', JSON.stringify(nuevosPermisos))
       } else {
-        setRol(data.roles?.codigo?.toLowerCase() || 'auditor'); setPermisos(data.permisos || [])
+        setRol('auditor')
+        setPermisos([])
       }
       setCargandoRol(false)
     }
+
     obtenerRolUsuario()
   }, [sesion])
 
+  // Lógica de Inactividad
   const cerrarSesion = useCallback(async () => {
     await supabase.auth.signOut()
-    setPantalla(''); setRol(null); setPermisos([]); setMostrarAviso(false)
+    setPantalla('')
+    setRol(null)
+    setPermisos([])
+    setMostrarAviso(false)
+    sessionStorage.removeItem('sigmo_rol')
+    sessionStorage.removeItem('sigmo_permisos')
   }, [])
 
   const reiniciarTemporizador = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
     if (avisoTimerRef.current) clearTimeout(avisoTimerRef.current)
+    
     setMostrarAviso(false)
-    avisoTimerRef.current = setTimeout(() => { setMostrarAviso(true) }, TIEMPO_DE_AVISO)
-    timerRef.current = setTimeout(() => { cerrarSesion(); toast.error("Sesión cerrada por inactividad") }, TIEMPO_INACTIVIDAD_TOTAL)
+
+    avisoTimerRef.current = setTimeout(() => {
+      setMostrarAviso(true)
+    }, TIEMPO_DE_AVISO)
+
+    timerRef.current = setTimeout(() => {
+      cerrarSesion()
+      toast.error("Sesión cerrada por inactividad")
+    }, TIEMPO_INACTIVIDAD_TOTAL)
   }, [cerrarSesion])
 
   useEffect(() => {
     if (!sesion) return
+
     const eventos = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll']
     const manejarActividad = () => { if (!mostrarAviso) reiniciarTemporizador() }
+
     eventos.forEach(evento => window.addEventListener(evento, manejarActividad))
     reiniciarTemporizador()
+
     return () => {
       eventos.forEach(evento => window.removeEventListener(evento, manejarActividad))
       if (timerRef.current) clearTimeout(timerRef.current)
@@ -274,12 +337,14 @@ function App() {
     return false
   }
 
+  // --- VISTAS PÚBLICAS ---
   if (!sesion) {
     if (esRecuperacion) return <ResetPassword />
     if (pantalla === 'forgot') return <ForgotPassword setPantalla={setPantalla} />
     return <Login setPantalla={setPantalla} />
   }
 
+  // --- PANTALLA DE CARGA ---
   if (cargandoRol) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f3f4f6' }}>
@@ -288,6 +353,7 @@ function App() {
     )
   }
 
+  // --- VISTAS CON SESIÓN ---
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
       <Toaster position="top-right" toastOptions={{ duration: 4000, style: { fontWeight: 'bold' } }} />
@@ -311,8 +377,6 @@ function App() {
       {pantalla === 'repositorio' && <RepositorioDocumental setPantalla={setPantalla} rol={rol} />}
       {pantalla === 'catalogos' && <GestionCatalogos setPantalla={setPantalla} />}
       {pantalla === 'usuarios' && <GestionUsuarios setPantalla={setPantalla} />}
-      
-      {/* NUEVO MÓDULO DE PRECIOS */}
       {pantalla === 'precios_menu' && <GestionPrecios setPantalla={setPantalla} rol={rol} />}
 
       {/* VISTAS INTERNAS DE PRECINTOS */}
