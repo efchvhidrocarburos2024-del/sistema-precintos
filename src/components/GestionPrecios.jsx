@@ -36,7 +36,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
   // Roles permitidos
   const rolesCarga = ['admin_sistema', 'analista_comercial', 'jefe_pricing']
   const puedeCargar = rolesCarga.includes(rol)
-  const puedeGestionar = ['admin_sistema', 'jefe_pricing'].includes(rol) // Roles que pueden borrar o hacer vigente
+  const puedeGestionar = ['admin_sistema', 'jefe_pricing'].includes(rol)
 
   useEffect(() => {
     if (vista === 'visualizar') {
@@ -62,9 +62,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
   // --- LÓGICA: MARCAR COMO VIGENTE ---
   const marcarComoVigente = async (id) => {
     try {
-      // 1. Quitar el vigente a todos
       await supabase.from('precios_archivos').update({ es_vigente: false }).eq('es_vigente', true)
-      // 2. Poner el vigente al seleccionado
       const { error } = await supabase.from('precios_archivos').update({ es_vigente: true }).eq('id', id)
       
       if (error) throw error
@@ -86,18 +84,17 @@ export default function GestionPrecios({ setPantalla, rol }) {
     setEliminando(true)
 
     try {
-      // 1. Extraer el path del archivo desde la URL pública
-      // La URL es algo como: https://.../documentos_sigmo/listas_precios/1712_archivo.xlsx
+      // Extraer ruta del storage (ej: listas_precios/1712_archivo.xlsx)
       const urlParts = archivoAEliminar.url_archivo.split('/documentos_sigmo/')
       const filePath = urlParts[1]
 
-      // 2. Borrar del Storage
       if (filePath) {
+        // 1. Borrar archivo físico
         const { error: storageError } = await supabase.storage.from('documentos_sigmo').remove([filePath])
         if (storageError) console.error('Error al borrar de storage:', storageError)
       }
 
-      // 3. Borrar de la Base de Datos
+      // 2. Borrar registro de la base de datos
       const { error: dbError } = await supabase.from('precios_archivos').delete().eq('id', archivoAEliminar.id)
       if (dbError) throw dbError
 
@@ -113,7 +110,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   }
 
-  // Calcular FISE dinámicamente
+  // Calcular FISE
   const handleTCChange = (e) => {
     const val = e.target.value;
     setTipoCambio(val);
@@ -139,7 +136,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
         const bstr = evt.target.result
         const wb = XLSX.read(bstr, { type: 'binary' })
         
-        // Buscar T.C y FISE
         let tcEncontrado = null
         let fiseEncontrado = null
 
@@ -174,7 +170,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
           }
         }
 
-        // Buscar Tabla
         const wsname = wb.SheetNames[0]
         const ws = wb.Sheets[wsname]
         const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
@@ -213,23 +208,26 @@ export default function GestionPrecios({ setPantalla, rol }) {
     setSubiendo(true)
     try {
       const nombreLimpio = archivoExcel.name.replace(/\s+/g, '_')
+      // RUTA CLAVE: Se guarda dentro de la carpeta listas_precios/
       const fileName = `listas_precios/${Date.now()}_${nombreLimpio}`
       
+      // 1. Subir al Storage
       const { error: uploadError } = await supabase.storage
         .from('documentos_sigmo')
         .upload(fileName, archivoExcel)
 
       if (uploadError) throw uploadError
 
+      // 2. Obtener URL Pública
       const { data: { publicUrl } } = supabase.storage
         .from('documentos_sigmo')
         .getPublicUrl(fileName)
 
       const { data: { user } } = await supabase.auth.getUser()
 
-      // Si es la primera lista, se marca como vigente automáticamente
       const esPrimeraLista = archivos.length === 0
 
+      // 3. Guardar en Base de Datos
       const { error: dbError } = await supabase
         .from('precios_archivos')
         .insert({
@@ -428,7 +426,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
-  // --- VISTA VISUALIZAR (CON TABLA DE GESTIÓN) ---
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
       {renderHeader()}
@@ -485,14 +482,12 @@ export default function GestionPrecios({ setPantalla, rol }) {
                             <Boton variante="outline" tamano="sm" style={{ color: 'var(--primary-blue)' }}>⬇️</Boton>
                           </a>
 
-                          {/* BOTÓN HACER VIGENTE (Solo roles autorizados y si no es vigente ya) */}
                           {puedeGestionar && !file.es_vigente && (
                             <Boton variante="success" tamano="sm" onClick={() => marcarComoVigente(file.id)} title="Marcar como vigente">
                               ✅
                             </Boton>
                           )}
 
-                          {/* BOTÓN ELIMINAR (Solo roles autorizados) */}
                           {puedeGestionar && (
                             <Boton variante="danger" tamano="sm" onClick={() => abrirModalEliminar(file)} title="Eliminar lista">
                               🗑️
