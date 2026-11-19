@@ -4,7 +4,7 @@ import { Toaster } from 'react-hot-toast'
 import toast from 'react-hot-toast'
 import './App.css'
 
-// Importación de todos los componentes
+// --- Componentes de módulos (sin cambios) ---
 import Login from './components/Login'
 import RegistroLotes from './components/RegistroLotes'
 import RegistroViajes from './components/RegistroViajes'
@@ -25,197 +25,58 @@ import RepositorioDocumental from './components/RepositorioDocumental'
 import GestionCatalogos from './components/GestionCatalogos'
 import GestionPrecios from './components/GestionPrecios'
 
-const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000;
-const TIEMPO_DE_AVISO = TIEMPO_INACTIVIDAD_TOTAL - (2 * 60 * 1000);
+// --- Componentes refactorizados (usan ./ui) ---
+import LobbyModulos from './components/LobbyModulos'
+import MenuPrecintos from './components/MenuPrecintos'
+import NavbarPrecintos from './components/NavbarPrecintos'
 
-const cardStyle = {
-  backgroundColor: 'white',
-  borderRadius: '12px',
-  padding: '25px 20px',
-  textAlign: 'center',
-  boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-  border: '2px solid transparent',
-  cursor: 'pointer',
-  transition: 'all 0.2s',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center'
-}
+// --- Utilidades centralizadas ---
+import { puedeAccederPantalla, PANTALLAS_CON_NAVBAR } from './utils/permisos'
+import { throttle } from './utils/throttle'
 
-// ============================================================================
-// COMPONENTE: LOBBY PRINCIPAL SIGMO
-// ============================================================================
-function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
-  const rolesPrecintos = ['admin_sistema', 'admin_planta', 'jefe_operaciones', 'analista_operaciones', 'auditor'];
-  const rolesRepositorio = ['admin_sistema', 'admin_planta', 'jefe_operaciones', 'analista_operaciones', 'asesor_comercial', 'auditor'];
+// ============================================================
+// CONSTANTES
+// ============================================================
+const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000
+const TIEMPO_DE_AVISO = TIEMPO_INACTIVIDAD_TOTAL - 2 * 60 * 1000
+const STORAGE_KEY_PANTALLA = 'sigmo_pantalla'
 
-  const puedeVerPrecintos = rolesPrecintos.includes(rol);
-  const puedeVerRepositorio = rolesRepositorio.includes(rol);
-  const puedeVerCatalogos = rol === 'admin_sistema'; 
-
-  return (
-    <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
-      <header style={{ padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-        <div>
-          <h1 style={{ margin: 0, color: 'var(--primary-blue)', fontSize: '32px', fontWeight: '900', letterSpacing: '1.5px' }}>SIGMO</h1>
-          <span style={{ color: 'var(--text-light)', fontSize: '14px', fontWeight: '500' }}>Sistema de Gestión Modular</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <span style={{ color: 'var(--text-dark)', fontWeight: '600', fontSize: '14px' }}>👤 {sesion.user.email} ({rol?.toUpperCase() || 'SIN ROL'})</span>
-          <button onClick={cerrarSesion} style={{ padding: '8px 16px', background: '#fee2e2', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', color: '#991b1b' }}>
-            Cerrar Sesión
-          </button>
-        </div>
-      </header>
-
-      <main style={{ flex: 1, padding: '60px 20px', maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
-        <div style={{ textAlign: 'center', marginBottom: '50px' }}>
-          <h2 style={{ color: 'var(--text-dark)', fontSize: '28px', marginBottom: '10px' }}>Bienvenido a tu plataforma</h2>
-          <p style={{ color: 'var(--text-light)', fontSize: '16px' }}>Selecciona el módulo que deseas administrar</p>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '25px' }}>
-          
-          {/* MÓDULO 1: PRECINTOS */}
-          {puedeVerPrecintos && (
-            <div style={{ ...cardStyle, borderColor: 'var(--primary-blue)' }} onClick={() => setPantalla('precintos_menu')}>
-              <div style={{ fontSize: '50px', marginBottom: '15px' }}>📦</div>
-              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '15px', fontSize: '20px' }}>Gestión de Precintos</h3>
-              <p style={{ color: 'var(--text-light)', marginBottom: '25px', fontSize: '14px', lineHeight: '1.5' }}>
-                Control de viajes, SCOP, inventario de plantas y reportes operativos.
-              </p>
-              <button style={{ width: '100%', padding: '12px', borderRadius: '6px', border: 'none', background: 'var(--primary-blue)', color: 'white', fontWeight: 'bold', fontSize: '15px' }}>
-                Entrar al Módulo
-              </button>
-            </div>
-          )}
-
-          {/* MÓDULO 2: REPOSITORIO DOCUMENTAL */}
-          {puedeVerRepositorio && (
-            <div style={{ ...cardStyle, borderColor: 'var(--primary-blue)' }} onClick={() => setPantalla('repositorio')}>
-              <div style={{ fontSize: '50px', marginBottom: '15px' }}>📂</div>
-              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '15px', fontSize: '20px' }}>Repositorio Documental</h3>
-              <p style={{ color: 'var(--text-light)', marginBottom: '25px', fontSize: '14px', lineHeight: '1.5' }}>
-                Busca archivos técnicos, operativos y guías por categorías.
-              </p>
-              <button style={{ width: '100%', padding: '12px', borderRadius: '6px', border: 'none', background: 'var(--primary-blue)', color: 'white', fontWeight: 'bold', fontSize: '15px' }}>
-                Entrar al Módulo
-              </button>
-            </div>
-          )}
-
-          {/* MÓDULO 3: CATÁLOGOS MAESTROS (Solo Admin) */}
-          {puedeVerCatalogos && (
-            <div style={{ ...cardStyle, borderColor: 'var(--primary-blue)' }} onClick={() => setPantalla('catalogos')}>
-              <div style={{ fontSize: '50px', marginBottom: '15px' }}>⚙️</div>
-              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '15px', fontSize: '20px' }}>Catálogos Maestros</h3>
-              <p style={{ color: 'var(--text-light)', marginBottom: '25px', fontSize: '14px', lineHeight: '1.5' }}>
-                Administra proveedores, productos, terminales y usuarios.
-              </p>
-              <button style={{ width: '100%', padding: '12px', borderRadius: '6px', border: 'none', background: 'var(--primary-blue)', color: 'white', fontWeight: 'bold', fontSize: '15px' }}>
-                Entrar al Módulo
-              </button>
-            </div>
-          )}
-
-          {/* MÓDULO 4: LISTA DE PRECIOS */}
-          <div style={{ ...cardStyle, borderColor: 'var(--primary-blue)' }} onClick={() => setPantalla('precios_menu')}>
-            <div style={{ fontSize: '50px', marginBottom: '15px' }}>💰</div>
-            <h3 style={{ color: 'var(--primary-blue)', marginBottom: '15px', fontSize: '20px' }}>Lista de Precios</h3>
-            <p style={{ color: 'var(--text-light)', marginBottom: '25px', fontSize: '14px', lineHeight: '1.5' }}>
-              Consulta y gestión de listas de precios en formato Excel.
-            </p>
-            <button style={{ width: '100%', padding: '12px', borderRadius: '6px', border: 'none', background: 'var(--primary-blue)', color: 'white', fontWeight: 'bold', fontSize: '15px' }}>
-              Entrar al Módulo
-            </button>
-          </div>
-
-        </div>
-      </main>
-    </div>
-  )
-}
-
-// ============================================================================
-// COMPONENTE: MENÚ INTERNO DEL MÓDULO PRECINTOS
-// ============================================================================
-function MenuPrecintos({ setPantalla, rol, permisos }) {
-  const tienePermiso = (permisoExtra, rolesPermitidos) => {
-    if (rolesPermitidos.includes(rol)) return true
-    if (permisos.includes(permisoExtra)) return true
-    return false
-  }
-
-  const opciones = [
-    { id: 'lotes', titulo: 'Registro de Lotes', icono: '📝', desc: 'Ingreso de nuevos lotes de precintos.', permiso: 'lotes', roles: ['admin_sistema', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto'] },
-    { id: 'admin', titulo: 'Registrar Viajes (SCOP)', icono: '🚚', desc: 'Asignación de precintos a viajes.', permiso: 'viajes', roles: ['admin_sistema', 'admin_planta'] },
-    { id: 'excepciones', titulo: 'Excepciones', icono: '⚠️', desc: 'Gestión de casos especiales.', permiso: 'viajes', roles: ['admin_sistema', 'admin_planta'] },
-    { id: 'precintos', titulo: 'Listado de Precintos', icono: '🔖', desc: 'Inventario y estado de precintos.', permiso: 'precintos', roles: ['admin_sistema', 'admin_planta', 'analista_operaciones', 'jefe_operaciones', 'auditor', 'jefe_proyecto'] },
-    { id: 'dashboard', titulo: 'Dashboard', icono: '📊', desc: 'Métricas y panel de control.', permiso: 'dashboard', roles: ['admin_sistema', 'auditor', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto', 'admin_planta'] },
-    { id: 'reportes', titulo: 'Reportes', icono: '📈', desc: 'Exportación de datos a Excel y PDF.', permiso: 'dashboard', roles: ['admin_sistema', 'auditor', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto', 'admin_planta'] },
-    { id: 'conciliacion', titulo: 'Conciliación', icono: '🤝', desc: 'Cruce de información de viajes.', permiso: 'conciliacion', roles: ['admin_sistema', 'jefe_proyecto', 'analista_operaciones', 'jefe_operaciones'] },
-    { id: 'proyeccion', titulo: 'Proyección Demanda', icono: '🔮', desc: 'Estimación de uso futuro.', permiso: 'proyeccion', roles: ['admin_sistema', 'jefe_proyecto', 'jefe_operaciones', 'analista_operaciones'] },
-    { id: 'bitacora', titulo: 'Bitácora', icono: '📋', desc: 'Historial de acciones del sistema.', permiso: 'bitacora', roles: ['admin_sistema', 'auditor', 'jefe_operaciones', 'jefe_proyecto'] },
-    { id: 'plantas', titulo: 'Config. Plantas', icono: '🏭', desc: 'Administración de terminales.', permiso: 'plantas', roles: ['admin_sistema'] },
-    { id: 'respaldos', titulo: 'Respaldos', icono: '💾', desc: 'Gestión de copias de seguridad.', permiso: 'respaldos', roles: ['admin_sistema'] },
-  ]
-
-  return (
-    <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
-      <header style={{ padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <button onClick={() => setPantalla('')} style={{ background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}>← SIGMO</button>
-          <h1 style={{ margin: 0, color: 'var(--primary-blue)', fontSize: '28px', fontWeight: '900' }}>Módulo de Precintos</h1>
-        </div>
-        <button onClick={() => setPantalla('cambiar-password')} style={{ background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>Mi Perfil</button>
-      </header>
-
-      <main style={{ flex: 1, padding: '40px 20px', maxWidth: '1100px', margin: '0 auto', width: '100%' }}>
-        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-          <h2 style={{ color: 'var(--text-dark)', fontSize: '24px', marginBottom: '10px' }}>¿Qué deseas hacer hoy?</h2>
-          <p style={{ color: 'var(--text-light)', fontSize: '15px' }}>Selecciona una opción para comenzar</p>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
-          {opciones.map((opc) => (
-            tienePermiso(opc.permiso, opc.roles) && (
-              <div 
-                key={opc.id} onClick={() => setPantalla(opc.id)}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--primary-blue)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                style={cardStyle}
-              >
-                <div style={{ fontSize: '40px', marginBottom: '15px' }}>{opc.icono}</div>
-                <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>{opc.titulo}</h3>
-                <p style={{ color: 'var(--text-light)', fontSize: '13px', margin: 0, lineHeight: '1.4' }}>{opc.desc}</p>
-              </div>
-            )
-          ))}
-        </div>
-      </main>
-    </div>
-  )
-}
-
-// ============================================================================
-// COMPONENTE PRINCIPAL: APP
-// ============================================================================
+// ============================================================
+// COMPONENTE PRINCIPAL
+// ============================================================
 function App() {
   const [sesion, setSesion] = useState(null)
-  const [pantalla, setPantalla] = useState('') 
-  const [rol, setRol] = useState(null) 
+  const [pantalla, setPantalla] = useState(
+    () => sessionStorage.getItem(STORAGE_KEY_PANTALLA) || ''
+  )
+  const [rol, setRol] = useState(null)
   const [permisos, setPermisos] = useState([])
   const [cargandoRol, setCargandoRol] = useState(true)
   const [esRecuperacion, setEsRecuperacion] = useState(false)
-  
+
   const [mostrarAviso, setMostrarAviso] = useState(false)
   const timerRef = useRef(null)
   const avisoTimerRef = useRef(null)
 
-  // Lógica de Autenticación
+  // ----------------------------------------------------------
+  // Persistencia de pantalla actual
+  // ----------------------------------------------------------
   useEffect(() => {
-    if (window.location.hash.includes('type=recovery') || window.location.search.includes('type=recovery')) {
+    if (pantalla) {
+      sessionStorage.setItem(STORAGE_KEY_PANTALLA, pantalla)
+    } else {
+      sessionStorage.removeItem(STORAGE_KEY_PANTALLA)
+    }
+  }, [pantalla])
+
+  // ----------------------------------------------------------
+  // Autenticación
+  // ----------------------------------------------------------
+  useEffect(() => {
+    if (
+      window.location.hash.includes('type=recovery') ||
+      window.location.search.includes('type=recovery')
+    ) {
       setEsRecuperacion(true)
     }
 
@@ -233,7 +94,9 @@ function App() {
     return () => authListener.subscription.unsubscribe()
   }, [])
 
-  // Lógica de Roles y Permisos con CACHÉ (Optimizado)
+  // ----------------------------------------------------------
+  // Roles y permisos (con caché)
+  // ----------------------------------------------------------
   useEffect(() => {
     if (!sesion) {
       setRol(null)
@@ -244,7 +107,6 @@ function App() {
       return
     }
 
-    // Si ya tenemos los datos en la memoria del navegador, los usamos inmediatamente
     const cachedRol = sessionStorage.getItem('sigmo_rol')
     const cachedPermisos = sessionStorage.getItem('sigmo_permisos')
 
@@ -252,10 +114,9 @@ function App() {
       setRol(cachedRol)
       setPermisos(JSON.parse(cachedPermisos || '[]'))
       setCargandoRol(false)
-      return 
+      return
     }
 
-    // Si no están en caché (es la primera vez), consultamos a Supabase
     async function obtenerRolUsuario() {
       setCargandoRol(true)
       const { data, error } = await supabase
@@ -271,11 +132,8 @@ function App() {
       } else if (data) {
         const nuevoRol = data.roles?.codigo?.toLowerCase() || 'auditor'
         const nuevosPermisos = data.permisos || []
-        
         setRol(nuevoRol)
         setPermisos(nuevosPermisos)
-        
-        // Guardar en la memoria temporal
         sessionStorage.setItem('sigmo_rol', nuevoRol)
         sessionStorage.setItem('sigmo_permisos', JSON.stringify(nuevosPermisos))
       } else {
@@ -288,7 +146,20 @@ function App() {
     obtenerRolUsuario()
   }, [sesion])
 
-  // Lógica de Inactividad
+  // ----------------------------------------------------------
+  // Validación: si la pantalla persistida ya no es accesible, volver al lobby
+  // ----------------------------------------------------------
+  useEffect(() => {
+    if (cargandoRol || !sesion || !rol) return
+    if (pantalla && !puedeAccederPantalla(pantalla, rol, permisos)) {
+      setPantalla('')
+      sessionStorage.removeItem(STORAGE_KEY_PANTALLA)
+    }
+  }, [cargandoRol, sesion, rol, permisos, pantalla])
+
+  // ----------------------------------------------------------
+  // Cerrar sesión
+  // ----------------------------------------------------------
   const cerrarSesion = useCallback(async () => {
     await supabase.auth.signOut()
     setPantalla('')
@@ -297,12 +168,16 @@ function App() {
     setMostrarAviso(false)
     sessionStorage.removeItem('sigmo_rol')
     sessionStorage.removeItem('sigmo_permisos')
+    sessionStorage.removeItem(STORAGE_KEY_PANTALLA)
   }, [])
 
+  // ----------------------------------------------------------
+  // Inactividad
+  // ----------------------------------------------------------
   const reiniciarTemporizador = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
     if (avisoTimerRef.current) clearTimeout(avisoTimerRef.current)
-    
+
     setMostrarAviso(false)
 
     avisoTimerRef.current = setTimeout(() => {
@@ -311,33 +186,32 @@ function App() {
 
     timerRef.current = setTimeout(() => {
       cerrarSesion()
-      toast.error("Sesión cerrada por inactividad")
+      toast.error('Sesión cerrada por inactividad')
     }, TIEMPO_INACTIVIDAD_TOTAL)
   }, [cerrarSesion])
 
   useEffect(() => {
     if (!sesion) return
 
-    const eventos = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll']
-    const manejarActividad = () => { if (!mostrarAviso) reiniciarTemporizador() }
+    // Throttle → el handler corre máximo 1×/seg
+    const manejarActividad = throttle(() => {
+      if (!mostrarAviso) reiniciarTemporizador()
+    }, 1000)
 
-    eventos.forEach(evento => window.addEventListener(evento, manejarActividad))
+    const eventos = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll']
+    eventos.forEach((evento) => window.addEventListener(evento, manejarActividad))
     reiniciarTemporizador()
 
     return () => {
-      eventos.forEach(evento => window.removeEventListener(evento, manejarActividad))
+      eventos.forEach((evento) => window.removeEventListener(evento, manejarActividad))
       if (timerRef.current) clearTimeout(timerRef.current)
       if (avisoTimerRef.current) clearTimeout(avisoTimerRef.current)
     }
   }, [sesion, mostrarAviso, reiniciarTemporizador])
 
-  const tienePermiso = (permisoExtra, rolesPermitidos) => {
-    if (rolesPermitidos.includes(rol)) return true
-    if (permisos.includes(permisoExtra)) return true
-    return false
-  }
-
+  // ----------------------------------------------------------
   // --- VISTAS PÚBLICAS ---
+  // ----------------------------------------------------------
   if (!sesion) {
     if (esRecuperacion) return <ResetPassword />
     if (pantalla === 'forgot') return <ForgotPassword setPantalla={setPantalla} />
@@ -353,59 +227,72 @@ function App() {
     )
   }
 
+  // ----------------------------------------------------------
+  // Cálculo de pantalla efectiva (evita "flash" no autorizado)
+  // ----------------------------------------------------------
+  const pantallaAccesible =
+    pantalla && puedeAccederPantalla(pantalla, rol, permisos) ? pantalla : ''
+  const mostrarNavbar = PANTALLAS_CON_NAVBAR.includes(pantallaAccesible)
+
+  // ----------------------------------------------------------
   // --- VISTAS CON SESIÓN ---
+  // ----------------------------------------------------------
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
       <Toaster position="top-right" toastOptions={{ duration: 4000, style: { fontWeight: 'bold' } }} />
-      
+
       {mostrarAviso && (
         <div className="modal-overlay">
           <div className="modal-content">
             <h2 style={{ color: 'var(--danger-red)', marginTop: 0 }}>⚠️ Sesión a punto de expirar</h2>
-            <p style={{ color: 'var(--text-dark)', marginBottom: '25px', fontSize: '15px' }}>Tu sesión se cerrará en <strong>2 minutos</strong>.</p>
+            <p style={{ color: 'var(--text-dark)', marginBottom: '25px', fontSize: '15px' }}>
+              Tu sesión se cerrará en <strong>2 minutos</strong>.
+            </p>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={reiniciarTemporizador} style={{ padding: '10px', background: 'var(--primary-green)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flex: 1 }}>Mantener sesión</button>
-              <button onClick={cerrarSesion} style={{ padding: '10px', background: '#6B7280', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flex: 1 }}>Cerrar ahora</button>
+              <button onClick={reiniciarTemporizador} style={{ padding: '10px', background: 'var(--primary-green)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flex: 1 }}>
+                Mantener sesión
+              </button>
+              <button onClick={cerrarSesion} style={{ padding: '10px', background: '#6B7280', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flex: 1 }}>
+                Cerrar ahora
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* VISTAS PRINCIPALES */}
-      {pantalla === '' && <LobbyModulos sesion={sesion} cerrarSesion={cerrarSesion} setPantalla={setPantalla} rol={rol} />}
-      {pantalla === 'precintos_menu' && <MenuPrecintos setPantalla={setPantalla} rol={rol} permisos={permisos} />}
-      {pantalla === 'repositorio' && <RepositorioDocumental setPantalla={setPantalla} rol={rol} />}
-      {pantalla === 'catalogos' && <GestionCatalogos setPantalla={setPantalla} />}
-      {pantalla === 'usuarios' && <GestionUsuarios setPantalla={setPantalla} />}
-      {pantalla === 'precios_menu' && <GestionPrecios setPantalla={setPantalla} rol={rol} />}
+      {/* VISTAS SIN NAVBAR */}
+      {pantallaAccesible === '' && (
+        <LobbyModulos sesion={sesion} cerrarSesion={cerrarSesion} setPantalla={setPantalla} rol={rol} />
+      )}
+      {pantallaAccesible === 'precintos_menu' && (
+        <MenuPrecintos setPantalla={setPantalla} rol={rol} permisos={permisos} />
+      )}
+      {pantallaAccesible === 'repositorio' && (
+        <RepositorioDocumental setPantalla={setPantalla} rol={rol} />
+      )}
+      {pantallaAccesible === 'catalogos' && <GestionCatalogos setPantalla={setPantalla} />}
+      {pantallaAccesible === 'usuarios' && <GestionUsuarios setPantalla={setPantalla} />}
+      {pantallaAccesible === 'precios_menu' && (
+        <GestionPrecios setPantalla={setPantalla} rol={rol} />
+      )}
 
-      {/* VISTAS INTERNAS DE PRECINTOS */}
-      {pantalla !== '' && pantalla !== 'precintos_menu' && pantalla !== 'repositorio' && pantalla !== 'catalogos' && pantalla !== 'usuarios' && pantalla !== 'precios_menu' && (
+      {/* VISTAS CON NAVBAR INTERNA */}
+      {mostrarNavbar && (
         <div style={{ minHeight: '100vh' }}>
-          <nav style={{ backgroundColor: 'white', borderBottom: '1px solid #e5e7eb', padding: '15px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-              <button onClick={() => setPantalla('precintos_menu')} style={{ background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}>← Volver al Menú</button>
-              <span style={{ fontSize: '20px', fontWeight: '900', color: 'var(--primary-blue)' }}>Precintos</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-              <span style={{ fontSize: '13px', color: '#4b5563', fontWeight: '500' }}>👤 {sesion.user.email}</span>
-              <button onClick={() => setPantalla('cambiar-password')} style={{ background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>Mi Perfil</button>
-              <button onClick={cerrarSesion} style={{ background: '#fee2e2', border: 'none', color: '#991b1b', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>Salir</button>
-            </div>
-          </nav>
+          <NavbarPrecintos sesion={sesion} cerrarSesion={cerrarSesion} setPantalla={setPantalla} />
           <div style={{ paddingTop: '20px', paddingBottom: '40px' }}>
-            {pantalla === 'lotes' && tienePermiso('lotes', ['admin_sistema', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto']) && <RegistroLotes />}
-            {pantalla === 'admin' && tienePermiso('viajes', ['admin_sistema', 'admin_planta']) && <RegistroViajes />}
-            {pantalla === 'excepciones' && tienePermiso('viajes', ['admin_sistema', 'admin_planta']) && <Excepciones />}
-            {pantalla === 'precintos' && tienePermiso('precintos', ['admin_sistema', 'admin_planta', 'analista_operaciones', 'jefe_operaciones', 'auditor', 'jefe_proyecto']) && <ListadoPrecintos />}
-            {pantalla === 'dashboard' && tienePermiso('dashboard', ['admin_sistema', 'auditor', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto', 'admin_planta']) && <Dashboard />}
-            {pantalla === 'reportes' && tienePermiso('dashboard', ['admin_sistema', 'auditor', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto', 'admin_planta']) && <Reportes />}
-            {pantalla === 'bitacora' && tienePermiso('bitacora', ['admin_sistema', 'auditor', 'jefe_operaciones', 'jefe_proyecto']) && <Bitacora />}
-            {pantalla === 'conciliacion' && tienePermiso('conciliacion', ['admin_sistema', 'jefe_proyecto', 'analista_operaciones', 'jefe_operaciones']) && <Conciliacion />}
-            {pantalla === 'proyeccion' && tienePermiso('proyeccion', ['admin_sistema', 'jefe_proyecto', 'jefe_operaciones', 'analista_operaciones']) && <ProyeccionDemanda />}
-            {pantalla === 'cambiar-password' && <CambiarPassword />}
-            {pantalla === 'plantas' && tienePermiso('plantas', ['admin_sistema']) && <GestionPlantas />}
-            {pantalla === 'respaldos' && tienePermiso('respaldos', ['admin_sistema']) && <PanelRespaldos />}
+            {pantallaAccesible === 'lotes' && <RegistroLotes />}
+            {pantallaAccesible === 'admin' && <RegistroViajes />}
+            {pantallaAccesible === 'excepciones' && <Excepciones />}
+            {pantallaAccesible === 'precintos' && <ListadoPrecintos />}
+            {pantallaAccesible === 'dashboard' && <Dashboard />}
+            {pantallaAccesible === 'reportes' && <Reportes />}
+            {pantallaAccesible === 'bitacora' && <Bitacora />}
+            {pantallaAccesible === 'conciliacion' && <Conciliacion />}
+            {pantallaAccesible === 'proyeccion' && <ProyeccionDemanda />}
+            {pantallaAccesible === 'cambiar-password' && <CambiarPassword />}
+            {pantallaAccesible === 'plantas' && <GestionPlantas />}
+            {pantallaAccesible === 'respaldos' && <PanelRespaldos />}
           </div>
         </div>
       )}
