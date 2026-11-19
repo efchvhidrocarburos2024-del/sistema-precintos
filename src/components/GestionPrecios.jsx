@@ -259,7 +259,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
           if (item === 'NUEVO') {
             row.push('NUEVO');
           } else if (item && Math.abs(item.diff) > 0.00001) {
-            // 4 DECIMALES
             row.push(`${item.diff > 0 ? '+' : ''}${item.diff.toFixed(4)}`);
           } else if (item && Math.abs(item.diff) <= 0.00001) {
             row.push('0.0000');
@@ -328,13 +327,13 @@ export default function GestionPrecios({ setPantalla, rol }) {
           if (data.section === 'body' && data.column.index > 1) {
             const text = data.cell.text[0];
             if (text && text.startsWith('+')) {
-              data.cell.styles.textColor = [239, 68, 68]; // Rojo
+              data.cell.styles.textColor = [239, 68, 68];
               data.cell.styles.fontStyle = 'bold';
             } else if (text && text.startsWith('-')) {
-              data.cell.styles.textColor = [16, 185, 129]; // Verde
+              data.cell.styles.textColor = [16, 185, 129];
               data.cell.styles.fontStyle = 'bold';
             } else if (text === 'NUEVO') {
-              data.cell.styles.textColor = [59, 130, 246]; // Azul
+              data.cell.styles.textColor = [59, 130, 246];
               data.cell.styles.fontStyle = 'bold';
             }
           }
@@ -479,6 +478,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     if (fileInput) fileInput.value = ''
   }
 
+  // --- LÓGICA DE SUBIDA CON VALIDACIÓN DE FECHA ---
   async function handleSubirArchivo() {
     if (!archivoExcel) return toast.error('No hay archivo seleccionado')
     setSubiendo(true)
@@ -486,24 +486,77 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const nombreLimpio = archivoExcel.name.replace(/\s+/g, '_')
       const fileName = `listas_precios/${Date.now()}_${nombreLimpio}`
       
+      // 1. Subir archivo a Storage
       const { error: uploadError } = await supabase.storage.from('documentos_sigmo').upload(fileName, archivoExcel)
       if (uploadError) throw uploadError
 
       const { data: { publicUrl } } = supabase.storage.from('documentos_sigmo').getPublicUrl(fileName)
       const { data: { user } } = await supabase.auth.getUser()
 
-      await supabase.from('precios_archivos').update({ es_vigente: false }).eq('es_vigente', true)
+      // 2. LÓGICA INTELIGENTE DE FECHAS
+      let debeSerVigente = false;
 
+      if (archivos.length === 0) {
+        debeSerVigente = true; // El primer archivo siempre es vigente
+      } else {
+        const vigenteActual = archivos.find(a => a.es_vigente);
+        
+        if (!vigenteActual) {
+          debeSerVigente = true; 
+        } else {
+          // Extraer fechas de los nombres (formato YYYY-MM-DD o DD-MM-YYYY)
+          const regexFecha = /(\d{4}-\d{2}-\d{2})|(\d{2}-\d{2}-\d{4})/;
+          const matchNuevo = archivoExcel.name.match(regexFecha);
+          const matchVigente = vigenteActual.nombre_archivo.match(regexFecha);
+
+          if (matchNuevo && matchVigente) {
+            let fechaNuevaStr = matchNuevo[0];
+            let fechaVigenteStr = matchVigente[0];
+
+            // Normalizar a formato YYYY-MM-DD para comparar correctamente
+            if (fechaNuevaStr.includes('/') || fechaNuevaStr.indexOf('-') === 2) {
+              const [d, m, a] = fechaNuevaStr.split(/[-/]/);
+              fechaNuevaStr = `${a}-${m}-${d}`;
+            }
+            if (fechaVigenteStr.includes('/') || fechaVigenteStr.indexOf('-') === 2) {
+              const [d, m, a] = fechaVigenteStr.split(/[-/]/);
+              fechaVigenteStr = `${a}-${m}-${d}`;
+            }
+
+            // Comparar strings en formato YYYY-MM-DD
+            if (fechaNuevaStr > fechaVigenteStr) {
+              debeSerVigente = true; // La nueva es más reciente
+            } else {
+              debeSerVigente = false; // La nueva es más antigua o igual
+            }
+          } else {
+            // Si no se encuentra una fecha en el nombre, se asume histórico por seguridad
+            debeSerVigente = false;
+          }
+        }
+      }
+
+      // 3. Si debe ser vigente, quitar el vigente al anterior
+      if (debeSerVigente) {
+        await supabase.from('precios_archivos').update({ es_vigente: false }).eq('es_vigente', true)
+      }
+
+      // 4. Insertar el nuevo registro
       const { error: dbError } = await supabase.from('precios_archivos').insert({
         nombre_archivo: archivoExcel.name,
         url_archivo: publicUrl,
         subido_por: user.email,
-        es_vigente: true
+        es_vigente: debeSerVigente
       })
 
       if (dbError) throw dbError
 
-      toast.success('Lista de precios subida y marcada como VIGENTE')
+      if (debeSerVigente) {
+        toast.success('Lista subida y marcada como VIGENTE (es la más reciente)')
+      } else {
+        toast.success('Lista subida como HISTÓRICO (fecha anterior a la vigente)')
+      }
+      
       limpiarPrevisualizacion()
       setVista('menu')
     } catch (error) {
@@ -614,7 +667,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
                       return (
                         <tr key={rowIndex} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: rowIndex % 2 === 0 ? 'white' : '#f9fafb' }}>
                           {row.map((cell, cellIndex) => {
-                            // LÓGICA DE FORMATO A 4 DECIMALES EN LA PREVISUALIZACIÓN
                             let displayValue = cell;
                             if (cellIndex > 1) {
                               const num = parseFloat(String(cell).replace(',', '.'));
@@ -742,7 +794,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
                             return <td key={colIndex} style={{ padding: '10px 8px', color: '#9ca3af' }}>-</td>;
                           }
 
-                          // MOSTRAR 4 DECIMALES EN LA VARIACIÓN
                           if (Math.abs(item.diff) > 0.00001) {
                             if (item.diff > 0) {
                               return <td key={colIndex} style={{ padding: '10px 8px', color: '#ef4444', fontWeight: 'bold' }}>+{item.diff.toFixed(4)}</td>;
