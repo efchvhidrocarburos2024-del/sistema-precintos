@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import * as XLSX from 'xlsx' // <-- NUEVA LIBRERÍA PARA LEER EXCEL
+import * as XLSX from 'xlsx'
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
 import { Card, Boton } from './ui'
@@ -12,7 +12,7 @@ const cardStyle = {
 const btnHeaderStyle = { background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }
 
 export default function GestionPrecios({ setPantalla, rol }) {
-  const [vista, setVista] = useState('menu') // 'menu', 'cargar', 'visualizar'
+  const [vista, setVista] = useState('menu')
   const [archivos, setArchivos] = useState([])
   const [cargando, setCargando] = useState(false)
   
@@ -23,13 +23,15 @@ export default function GestionPrecios({ setPantalla, rol }) {
   // Estados para la tabla de previsualización
   const [previewData, setPreviewData] = useState([])
   const [previewHeaders, setPreviewHeaders] = useState([])
-  const [previewCodes, setPreviewCodes] = useState([]) // Para la fila de códigos (029, 027...)
+  
+  // Estados para T.C y FISE
+  const [tipoCambio, setTipoCambio] = useState(null)
+  const [valorFise, setValorFise] = useState(null)
 
   // Roles permitidos para subir
   const rolesCarga = ['admin_sistema', 'analista_comercial', 'jefe_pricing']
   const puedeCargar = rolesCarga.includes(rol)
 
-  // Cargar archivos cuando entra a visualizar
   useEffect(() => {
     if (vista === 'visualizar') {
       fetchArchivos()
@@ -45,7 +47,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
     if (error) {
       toast.error('Error al cargar los archivos')
-      console.error(error)
     } else {
       setArchivos(data || [])
     }
@@ -58,6 +59,8 @@ export default function GestionPrecios({ setPantalla, rol }) {
     if (!file) return
 
     setArchivoExcel(file)
+    setTipoCambio(null)
+    setValorFise(null)
 
     const reader = new FileReader()
     reader.onload = (evt) => {
@@ -65,27 +68,55 @@ export default function GestionPrecios({ setPantalla, rol }) {
         const bstr = evt.target.result
         const wb = XLSX.read(bstr, { type: 'binary' })
         
-        // Tomamos la primera hoja (Precio Base)
         const wsname = wb.SheetNames[0]
         const ws = wb.Sheets[wsname]
         
-        // Convertimos a matriz (array de arrays)
         const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
 
-        // Buscamos la fila que contiene "PLANTAS" para usarla como cabecera
+        // 1. BUSCAR T.C Y FISE (en las primeras 15 filas)
+        let tcEncontrado = null
+        let fiseEncontrado = null
+
+        for (let i = 0; i < Math.min(15, data.length); i++) {
+          const row = data[i]
+          for (let j = 0; j < row.length; j++) {
+            const cellValue = String(row[j]).trim().toUpperCase()
+            
+            // Buscar T.C o T/C
+            if (cellValue === 'T.C' || cellValue === 'T/C' || cellValue.includes('TIPO DE CAMBIO')) {
+              // El valor suele estar en la celda de la derecha
+              if (row[j + 1] && !isNaN(row[j + 1])) tcEncontrado = parseFloat(row[j + 1])
+            }
+            // Buscar FISE
+            if (cellValue === 'FISE') {
+              if (row[j + 1] && !isNaN(row[j + 1])) fiseEncontrado = parseFloat(row[j + 1])
+            }
+          }
+        }
+
+        // Calcular FISE si no viene en el excel y tenemos T.C
+        if (tcEncontrado) {
+          setTipoCambio(tcEncontrado)
+          if (!fiseEncontrado) {
+            const fiseCalculado = (1 / 42) * tcEncontrado
+            setValorFise(fiseCalculado.toFixed(4))
+          } else {
+            setValorFise(fiseEncontrado.toFixed(4))
+          }
+        }
+
+        // 2. BUSCAR LA TABLA DE DATOS
         let headerIndex = data.findIndex(row => row.includes('PLANTAS'))
-        if (headerIndex === -1) headerIndex = 0 // Si no lo encuentra, asume la primera fila
+        if (headerIndex === -1) headerIndex = 0
 
         const headers = data[headerIndex]
-        const codes = data[headerIndex + 1] || [] // La siguiente fila suele tener los códigos
         
-        // Extraemos los datos, omitiendo filas vacías
+        // Filtramos los datos desde la cabecera en adelante
         const rows = data.slice(headerIndex + 1).filter(row => row.some(cell => cell !== ''))
 
         setPreviewHeaders(headers)
-        setPreviewCodes(codes)
         setPreviewData(rows)
-        toast.success('Archivo leído. Revisa la previsualización.')
+        toast.success('Archivo leído correctamente.')
       } catch (error) {
         console.error(error)
         toast.error('Error al leer el archivo Excel')
@@ -99,13 +130,12 @@ export default function GestionPrecios({ setPantalla, rol }) {
     setArchivoExcel(null)
     setPreviewData([])
     setPreviewHeaders([])
-    setPreviewCodes([])
-    // Limpiamos el input file visualmente
+    setTipoCambio(null)
+    setValorFise(null)
     const fileInput = document.getElementById('file-upload-precios')
     if (fileInput) fileInput.value = ''
   }
 
-  // --- LÓGICA DE SUBIDA REAL A SUPABASE ---
   async function handleSubirArchivo() {
     if (!archivoExcel) return toast.error('No hay archivo seleccionado')
     
@@ -162,7 +192,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     </header>
   )
 
-  // --- VISTA 1: MENÚ DEL MÓDULO ---
   if (vista === 'menu') {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
@@ -193,7 +222,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
-  // --- VISTA 2: CARGAR ARCHIVO CON PREVISUALIZACIÓN ---
   if (vista === 'cargar') {
     if (!puedeCargar) {
       return (
@@ -230,19 +258,36 @@ export default function GestionPrecios({ setPantalla, rol }) {
             </div>
           </Card>
 
-          {/* TABLA DE PREVISUALIZACIÓN */}
+          {/* TABLA DE PREVISUALIZACIÓN ADAPTABLE */}
           {previewData.length > 0 && (
             <Card style={{ padding: '30px', overflow: 'hidden' }}>
+              
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h2 style={{ margin: 0, color: 'var(--text-dark)', fontSize: '22px' }}>Paso 2: Previsualización (Precio Base)</h2>
+                <h2 style={{ margin: 0, color: 'var(--text-dark)', fontSize: '22px' }}>Paso 2: Previsualización</h2>
               </div>
 
-              <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px', maxHeight: '500px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left', minWidth: '1000px' }}>
+              {/* FRANJA DE T.C Y FISE */}
+              {(tipoCambio || valorFise) && (
+                <div style={{ display: 'flex', gap: '20px', backgroundColor: '#f3f4f6', padding: '12px 20px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #e5e7eb' }}>
+                  {tipoCambio && (
+                    <div style={{ fontSize: '14px', color: 'var(--text-dark)' }}>
+                      <strong>T.C:</strong> <span style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>{tipoCambio}</span>
+                    </div>
+                  )}
+                  {valorFise && (
+                    <div style={{ fontSize: '14px', color: 'var(--text-dark)' }}>
+                      <strong>FISE:</strong> <span style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>{valorFise}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'center' }}>
                   <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white', position: 'sticky', top: 0 }}>
                     <tr>
                       {previewHeaders.map((h, i) => (
-                        <th key={i} style={{ padding: '12px', borderBottom: '2px solid #1e40af', whiteSpace: 'nowrap' }}>
+                        <th key={i} style={{ padding: '10px 8px', borderBottom: '2px solid #1e40af', wordBreak: 'break-word' }}>
                           {h || '-'}
                         </th>
                       ))}
@@ -250,24 +295,20 @@ export default function GestionPrecios({ setPantalla, rol }) {
                   </thead>
                   <tbody>
                     {previewData.map((row, rowIndex) => {
-                      // Omitimos la fila de códigos si se coló en los datos
                       if (row.includes('029') && row.includes('027')) return null; 
                       
                       return (
                         <tr key={rowIndex} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: rowIndex % 2 === 0 ? 'white' : '#f9fafb' }}>
                           {row.map((cell, cellIndex) => {
-                            // Formatear celdas: si es 0, mostrar un guion
                             const displayValue = cell === 0 || cell === '0' ? '-' : cell;
-                            
-                            // Resaltar la columna de PLANTAS (índice 1)
                             const isPlanta = cellIndex === 1;
 
                             return (
                               <td key={cellIndex} style={{ 
-                                padding: '10px 12px', 
+                                padding: '8px 6px', 
                                 fontWeight: isPlanta ? 'bold' : 'normal',
                                 color: isPlanta ? 'var(--text-dark)' : 'var(--text-light)',
-                                whiteSpace: 'nowrap'
+                                wordBreak: 'break-word'
                               }}>
                                 {displayValue}
                               </td>
@@ -280,7 +321,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
                 </table>
               </div>
 
-              {/* BOTONES DE ACCIÓN (LIMPIAR / CALCULAR/SUBIR) */}
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '25px' }}>
                 <button 
                   onClick={limpiarPrevisualizacion}
@@ -304,7 +344,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
-  // --- VISTA 3: VISUALIZAR ARCHIVOS ---
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
       {renderHeader()}
