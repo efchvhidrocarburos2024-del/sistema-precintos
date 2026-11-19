@@ -3,9 +3,12 @@ import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
 import { PageHeader, Card, Input, Select, Boton } from './ui'
 
-export default function RepositorioDocumental({ setPantalla }) {
+export default function RepositorioDocumental({ setPantalla, rol }) {
   const [vista, setVista] = useState('menu') 
   
+  // Variable para saber si el usuario solo puede ver
+  const esSoloLectura = rol === 'auditor';
+
   // --- ESTADOS DEL FORMULARIO ---
   const [categoria, setCategoria] = useState('')
   const [archivo, setArchivo] = useState(null)
@@ -191,16 +194,23 @@ export default function RepositorioDocumental({ setPantalla }) {
           <Boton variante="outline" onClick={() => setPantalla('')}>← Volver a SIGMO</Boton>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '25px' }}>
+          
+          {/* Visualizar: SIEMPRE VISIBLE */}
           <Card style={{ textAlign: 'center', padding: '40px', cursor: 'pointer', border: '2px solid var(--primary-blue)' }} onClick={() => setVista('visualizar')}>
             <div style={{ fontSize: '60px', marginBottom: '15px' }}>📂</div>
             <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px' }}>Visualizar Documentos</h3>
             <p style={{ color: 'var(--text-light)' }}>Explora el repositorio con visor integrado.</p>
           </Card>
-          <Card style={{ textAlign: 'center', padding: '40px', cursor: 'pointer', border: '2px solid var(--primary-blue)' }} onClick={() => setVista('menu_subir')}>
-            <div style={{ fontSize: '60px', marginBottom: '15px' }}>📤</div>
-            <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px' }}>Subir Documento</h3>
-            <p style={{ color: 'var(--text-light)' }}>Añade archivos técnicos, operativos o guías.</p>
-          </Card>
+
+          {/* Subir: SOLO VISIBLE SI NO ES AUDITOR */}
+          {!esSoloLectura && (
+            <Card style={{ textAlign: 'center', padding: '40px', cursor: 'pointer', border: '2px solid var(--primary-blue)' }} onClick={() => setVista('menu_subir')}>
+              <div style={{ fontSize: '60px', marginBottom: '15px' }}>📤</div>
+              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px' }}>Subir Documento</h3>
+              <p style={{ color: 'var(--text-light)' }}>Añade archivos técnicos, operativos o guías.</p>
+            </Card>
+          )}
+
         </div>
       </div>
     )
