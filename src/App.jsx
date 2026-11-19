@@ -22,6 +22,7 @@ import Bitacora from './components/Bitacora'
 import GestionPlantas from './components/GestionPlantas'
 import PanelRespaldos from './components/PanelRespaldos'
 import RepositorioDocumental from './components/RepositorioDocumental'
+import GestionCatalogos from './components/GestionCatalogos' // <-- NUEVO MÓDULO
 
 const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000;
 const TIEMPO_DE_AVISO = TIEMPO_INACTIVIDAD_TOTAL - (2 * 60 * 1000);
@@ -51,6 +52,7 @@ function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
 
   const puedeVerPrecintos = rolesPrecintos.includes(rol);
   const puedeVerRepositorio = rolesRepositorio.includes(rol);
+  const puedeVerCatalogos = rol === 'admin_sistema'; // Solo el admin del sistema
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
@@ -67,13 +69,15 @@ function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
         </div>
       </header>
 
-      <main style={{ flex: 1, padding: '60px 20px', maxWidth: '1100px', margin: '0 auto', width: '100%' }}>
+      <main style={{ flex: 1, padding: '60px 20px', maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
         <div style={{ textAlign: 'center', marginBottom: '50px' }}>
           <h2 style={{ color: 'var(--text-dark)', fontSize: '28px', marginBottom: '10px' }}>Bienvenido a tu plataforma</h2>
           <p style={{ color: 'var(--text-light)', fontSize: '16px' }}>Selecciona el módulo que deseas administrar</p>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '25px' }}>
+          
+          {/* MÓDULO 1: PRECINTOS */}
           {puedeVerPrecintos && (
             <div style={{ ...cardStyle, borderColor: 'var(--primary-blue)' }} onClick={() => setPantalla('precintos_menu')}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>📦</div>
@@ -87,6 +91,7 @@ function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
             </div>
           )}
 
+          {/* MÓDULO 2: REPOSITORIO DOCUMENTAL */}
           {puedeVerRepositorio && (
             <div style={{ ...cardStyle, borderColor: 'var(--primary-blue)' }} onClick={() => setPantalla('repositorio')}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>📂</div>
@@ -100,6 +105,21 @@ function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
             </div>
           )}
 
+          {/* MÓDULO 3: CATÁLOGOS MAESTROS (Solo Admin) */}
+          {puedeVerCatalogos && (
+            <div style={{ ...cardStyle, borderColor: 'var(--primary-blue)' }} onClick={() => setPantalla('catalogos')}>
+              <div style={{ fontSize: '50px', marginBottom: '15px' }}>⚙️</div>
+              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '15px', fontSize: '20px' }}>Catálogos Maestros</h3>
+              <p style={{ color: 'var(--text-light)', marginBottom: '25px', fontSize: '14px', lineHeight: '1.5' }}>
+                Administra proveedores, productos y terminales del sistema.
+              </p>
+              <button style={{ width: '100%', padding: '12px', borderRadius: '6px', border: 'none', background: 'var(--primary-blue)', color: 'white', fontWeight: 'bold', fontSize: '15px' }}>
+                Entrar al Módulo
+              </button>
+            </div>
+          )}
+
+          {/* MÓDULO FUTURO: FLOTA (BLOQUEADO) */}
           <div style={{ ...cardStyle, opacity: 0.6, cursor: 'not-allowed' }}>
             <div style={{ fontSize: '50px', marginBottom: '15px' }}>🚚</div>
             <h3 style={{ color: 'var(--text-dark)', marginBottom: '15px', fontSize: '20px' }}>Gestión de Flota</h3>
@@ -110,6 +130,7 @@ function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
               Próximamente
             </button>
           </div>
+
         </div>
       </main>
     </div>
@@ -126,7 +147,6 @@ function MenuPrecintos({ setPantalla, rol, permisos }) {
     return false
   }
 
-  // Definimos las opciones del módulo
   const opciones = [
     { id: 'lotes', titulo: 'Registro de Lotes', icono: '📝', desc: 'Ingreso de nuevos lotes de precintos.', permiso: 'lotes', roles: ['admin_sistema', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto'] },
     { id: 'admin', titulo: 'Registrar Viajes (SCOP)', icono: '🚚', desc: 'Asignación de precintos a viajes.', permiso: 'viajes', roles: ['admin_sistema', 'admin_planta'] },
@@ -346,8 +366,11 @@ function App() {
       {/* 3. MÓDULO REPOSITORIO */}
       {pantalla === 'repositorio' && <RepositorioDocumental setPantalla={setPantalla} rol={rol} />}
 
-      {/* 4. VISTAS INTERNAS DE PRECINTOS (CON HEADER DE VOLVER) */}
-      {pantalla !== '' && pantalla !== 'precintos_menu' && pantalla !== 'repositorio' && (
+      {/* 4. MÓDULO CATÁLOGOS MAESTROS */}
+      {pantalla === 'catalogos' && <GestionCatalogos setPantalla={setPantalla} />}
+
+      {/* 5. VISTAS INTERNAS DE PRECINTOS (CON HEADER DE VOLVER) */}
+      {pantalla !== '' && pantalla !== 'precintos_menu' && pantalla !== 'repositorio' && pantalla !== 'catalogos' && (
         <div style={{ minHeight: '100vh' }}>
           {/* Header Común para todas las vistas de Precintos */}
           <nav style={{ backgroundColor: 'white', borderBottom: '1px solid #e5e7eb', padding: '15px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
