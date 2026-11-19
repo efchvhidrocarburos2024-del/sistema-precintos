@@ -478,70 +478,74 @@ export default function GestionPrecios({ setPantalla, rol }) {
     if (fileInput) fileInput.value = ''
   }
 
-  // --- LÓGICA DE SUBIDA CON VALIDACIÓN DE FECHA ---
+  // --- LÓGICA DE SUBIDA CON VALIDACIÓN DIRECTA A BASE DE DATOS ---
   async function handleSubirArchivo() {
     if (!archivoExcel) return toast.error('No hay archivo seleccionado')
     setSubiendo(true)
     try {
+      // 1. Consultar directamente a la DB el vigente actual
+      const { data: archivosDb, error: fetchError } = await supabase
+        .from('precios_archivos')
+        .select('*')
+        .eq('es_vigente', true)
+
+      if (fetchError) throw fetchError
+
+      let debeSerVigente = false;
+      const vigenteActual = archivosDb && archivosDb.length > 0 ? archivosDb[0] : null;
+
+      // 2. Extraer fechas de los nombres (YYYY-MM-DD, YYYY_MM_DD, DD-MM-YYYY)
+      const extraerFecha = (nombre) => {
+        const regex = /(\d{4}[-_]\d{2}[-_]\d{2})|(\d{2}[-_]\d{2}[-_]\d{4})/;
+        const match = nombre.match(regex);
+        if (!match) return null;
+        
+        let fechaStr = match[0].replace(/_/g, '-');
+        
+        // Si es DD-MM-YYYY, lo pasamos a YYYY-MM-DD
+        if (fechaStr.indexOf('-') === 2) {
+          const [d, m, a] = fechaStr.split('-');
+          fechaStr = `${a}-${m}-${d}`;
+        }
+        return fechaStr;
+      };
+
+      const fechaNueva = extraerFecha(archivoExcel.name);
+
+      if (!vigenteActual) {
+        debeSerVigente = true; // Si no hay vigente, este entra como vigente
+      } else {
+        const fechaVigente = extraerFecha(vigenteActual.nombre_archivo);
+
+        if (fechaNueva && fechaVigente) {
+          // Si la fecha nueva es mayor a la vigente, se vuelve vigente
+          if (fechaNueva > fechaVigente) {
+            debeSerVigente = true;
+          } else {
+            debeSerVigente = false; // Es más antigua, queda como histórico
+          }
+        } else {
+          // Si los archivos no tienen fecha en el nombre, el nuevo entra como histórico por seguridad
+          debeSerVigente = false; 
+        }
+      }
+
+      // 3. Subir archivo
       const nombreLimpio = archivoExcel.name.replace(/\s+/g, '_')
       const fileName = `listas_precios/${Date.now()}_${nombreLimpio}`
       
-      // 1. Subir archivo a Storage
       const { error: uploadError } = await supabase.storage.from('documentos_sigmo').upload(fileName, archivoExcel)
       if (uploadError) throw uploadError
 
       const { data: { publicUrl } } = supabase.storage.from('documentos_sigmo').getPublicUrl(fileName)
       const { data: { user } } = await supabase.auth.getUser()
 
-      // 2. LÓGICA INTELIGENTE DE FECHAS
-      let debeSerVigente = false;
-
-      if (archivos.length === 0) {
-        debeSerVigente = true; // El primer archivo siempre es vigente
-      } else {
-        const vigenteActual = archivos.find(a => a.es_vigente);
-        
-        if (!vigenteActual) {
-          debeSerVigente = true; 
-        } else {
-          // Extraer fechas de los nombres (formato YYYY-MM-DD o DD-MM-YYYY)
-          const regexFecha = /(\d{4}-\d{2}-\d{2})|(\d{2}-\d{2}-\d{4})/;
-          const matchNuevo = archivoExcel.name.match(regexFecha);
-          const matchVigente = vigenteActual.nombre_archivo.match(regexFecha);
-
-          if (matchNuevo && matchVigente) {
-            let fechaNuevaStr = matchNuevo[0];
-            let fechaVigenteStr = matchVigente[0];
-
-            // Normalizar a formato YYYY-MM-DD para comparar correctamente
-            if (fechaNuevaStr.includes('/') || fechaNuevaStr.indexOf('-') === 2) {
-              const [d, m, a] = fechaNuevaStr.split(/[-/]/);
-              fechaNuevaStr = `${a}-${m}-${d}`;
-            }
-            if (fechaVigenteStr.includes('/') || fechaVigenteStr.indexOf('-') === 2) {
-              const [d, m, a] = fechaVigenteStr.split(/[-/]/);
-              fechaVigenteStr = `${a}-${m}-${d}`;
-            }
-
-            // Comparar strings en formato YYYY-MM-DD
-            if (fechaNuevaStr > fechaVigenteStr) {
-              debeSerVigente = true; // La nueva es más reciente
-            } else {
-              debeSerVigente = false; // La nueva es más antigua o igual
-            }
-          } else {
-            // Si no se encuentra una fecha en el nombre, se asume histórico por seguridad
-            debeSerVigente = false;
-          }
-        }
-      }
-
-      // 3. Si debe ser vigente, quitar el vigente al anterior
+      // 4. Si debe ser vigente, quitamos el vigente a los anteriores
       if (debeSerVigente) {
         await supabase.from('precios_archivos').update({ es_vigente: false }).eq('es_vigente', true)
       }
 
-      // 4. Insertar el nuevo registro
+      // 5. Insertar el nuevo registro
       const { error: dbError } = await supabase.from('precios_archivos').insert({
         nombre_archivo: archivoExcel.name,
         url_archivo: publicUrl,
@@ -552,9 +556,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
       if (dbError) throw dbError
 
       if (debeSerVigente) {
-        toast.success('Lista subida y marcada como VIGENTE (es la más reciente)')
+        toast.success('Lista subida y marcada como VIGENTE')
       } else {
-        toast.success('Lista subida como HISTÓRICO (fecha anterior a la vigente)')
+        toast.success('Lista subida como HISTÓRICO')
       }
       
       limpiarPrevisualizacion()
