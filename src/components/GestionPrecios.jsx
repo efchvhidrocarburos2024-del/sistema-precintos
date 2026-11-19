@@ -61,9 +61,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
   // Estados para Tendencias
   const [plantaSeleccionada, setPlantaSeleccionada] = useState('')
   const [productoSeleccionado, setProductoSeleccionado] = useState('')
-  const [hojaTendencia, setHojaTendencia] = useState('Precio Base') // NUEVO: Selector de hoja
+  const [hojaTendencia, setHojaTendencia] = useState('Precio Base')
   const [datosTendencia, setDatosTendencia] = useState([])
-  const [lineasDinamicas, setLineasDinamicas] = useState([]) // NUEVO: Para saber cuántas líneas dibujar
+  const [lineasDinamicas, setLineasDinamicas] = useState([])
   const [metricas, setMetricas] = useState(null)
   const [cargandoTendencia, setCargandoTendencia] = useState(false)
   const [errorTendencia, setErrorTendencia] = useState('')
@@ -212,7 +212,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
   };
 
   const generarComparacion = async () => {
-    // ... (Misma lógica de comparación que ya tenías)
     if (!idBase || !idNuevo) return toast.error('Faltan listas para comparar.');
     if (idBase === idNuevo) return toast.error('Las listas deben ser diferentes');
 
@@ -274,7 +273,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   };
 
-  // --- NUEVA LÓGICA PARA MÚLTIPLES LÍNEAS Y SELECCIÓN DE HOJA ---
   const cargarTendencias = async () => {
     if (!plantaSeleccionada || !productoSeleccionado) return toast.error('Selecciona una planta y un producto');
     setCargandoTendencia(true);
@@ -286,20 +284,17 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const archivosProcesar = archivos.slice(0, 15).reverse(); 
       if (archivosProcesar.length < 2) throw new Error("Se necesitan al menos 2 listas para calcular una tendencia.");
 
-      // Diccionario para agrupar por fecha: { "2026-10-27": { "CALLAO": 11.19, "CHIMBOTE": 13.5 } }
       const tendenciaAgrupada = {}; 
       let nombresLineas = new Set();
 
       for (const file of archivosProcesar) {
-        const data = await parseExcelFile(file.url_archivo, hojaTendencia); // <-- Usa la hoja seleccionada
+        const data = await parseExcelFile(file.url_archivo, hojaTendencia);
         const idxPlanta = data.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
         
         const fecha = extraerFecha(file.nombre_archivo);
         if (!tendenciaAgrupada[fecha]) tendenciaAgrupada[fecha] = { fecha };
 
-        // Determinar qué columnas o filas iterar según la selección
         if (plantaSeleccionada === 'TODOS' && productoSeleccionado !== 'TODOS') {
-          // Caso A: Todas las plantas, un producto. Generamos una línea por planta.
           const idxProducto = data.headers.findIndex(h => esMismoProducto(h, productoSeleccionado));
           if (idxProducto !== -1) {
             data.rows.forEach(fila => {
@@ -314,7 +309,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
             });
           }
         } else if (plantaSeleccionada !== 'TODOS' && productoSeleccionado === 'TODOS') {
-          // Caso B: Una planta, todos los productos. Generamos una línea por producto.
           const fila = data.rows.find(r => normalizarTexto(r[idxPlanta]) === normalizarTexto(plantaSeleccionada));
           if (fila) {
             data.headers.forEach((h, i) => {
@@ -330,7 +324,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
             });
           }
         } else if (plantaSeleccionada === 'TODOS' && productoSeleccionado === 'TODOS') {
-          // Caso C: Ambos TODOS. Para no saturar, generaremos una línea por planta (usando el promedio de sus productos)
           data.rows.forEach(fila => {
             const nombrePlanta = String(fila[idxPlanta]).trim();
             if (esPlantaValida(nombrePlanta)) {
@@ -348,7 +341,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
             }
           });
         } else {
-          // Caso D: Planta específica y Producto específico. Una sola línea.
           const idxProducto = data.headers.findIndex(h => esMismoProducto(h, productoSeleccionado));
           const fila = data.rows.find(r => normalizarTexto(r[idxPlanta]) === normalizarTexto(plantaSeleccionada));
           if (fila && idxProducto !== -1) {
@@ -362,7 +354,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
         }
       }
 
-      // Convertir diccionario a arreglo ordenado
       const datosArray = Object.values(tendenciaAgrupada).sort((a, b) => a.fecha.localeCompare(b.fecha));
       
       if (datosArray.length < 2) throw new Error("No hay suficientes datos históricos válidos.");
@@ -370,7 +361,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
       setDatosTendencia(datosArray);
       setLineasDinamicas(Array.from(nombresLineas));
 
-      // Calcular métricas generales basadas en la primera línea encontrada (solo para referencia visual)
       const primeraLinea = Array.from(nombresLineas)[0];
       if (primeraLinea) {
         const precios = datosArray.map(d => d[primeraLinea]).filter(v => v !== undefined);
@@ -443,7 +433,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
   }
 
   const handleFileChange = (e) => {
-    // ... (Misma lógica)
     const file = e.target.files[0]
     if (!file) return
     setArchivoExcel(file)
@@ -508,14 +497,41 @@ export default function GestionPrecios({ setPantalla, rol }) {
   }
 
   async function handleSubirArchivo() {
-    // ... (Misma lógica)
     if (!archivoExcel) return toast.error('No hay archivo seleccionado')
     setSubiendo(true)
+    
     try {
+      // --- VALIDACIÓN DE DUPLICADOS (Experto) ---
+      const nombreNormalizado = archivoExcel.name.trim();
+      const fechaNueva = extraerFecha(archivoExcel.name);
+
+      // 1. Validar por nombre exacto
+      const { data: existeNombre } = await supabase
+        .from('precios_archivos')
+        .select('id')
+        .eq('nombre_archivo', nombreNormalizado)
+        .limit(1);
+
+      if (existeNombre && existeNombre.length > 0) {
+        throw new Error(`El archivo "${nombreNormalizado}" ya fue subido anteriormente.`);
+      }
+
+      // 2. Validar por fecha (Evita subir 2 archivos para el mismo día con nombres distintos)
+      if (fechaNueva !== '1900-01-01') {
+        const { data: existeFecha } = await supabase
+          .from('precios_archivos')
+          .select('nombre_archivo')
+          .like('nombre_archivo', `%${fechaNueva}%`);
+          
+        if (existeFecha && existeFecha.length > 0) {
+          throw new Error(`Ya existe una lista registrada para la fecha ${fechaNueva} ("${existeFecha[0].nombre_archivo}"). Elimine la anterior si desea reemplazarla.`);
+        }
+      }
+      // --- FIN VALIDACIÓN ---
+
       const { data: archivosDb } = await supabase.from('precios_archivos').select('*').eq('es_vigente', true)
       let debeSerVigente = false;
       const vigenteActual = archivosDb && archivosDb.length > 0 ? archivosDb[0] : null;
-      const fechaNueva = extraerFecha(archivoExcel.name);
 
       if (!vigenteActual) {
         debeSerVigente = true; 
@@ -556,14 +572,13 @@ export default function GestionPrecios({ setPantalla, rol }) {
       limpiarPrevisualizacion()
       setVista('menu')
     } catch (error) {
-      toast.error('Error: ' + error.message)
+      toast.error(error.message)
     } finally {
       setSubiendo(false)
     }
   }
 
   const exportarComparacionExcel = () => {
-    // ... (Misma lógica)
     if (!datosComparados) return;
     const headerRow = ['CÓDIGO', 'PLANTAS', ...datosComparados.columnas];
     const excelData = [headerRow];
@@ -586,7 +601,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
   };
 
   const exportarComparacionPDF = () => {
-    // ... (Misma lógica)
     if (!datosComparados) return;
     const doc = new jsPDF('landscape');
     doc.text(`Variación - ${hojaComparar}`, 14, 22);
@@ -670,7 +684,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
   }
 
   if (vista === 'cargar') {
-    // ... (Misma vista)
     if (!puedeCargar) return <div style={{ padding: '50px', textAlign: 'center' }}><h2>No tienes permisos.</h2></div>
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
@@ -803,7 +816,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
                     <YAxis domain={['auto', 'auto']} tickFormatter={(val) => val.toFixed(2)} tick={{ fontSize: 12, fill: '#64748b' }} width={60} />
                     <Tooltip content={<CustomTooltip />} />
                     <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                    {/* Iteramos sobre las líneas dinámicas generadas */}
                     {lineasDinamicas.map((linea, index) => (
                       <Line 
                         key={linea}
@@ -835,7 +847,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
   if (vista === 'auditoria') {
     return (
-      // ... (Misma vista)
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
         {renderHeader()}
         <main style={{ padding: '40px 20px', maxWidth: '1000px', margin: '0 auto' }}>
@@ -881,7 +892,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
   }
 
   if (vista === 'comparar') {
-    // ... (Misma vista)
     const filePrevio = archivos.find(a => a.id === idBase);
     const fileActual = archivos.find(a => a.id === idNuevo);
     return (
