@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
 import { Card, Boton } from './ui'
@@ -38,6 +39,17 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [datosComparados, setDatosComparados] = useState(null)
   const [cargandoComparacion, setCargandoComparacion] = useState(false)
 
+  // --- ESTADOS PARA AUDITORÍA ---
+  const [auditoria, setAuditoria] = useState([])
+
+  // --- ESTADOS PARA TENDENCIAS ---
+  const [plantaSeleccionada, setPlantaSeleccionada] = useState('')
+  const [productoSeleccionado, setProductoSeleccionado] = useState('')
+  const [datosTendencia, setDatosTendencia] = useState([])
+  const [cargandoTendencia, setCargandoTendencia] = useState(false)
+  const [opcionesPlantas, setOpcionesPlantas] = useState([])
+  const [opcionesProductos, setOpcionesProductos] = useState([])
+
   // Estados para Modal de Eliminación
   const [modalEliminarAbierto, setModalEliminarAbierto] = useState(false)
   const [archivoAEliminar, setArchivoAEliminar] = useState(null)
@@ -48,13 +60,11 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const puedeCargar = rolesCarga.includes(rol)
   const puedeGestionar = ['admin_sistema', 'jefe_pricing'].includes(rol)
 
-  // Función auxiliar para extraer fechas (YYYY-MM-DD)
   const extraerFecha = (nombre) => {
     if (!nombre) return '1900-01-01';
     const regex = /(\d{4}[-_]\d{2}[-_]\d{2})|(\d{2}[-_]\d{2}[-_]\d{4})/;
     const match = nombre.match(regex);
     if (!match) return '1900-01-01';
-    
     let fechaStr = match[0].replace(/_/g, '-');
     if (fechaStr.indexOf('-') === 2) {
       const [d, m, a] = fechaStr.split('-');
@@ -64,12 +74,15 @@ export default function GestionPrecios({ setPantalla, rol }) {
   };
 
   useEffect(() => {
-    if (vista === 'visualizar' || vista === 'comparar') {
+    if (vista === 'visualizar' || vista === 'comparar' || vista === 'auditoria') {
       fetchArchivos()
+    }
+    if (vista === 'auditoria') {
+      fetchAuditoria()
     }
   }, [vista])
 
-  // Autocompletado de selectores (solo para la vista comparar)
+  // Autocompletado para comparación
   useEffect(() => {
     if (vista === 'comparar' && archivos.length > 0) {
       const ordenados = [...archivos].sort((a, b) => {
@@ -77,7 +90,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
         const fB = extraerFecha(b.nombre_archivo);
         return fB.localeCompare(fA); 
       });
-
       if (ordenados.length >= 1) setIdNuevo(ordenados[0].id);
       if (ordenados.length >= 2) setIdBase(ordenados[1].id);
       else setIdBase('');
@@ -92,20 +104,12 @@ export default function GestionPrecios({ setPantalla, rol }) {
       toast.error('Error al cargar los archivos')
     } else {
       let lista = data || []
-      // LÓGICA DE ORDENAMIENTO CORREGIDA: Fecha del documento (Nombre) y luego Vigente
       lista.sort((a, b) => {
-        // 1. El vigente siempre va primero
         if (a.es_vigente && !b.es_vigente) return -1;
         if (!a.es_vigente && b.es_vigente) return 1;
-        
-        // 2. Ordenar por la fecha del DOCUMENTO en el nombre (más reciente primero)
         const fA = extraerFecha(a.nombre_archivo);
         const fB = extraerFecha(b.nombre_archivo);
-        if (fA !== fB) {
-          return fB.localeCompare(fA);
-        }
-        
-        // 3. Si tienen la misma fecha en el nombre, ordenar por fecha de subida
+        if (fA !== fB) return fB.localeCompare(fA);
         return new Date(b.created_at) - new Date(a.created_at);
       });
       setArchivos(lista);
@@ -113,15 +117,30 @@ export default function GestionPrecios({ setPantalla, rol }) {
     setCargando(false)
   }
 
-  // --- LÓGICA DE COMPARACIÓN INTELIGENTE ---
+  async function fetchAuditoria() {
+    const { data, error } = await supabase
+      .from('precios_auditoria')
+      .select('*')
+      .order('created_at', { ascending: false })
+    
+    if (error) console.error(error)
+    else setAuditoria(data || [])
+  }
+
+  async function registrarAuditoria(id_archivo, nombre_archivo, accion) {
+    const { data: { user } } = await supabase.auth.getUser()
+    await supabase.from('precios_auditoria').insert({
+      id_archivo,
+      nombre_archivo,
+      accion,
+      usuario: user.email
+    })
+  }
+
+  // --- LÓGICA DE COMPARACIÓN ---
   const normalizarTexto = (txt) => {
     if (!txt) return '';
-    return String(txt)
-      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") 
-      .replace(/\s+/g, ' ') 
-      .replace(/N°/gi, 'N') 
-      .trim()
-      .toUpperCase();
+    return String(txt).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').replace(/N°/gi, 'N').trim().toUpperCase();
   };
 
   const esMismoProducto = (prod1, prod2) => {
@@ -179,8 +198,8 @@ export default function GestionPrecios({ setPantalla, rol }) {
   };
 
   const generarComparacion = async () => {
-    if (!idBase || !idNuevo) return toast.error('Faltan listas para comparar. Asegúrate de tener al menos 2 listas subidas.');
-    if (idBase === idNuevo) return toast.error('Las listas seleccionadas deben ser diferentes');
+    if (!idBase || !idNuevo) return toast.error('Faltan listas para comparar.');
+    if (idBase === idNuevo) return toast.error('Las listas deben ser diferentes');
 
     setCargandoComparacion(true);
     setDatosComparados(null);
@@ -199,49 +218,29 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const baseMap = {};
       dataBase.rows.forEach(row => {
         const planta = normalizarTexto(row[idxPlantaBase]);
-        if (esPlantaValida(planta)) {
-          baseMap[planta] = row;
-        }
+        if (esPlantaValida(planta)) baseMap[planta] = row;
       });
 
       const columnasComparar = [];
       dataNuevo.headers.forEach((h, i) => {
         const hNorm = normalizarTexto(h);
-        if (
-          !hNorm || hNorm.includes('PLANTAS') || hNorm.includes('CODIGO') || 
-          hNorm.includes('USO INTERNO') || hNorm.includes('SOLES/GALON') || 
-          hNorm.includes('VIGENTE') || hNorm.includes('T.C') || hNorm.includes('IGV') || 
-          hNorm.includes('ISC') || hNorm.includes('RODAJE') || hNorm.includes('FISE') ||
-          hNorm === 'SI' || hNorm === '-'
-        ) return;
-
+        if (!hNorm || hNorm.includes('PLANTAS') || hNorm.includes('CODIGO') || hNorm.includes('USO INTERNO') || hNorm.includes('SOLES/GALON') || hNorm.includes('VIGENTE') || hNorm.includes('T.C') || hNorm.includes('IGV') || hNorm.includes('ISC') || hNorm.includes('RODAJE') || hNorm.includes('FISE') || hNorm === 'SI' || hNorm === '-') return;
         const baseColIndex = dataBase.headers.findIndex(baseH => esMismoProducto(baseH, h));
-        
-        if (baseColIndex !== -1) {
-          columnasComparar.push({ titulo: h, indexNuevo: i, indexBase: baseColIndex });
-        }
+        if (baseColIndex !== -1) columnasComparar.push({ titulo: h, indexNuevo: i, indexBase: baseColIndex });
       });
 
       const comparacion = [];
       dataNuevo.rows.forEach(nuevaRow => {
         const planta = normalizarTexto(nuevaRow[idxPlantaNew]);
         if (!esPlantaValida(planta)) return;
-
         const baseRow = baseMap[planta];
         const variaciones = {};
-
         if (baseRow) {
           columnasComparar.forEach(col => {
-            const valNuevoStr = nuevaRow[col.indexNuevo];
-            const valBaseStr = baseRow[col.indexBase];
-
-            const valNuevo = parseFloat(String(valNuevoStr).replace(',', '.'));
-            const valBase = parseFloat(String(valBaseStr).replace(',', '.'));
-
+            const valNuevo = parseFloat(String(nuevaRow[col.indexNuevo]).replace(',', '.'));
+            const valBase = parseFloat(String(baseRow[col.indexBase]).replace(',', '.'));
             if (!isNaN(valNuevo) && !isNaN(valBase) && valNuevo > 0 && valBase > 0) {
-              variaciones[col.titulo] = {
-                diff: valNuevo - valBase
-              };
+              variaciones[col.titulo] = { diff: valNuevo - valBase };
             } else if (!isNaN(valNuevo) && valNuevo > 0 && (isNaN(valBase) || valBase === 0)) {
               variaciones[col.titulo] = 'NUEVO';
             } else {
@@ -249,163 +248,103 @@ export default function GestionPrecios({ setPantalla, rol }) {
             }
           });
         }
-
-        comparacion.push({ 
-          codigo: idxCodigoNew !== -1 ? nuevaRow[idxCodigoNew] : '', 
-          planta: nuevaRow[idxPlantaNew], 
-          variaciones 
-        });
+        comparacion.push({ codigo: idxCodigoNew !== -1 ? nuevaRow[idxCodigoNew] : '', planta: nuevaRow[idxPlantaNew], variaciones });
       });
 
-      setDatosComparados({
-        columnas: columnasComparar.map(c => c.titulo),
-        rows: comparacion
-      });
-
+      setDatosComparados({ columnas: columnasComparar.map(c => c.titulo), rows: comparacion });
     } catch (error) {
-      console.error(error);
       toast.error('Error al comparar: ' + error.message);
     } finally {
       setCargandoComparacion(false);
     }
   };
 
-  // --- LÓGICA: EXPORTAR A EXCEL ---
-  const exportarComparacionExcel = () => {
-    if (!datosComparados) return;
+  // --- LÓGICA DE TENDENCIAS ---
+  const cargarTendencias = async () => {
+    if (!plantaSeleccionada || !productoSeleccionado) return toast.error('Selecciona una planta y un producto');
+    setCargandoTendencia(true);
+    setDatosTendencia([]);
 
     try {
-      const headerRow = ['CÓDIGO', 'PLANTAS', ...datosComparados.columnas];
-      const excelData = [headerRow];
+      // Tomamos hasta los últimos 12 archivos ordenados por fecha (para no colgar el navegador)
+      const archivosProcesar = archivos.slice(0, 12).reverse(); 
+      const tendencia = [];
+      let opcionesPlantaSet = new Set();
+      let opcionesProductoSet = new Set();
 
-      datosComparados.rows.forEach(fila => {
-        const row = [fila.codigo, fila.planta];
+      for (const file of archivosProcesar) {
+        const data = await parseExcelFile(file.url_archivo, 'Precio Base');
         
-        datosComparados.columnas.forEach(col => {
-          const item = fila.variaciones[col];
-          if (item === 'NUEVO') {
-            row.push('NUEVO');
-          } else if (item && Math.abs(item.diff) > 0.00001) {
-            row.push(`${item.diff > 0 ? '+' : ''}${item.diff.toFixed(4)}`);
-          } else if (item && Math.abs(item.diff) <= 0.00001) {
-            row.push('0.0000');
-          } else {
-            row.push('-');
-          }
-        });
-        
-        excelData.push(row);
-      });
-
-      const ws = XLSX.utils.aoa_to_sheet(excelData);
-      ws['!cols'] = headerRow.map((_, i) => ({ wch: i < 2 ? 15 : 20 }));
-
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Variación');
-      
-      const fileName = `Variacion_${hojaComparar}_${new Date().toISOString().split('T')[0]}.xlsx`;
-      XLSX.writeFile(wb, fileName);
-      
-      toast.success('Excel descargado correctamente');
-    } catch (error) {
-      console.error(error);
-      toast.error('Error al exportar: ' + error.message);
-    }
-  };
-
-  // --- LÓGICA: EXPORTAR A PDF ---
-  const exportarComparacionPDF = () => {
-    if (!datosComparados) return;
-
-    try {
-      const doc = new jsPDF('landscape');
-      
-      doc.setFontSize(18);
-      doc.text(`Variación - ${hojaComparar}`, 14, 22);
-      
-      const head = [['CÓDIGO', 'PLANTAS', ...datosComparados.columnas]];
-      const body = datosComparados.rows.map(fila => {
-        const row = [fila.codigo, fila.planta];
-        
-        datosComparados.columnas.forEach(col => {
-          const item = fila.variaciones[col];
-          if (item === 'NUEVO') {
-            row.push('NUEVO');
-          } else if (item && Math.abs(item.diff) > 0.00001) {
-            row.push(`${item.diff > 0 ? '+' : ''}${item.diff.toFixed(4)}`);
-          } else if (item && Math.abs(item.diff) <= 0.00001) {
-            row.push('0.0000');
-          } else {
-            row.push('-');
-          }
-        });
-        
-        return row;
-      });
-
-      autoTable(doc, {
-        head: head,
-        body: body,
-        startY: 30,
-        styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [249, 250, 251] },
-        didParseCell: function (data) {
-          if (data.section === 'body' && data.column.index > 1) {
-            const text = data.cell.text[0];
-            if (text && text.startsWith('+')) {
-              data.cell.styles.textColor = [239, 68, 68];
-              data.cell.styles.fontStyle = 'bold';
-            } else if (text && text.startsWith('-')) {
-              data.cell.styles.textColor = [16, 185, 129];
-              data.cell.styles.fontStyle = 'bold';
-            } else if (text === 'NUEVO') {
-              data.cell.styles.textColor = [59, 130, 246];
-              data.cell.styles.fontStyle = 'bold';
+        // Llenar opciones si están vacías
+        if (opcionesPlantas.length === 0 || opcionesProductos.length === 0) {
+          data.rows.forEach(row => {
+            const idxP = data.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
+            if (idxP !== -1 && esPlantaValida(row[idxP])) opcionesPlantaSet.add(String(row[idxP]).trim());
+          });
+          data.headers.forEach(h => {
+            if (h && !normalizarTexto(h).includes('PLANTAS') && !normalizarTexto(h).includes('CODIGO') && !normalizarTexto(h).includes('USO INTERNO')) {
+              opcionesProductoSet.add(String(h).trim());
             }
+          });
+        }
+
+        const idxPlanta = data.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
+        const idxProducto = data.headers.findIndex(h => esMismoProducto(h, productoSeleccionado));
+        const fila = data.rows.find(r => normalizarTexto(r[idxPlanta]) === normalizarTexto(plantaSeleccionada));
+
+        if (fila && idxProducto !== -1) {
+          const valor = parseFloat(String(fila[idxProducto]).replace(',', '.'));
+          if (!isNaN(valor)) {
+            const fecha = extraerFecha(file.nombre_archivo);
+            tendencia.push({
+              fecha: fecha,
+              precio: valor
+            });
           }
         }
-      });
+      }
 
-      const fileName = `Variacion_${hojaComparar}_${new Date().toISOString().split('T')[0]}.pdf`;
-      doc.save(fileName);
+      setOpcionesPlantas(Array.from(opcionesPlantaSet).sort());
+      setOpcionesProductos(Array.from(opcionesProductoSet).filter(p => p.length > 3).sort());
       
-      toast.success('PDF descargado correctamente');
+      // Ordenar por fecha
+      tendencia.sort((a, b) => a.fecha.localeCompare(b.fecha));
+      setDatosTendencia(tendencia);
+
     } catch (error) {
-      console.error(error);
-      toast.error('Error al exportar PDF: ' + error.message);
+      toast.error('Error al cargar tendencias: ' + error.message);
+    } finally {
+      setCargandoTendencia(false);
     }
   };
 
-  // --- LÓGICA DE FILTRADO Y GESTIÓN ---
-  const archivosFiltrados = archivos.filter(file => {
-    const coincideTexto = 
-      file.nombre_archivo.toLowerCase().includes(filtroTexto.toLowerCase()) || 
-      (file.subido_por && file.subido_por.toLowerCase().includes(filtroTexto.toLowerCase()));
+  useEffect(() => {
+    if (vista === 'tendencias' && opcionesPlantas.length === 0 && archivos.length > 0) {
+      // Pre-cargar opciones de la primera lista
+      parseExcelFile(archivos[0].url_archivo, 'Precio Base').then(data => {
+        const idxP = data.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
+        const plnts = data.rows.map(r => String(r[idxP]).trim()).filter(p => esPlantaValida(p));
+        setOpcionesPlantas([...new Set(plnts)].sort());
+        
+        const prods = data.headers.map(h => String(h).trim()).filter(h => h && !normalizarTexto(h).includes('PLANTAS') && !normalizarTexto(h).includes('CODIGO') && !normalizarTexto(h).includes('USO INTERNO'));
+        setOpcionesProductos([...new Set(prods)].filter(p => p.length > 3).sort());
+      });
+    }
+  }, [vista, archivos]);
 
-    let coincideDesde = true;
-    if (fechaDesde) coincideDesde = new Date(file.created_at).setHours(0,0,0,0) >= new Date(fechaDesde).setHours(0,0,0,0);
-    let coincideHasta = true;
-    if (fechaHasta) coincideHasta = new Date(file.created_at).setHours(23,59,59,999) <= new Date(fechaHasta).setHours(23,59,59,999);
-
-    return coincideTexto && coincideDesde && coincideHasta;
-  });
-
-  const marcarComoVigente = async (id) => {
+  // --- GESTIÓN Y SUBIDA ---
+  const marcarComoVigente = async (id, nombre) => {
     try {
       await supabase.from('precios_archivos').update({ es_vigente: false }).eq('es_vigente', true)
       const { error } = await supabase.from('precios_archivos').update({ es_vigente: true }).eq('id', id)
       if (error) throw error
+      
+      await registrarAuditoria(id, nombre, 'VIGENTE')
       toast.success('Lista marcada como VIGENTE')
       fetchArchivos()
     } catch (error) {
-      toast.error('Error al actualizar: ' + error.message)
+      toast.error('Error: ' + error.message)
     }
-  }
-
-  const abrirModalEliminar = (file) => {
-    setArchivoAEliminar(file)
-    setModalEliminarAbierto(true)
   }
 
   const confirmarEliminar = async () => {
@@ -414,29 +353,21 @@ export default function GestionPrecios({ setPantalla, rol }) {
     try {
       const urlParts = archivoAEliminar.url_archivo.split('/documentos_sigmo/')
       const filePath = urlParts[1]
-      if (filePath) {
-        await supabase.storage.from('documentos_sigmo').remove([filePath])
-      }
+      if (filePath) await supabase.storage.from('documentos_sigmo').remove([filePath])
+      
       const { error: dbError } = await supabase.from('precios_archivos').delete().eq('id', archivoAEliminar.id)
       if (dbError) throw dbError
-      toast.success('Lista eliminada permanentemente')
+      
+      await registrarAuditoria(archivoAEliminar.id, archivoAEliminar.nombre_archivo, 'ELIMINACION')
+      
+      toast.success('Lista eliminada')
       setModalEliminarAbierto(false)
       setArchivoAEliminar(null)
       fetchArchivos()
     } catch (error) {
-      toast.error('Error al eliminar: ' + error.message)
+      toast.error('Error: ' + error.message)
     } finally {
       setEliminando(false)
-    }
-  }
-
-  const handleTCChange = (e) => {
-    const val = e.target.value;
-    setTipoCambio(val);
-    if (!isNaN(parseFloat(val)) && parseFloat(val) > 0) {
-      setValorFise(((1 / 42) * parseFloat(val)).toFixed(4));
-    } else {
-      setValorFise('');
     }
   }
 
@@ -461,7 +392,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
             const row = sheetData[i]
             for (let j = 0; j < row.length; j++) {
               const cellValue = String(row[j]).trim().toUpperCase()
-              if (cellValue === 'T.C' || cellValue === 'T/C' || cellValue.includes('TIPO DE CAMBIO')) {
+              if (cellValue === 'T.C' || cellValue === 'T/C') {
                 const possibleNum = parseFloat(String(row[j + 1]).replace(',', '.'));
                 if (!isNaN(possibleNum)) tcEncontrado = possibleNum;
               }
@@ -479,8 +410,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
           else setValorFise(((1 / 42) * tcEncontrado).toFixed(4))
         }
 
-        const wsname = wb.SheetNames[0]
-        const ws = wb.Sheets[wsname]
+        const ws = wb.Sheets[wb.SheetNames[0]]
         const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
         let headerIndex = data.findIndex(row => row.includes('PLANTAS'))
         if (headerIndex === -1) headerIndex = 0
@@ -505,18 +435,11 @@ export default function GestionPrecios({ setPantalla, rol }) {
     if (fileInput) fileInput.value = ''
   }
 
-  // --- LÓGICA DE SUBIDA CON VALIDACIÓN DIRECTA A BASE DE DATOS ---
   async function handleSubirArchivo() {
     if (!archivoExcel) return toast.error('No hay archivo seleccionado')
     setSubiendo(true)
     try {
-      const { data: archivosDb, error: fetchError } = await supabase
-        .from('precios_archivos')
-        .select('*')
-        .eq('es_vigente', true)
-
-      if (fetchError) throw fetchError
-
+      const { data: archivosDb } = await supabase.from('precios_archivos').select('*').eq('es_vigente', true)
       let debeSerVigente = false;
       const vigenteActual = archivosDb && archivosDb.length > 0 ? archivosDb[0] : null;
       const fechaNueva = extraerFecha(archivoExcel.name);
@@ -526,13 +449,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
       } else {
         const fechaVigente = extraerFecha(vigenteActual.nombre_archivo);
         if (fechaNueva !== '1900-01-01' && fechaVigente !== '1900-01-01') {
-          if (fechaNueva > fechaVigente) {
-            debeSerVigente = true;
-          } else {
-            debeSerVigente = false; 
-          }
-        } else {
-          debeSerVigente = false; 
+          if (fechaNueva > fechaVigente) debeSerVigente = true;
         }
       }
 
@@ -549,40 +466,88 @@ export default function GestionPrecios({ setPantalla, rol }) {
         await supabase.from('precios_archivos').update({ es_vigente: false }).eq('es_vigente', true)
       }
 
-      const { error: dbError } = await supabase.from('precios_archivos').insert({
+      const { data: insertedData, error: dbError } = await supabase.from('precios_archivos').insert({
         nombre_archivo: archivoExcel.name,
         url_archivo: publicUrl,
         subido_por: user.email,
         es_vigente: debeSerVigente
-      })
+      }).select()
 
       if (dbError) throw dbError
-
-      if (debeSerVigente) {
-        toast.success('Lista subida y marcada como VIGENTE')
-      } else {
-        toast.success('Lista subida como HISTÓRICO')
-      }
       
+      if (insertedData && insertedData.length > 0) {
+        await registrarAuditoria(insertedData[0].id, archivoExcel.name, 'SUBIDA')
+      }
+
+      toast.success(debeSerVigente ? 'Lista subida como VIGENTE' : 'Lista subida como HISTÓRICO')
       limpiarPrevisualizacion()
       setVista('menu')
     } catch (error) {
-      toast.error('Error al subir: ' + error.message)
+      toast.error('Error: ' + error.message)
     } finally {
       setSubiendo(false)
     }
   }
 
+  const exportarComparacionExcel = () => {
+    if (!datosComparados) return;
+    const headerRow = ['CÓDIGO', 'PLANTAS', ...datosComparados.columnas];
+    const excelData = [headerRow];
+    datosComparados.rows.forEach(fila => {
+      const row = [fila.codigo, fila.planta];
+      datosComparados.columnas.forEach(col => {
+        const item = fila.variaciones[col];
+        if (item === 'NUEVO') row.push('NUEVO');
+        else if (item && Math.abs(item.diff) > 0.00001) row.push(`${item.diff > 0 ? '+' : ''}${item.diff.toFixed(4)}`);
+        else if (item) row.push('0.0000');
+        else row.push('-');
+      });
+      excelData.push(row);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Variación');
+    XLSX.writeFile(wb, `Variacion_${hojaComparar}.xlsx`);
+    toast.success('Excel descargado');
+  };
+
+  const exportarComparacionPDF = () => {
+    if (!datosComparados) return;
+    const doc = new jsPDF('landscape');
+    doc.text(`Variación - ${hojaComparar}`, 14, 22);
+    const head = [['CÓDIGO', 'PLANTAS', ...datosComparados.columnas]];
+    const body = datosComparados.rows.map(fila => {
+      const row = [fila.codigo, fila.planta];
+      datosComparados.columnas.forEach(col => {
+        const item = fila.variaciones[col];
+        if (item === 'NUEVO') row.push('NUEVO');
+        else if (item && Math.abs(item.diff) > 0.00001) row.push(`${item.diff > 0 ? '+' : ''}${item.diff.toFixed(4)}`);
+        else if (item) row.push('0.0000');
+        else row.push('-');
+      });
+      return row;
+    });
+    autoTable(doc, { head, body, startY: 30, styles: { fontSize: 8 }, didParseCell: (data) => {
+      if (data.section === 'body' && data.column.index > 1) {
+        const t = data.cell.text[0];
+        if (t.startsWith('+')) { data.cell.styles.textColor = [239, 68, 68]; data.cell.styles.fontStyle = 'bold'; }
+        else if (t.startsWith('-')) { data.cell.styles.textColor = [16, 185, 129]; data.cell.styles.fontStyle = 'bold'; }
+        else if (t === 'NUEVO') { data.cell.styles.textColor = [59, 130, 246]; }
+      }
+    }});
+    doc.save(`Variacion_${hojaComparar}.pdf`);
+    toast.success('PDF descargado');
+  };
+
+  // --- RENDERIZADO ---
   const renderHeader = () => (
     <header style={{ padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-        {vista === 'menu' ? (
-          <button onClick={() => setPantalla('')} style={btnHeaderStyle}>← SIGMO</button>
-        ) : (
-          <button onClick={() => setVista('menu')} style={btnHeaderStyle}>← Volver al Menú</button>
-        )}
+        <button onClick={() => vista === 'menu' ? setPantalla('') : setVista('menu')} style={btnHeaderStyle}>
+          ← {vista === 'menu' ? 'SIGMO' : 'Volver al Menú'}
+        </button>
         <h1 style={{ margin: 0, color: 'var(--primary-blue)', fontSize: '28px', fontWeight: '900' }}>
-          {vista === 'comparar' ? 'Comparativa de Listas de Precios' : 'Módulo de Lista de Precios'}
+          {vista === 'comparar' ? 'Comparativa de Listas' : vista === 'tendencias' ? 'Tendencias de Precios' : vista === 'auditoria' ? 'Auditoría de Precios' : 'Módulo de Lista de Precios'}
         </h1>
       </div>
     </header>
@@ -592,7 +557,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
         {renderHeader()}
-        <main style={{ flex: 1, padding: '40px 20px', maxWidth: '800px', margin: '0 auto', width: '100%' }}>
+        <main style={{ flex: 1, padding: '40px 20px', maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
           <div style={{ textAlign: 'center', marginBottom: '40px' }}>
             <h2 style={{ color: 'var(--text-dark)', fontSize: '24px', marginBottom: '10px' }}>Repositorio de Listas</h2>
             <p style={{ color: 'var(--text-light)' }}>Selecciona una acción</p>
@@ -601,7 +566,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
             <div onClick={() => setVista('visualizar')} style={cardStyle} onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary-blue)'} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>👁️</div>
-              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Visualizar Lista</h3>
+              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Visualizar Listas</h3>
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Ver, buscar y descargar archivos Excel.</p>
             </div>
 
@@ -612,6 +577,18 @@ export default function GestionPrecios({ setPantalla, rol }) {
                 <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Sube y previsualiza archivos Excel.</p>
               </div>
             )}
+
+            <div onClick={() => setVista('tendencias')} style={cardStyle} onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary-blue)'} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}>
+              <div style={{ fontSize: '50px', marginBottom: '15px' }}>📈</div>
+              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Gráfico de Tendencias</h3>
+              <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Evolución histórica de precios por planta.</p>
+            </div>
+
+            <div onClick={() => setVista('auditoria')} style={cardStyle} onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary-blue)'} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}>
+              <div style={{ fontSize: '50px', marginBottom: '15px' }}>📋</div>
+              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Auditoría</h3>
+              <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Historial de cambios y accesos.</p>
+            </div>
           </div>
         </main>
       </div>
@@ -619,87 +596,46 @@ export default function GestionPrecios({ setPantalla, rol }) {
   }
 
   if (vista === 'cargar') {
-    if (!puedeCargar) {
-      return (
-        <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
-          {renderHeader()}
-          <div style={{ textAlign: 'center', padding: '50px' }}>
-            <h2 style={{ color: 'var(--danger-red)' }}>No tienes permisos para cargar archivos.</h2>
-          </div>
-        </div>
-      )
-    }
-
+    if (!puedeCargar) return <div style={{ padding: '50px', textAlign: 'center' }}><h2>No tienes permisos.</h2></div>
     return (
-      <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
         {renderHeader()}
-        <main style={{ flex: 1, padding: '40px 20px', maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
-          
+        <main style={{ padding: '40px 20px', maxWidth: '1200px', margin: '0 auto' }}>
           <Card style={{ padding: '30px', marginBottom: '20px' }}>
-            <h2 style={{ margin: '0 0 15px 0', color: 'var(--text-dark)', fontSize: '22px' }}>Paso 1: Seleccionar Archivo</h2>
+            <h2 style={{ margin: '0 0 15px 0', fontSize: '22px' }}>Paso 1: Seleccionar Archivo</h2>
             <div style={{ display: 'flex', alignItems: 'center', gap: '20px', padding: '20px', border: '2px dashed #cbd5e1', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
-              <input type="file" id="file-upload-precios" accept=".xlsx, .xls" onChange={handleFileChange} style={{ fontSize: '14px' }} />
+              <input type="file" id="file-upload-precios" accept=".xlsx, .xls" onChange={handleFileChange} />
               {archivoExcel && <span style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>✅ {archivoExcel.name}</span>}
             </div>
           </Card>
 
           {previewData.length > 0 && (
-            <Card style={{ padding: '30px', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h2 style={{ margin: 0, color: 'var(--text-dark)', fontSize: '22px' }}>Paso 2: Previsualización</h2>
-              </div>
-              <div style={{ display: 'flex', gap: '20px', backgroundColor: '#f3f4f6', padding: '12px 20px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #e5e7eb', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <label style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-dark)' }}>T.C:</label>
-                  <input type="number" step="0.001" value={tipoCambio} onChange={handleTCChange} placeholder="Ej. 3.415" style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #d1d5db', width: '100px', fontSize: '14px' }} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <label style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-dark)' }}>FISE:</label>
-                  <input type="text" value={valorFise} readOnly placeholder="0.0000" style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #d1d5db', width: '100px', backgroundColor: '#e5e7eb', fontSize: '14px', color: 'var(--primary-blue)', fontWeight: 'bold' }} />
-                </div>
-              </div>
-
-              <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
+            <Card style={{ padding: '30px' }}>
+              <h2 style={{ margin: '0 0 20px 0', fontSize: '22px' }}>Paso 2: Previsualización</h2>
+              <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '20px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'center' }}>
-                  <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white', position: 'sticky', top: 0 }}>
-                    <tr>
-                      {previewHeaders.map((h, i) => (
-                        <th key={i} style={{ padding: '10px 8px', borderBottom: '2px solid #1e40af', whiteSpace: (i === 0 || i === 1) ? 'nowrap' : 'normal', wordBreak: 'break-word' }}>{h || '-'}</th>
-                      ))}
-                    </tr>
+                  <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white' }}>
+                    <tr>{previewHeaders.map((h, i) => <th key={i} style={{ padding: '10px' }}>{h || '-'}</th>)}</tr>
                   </thead>
                   <tbody>
-                    {previewData.map((row, rowIndex) => {
-                      if (row.includes('029') && row.includes('027')) return null; 
-                      return (
-                        <tr key={rowIndex} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: rowIndex % 2 === 0 ? 'white' : '#f9fafb' }}>
-                          {row.map((cell, cellIndex) => {
-                            let displayValue = cell;
-                            if (cellIndex > 1) {
-                              const num = parseFloat(String(cell).replace(',', '.'));
-                              if (!isNaN(num) && String(cell).trim() !== '') {
-                                displayValue = num === 0 ? '-' : num.toFixed(4);
-                              }
-                            } else if (cell === 0 || cell === '0') {
-                              displayValue = '-';
-                            }
-
-                            return (
-                              <td key={cellIndex} style={{ padding: '8px 6px', fontWeight: cellIndex === 1 ? 'bold' : 'normal', color: cellIndex === 1 ? 'var(--text-dark)' : 'var(--text-light)', whiteSpace: (cellIndex === 0 || cellIndex === 1) ? 'nowrap' : 'normal', wordBreak: 'break-word' }}>
-                                {displayValue}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      )
-                    })}
+                    {previewData.map((row, rowIndex) => (
+                      <tr key={rowIndex} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                        {row.map((cell, cellIndex) => {
+                          let val = cell;
+                          if (cellIndex > 1) {
+                            const num = parseFloat(String(cell).replace(',', '.'));
+                            if (!isNaN(num)) val = num === 0 ? '-' : num.toFixed(4);
+                          }
+                          return <td key={cellIndex} style={{ padding: '8px', fontWeight: cellIndex === 1 ? 'bold' : 'normal' }}>{val}</td>
+                        })}
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '25px' }}>
-                <button onClick={limpiarPrevisualizacion} style={{ padding: '10px 25px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}>LIMPIAR</button>
-                <button onClick={handleSubirArchivo} disabled={subiendo} style={{ padding: '10px 25px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: subiendo ? 'not-allowed' : 'pointer', fontSize: '14px' }}>{subiendo ? 'SUBIENDO...' : 'CONFIRMAR Y SUBIR'}</button>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <button onClick={limpiarPrevisualizacion} style={{ padding: '10px 25px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}>LIMPIAR</button>
+                <button onClick={handleSubirArchivo} disabled={subiendo} style={{ padding: '10px 25px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}>{subiendo ? 'SUBIENDO...' : 'CONFIRMAR Y SUBIR'}</button>
               </div>
             </Card>
           )}
@@ -708,111 +644,165 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
-  // --- VISTA 4: COMPARATIVA DE PRECIOS ---
+  if (vista === 'tendencias') {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
+        {renderHeader()}
+        <main style={{ padding: '40px 20px', maxWidth: '1000px', margin: '0 auto' }}>
+          <Card style={{ padding: '30px', marginBottom: '20px' }}>
+            <h2 style={{ margin: '0 0 20px 0', fontSize: '22px' }}>Evolución de Precios</h2>
+            <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: '200px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Planta</label>
+                <select value={plantaSeleccionada} onChange={(e) => setPlantaSeleccionada(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db' }}>
+                  <option value="">Seleccione...</option>
+                  {opcionesPlantas.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div style={{ flex: 1, minWidth: '200px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Producto</label>
+                <select value={productoSeleccionado} onChange={(e) => setProductoSeleccionado(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db' }}>
+                  <option value="">Seleccione...</option>
+                  {opcionesProductos.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <Boton variante="primary" onClick={cargarTendencias} disabled={cargandoTendencia} style={{ height: '42px' }}>
+                {cargandoTendencia ? 'Cargando...' : '📈 Generar Gráfico'}
+              </Boton>
+            </div>
+          </Card>
+
+          {cargandoTendencia ? (
+            <p style={{ textAlign: 'center', color: 'var(--text-light)' }}>Analizando historial de archivos...</p>
+          ) : datosTendencia.length > 0 ? (
+            <Card style={{ padding: '30px', height: '500px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={datosTendencia} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="fecha" />
+                  <YAxis domain={['auto', 'auto']} tickFormatter={(val) => val.toFixed(2)} />
+                  <Tooltip formatter={(value) => [`${value.toFixed(4)}`, 'Precio']} />
+                  <Legend />
+                  <Line type="monotone" dataKey="precio" name={productoSeleccionado} stroke="#0B5FA5" strokeWidth={3} activeDot={{ r: 8 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </Card>
+          ) : (
+            <p style={{ textAlign: 'center', color: 'var(--text-light)' }}>Selecciona una planta y producto para ver la tendencia histórica.</p>
+          )}
+        </main>
+      </div>
+    )
+  }
+
+  if (vista === 'auditoria') {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
+        {renderHeader()}
+        <main style={{ padding: '40px 20px', maxWidth: '1000px', margin: '0 auto' }}>
+          <Card style={{ padding: '30px' }}>
+            <h2 style={{ margin: '0 0 20px 0', fontSize: '22px' }}>Registro de Auditoría</h2>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white' }}>
+                  <tr>
+                    <th style={{ padding: '12px', textAlign: 'left' }}>FECHA / HORA</th>
+                    <th style={{ padding: '12px', textAlign: 'left' }}>USUARIO</th>
+                    <th style={{ padding: '12px', textAlign: 'left' }}>ACCIÓN</th>
+                    <th style={{ padding: '12px', textAlign: 'left' }}>ARCHIVO</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditoria.map(log => (
+                    <tr key={log.id} style={{ borderBottom: '1px solid #eee' }}>
+                      <td style={{ padding: '12px', color: 'var(--text-light)' }}>{new Date(log.created_at).toLocaleString()}</td>
+                      <td style={{ padding: '12px' }}>{log.usuario}</td>
+                      <td style={{ padding: '12px' }}>
+                        <span style={{ 
+                          padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold',
+                          backgroundColor: log.accion === 'SUBIDA' ? '#DCFCE7' : log.accion === 'VIGENTE' ? '#DBEAFE' : '#FEE2E2',
+                          color: log.accion === 'SUBIDA' ? '#166534' : log.accion === 'VIGENTE' ? '#1E40AF' : '#991B1B'
+                        }}>
+                          {log.accion}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px', fontWeight: 'bold' }}>{log.nombre_archivo}</td>
+                    </tr>
+                  ))}
+                  {auditoria.length === 0 && (
+                    <tr><td colSpan="4" style={{ padding: '20px', textAlign: 'center' }}>No hay registros de auditoría.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </main>
+      </div>
+    )
+  }
+
+  // VISTA COMPARAR
   if (vista === 'comparar') {
-    
     const filePrevio = archivos.find(a => a.id === idBase);
     const fileActual = archivos.find(a => a.id === idNuevo);
-
     return (
-      <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
         {renderHeader()}
-        <main style={{ flex: 1, padding: '40px 20px', maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
-          
+        <main style={{ padding: '40px 20px', maxWidth: '1200px', margin: '0 auto' }}>
           <Card style={{ padding: '30px', marginBottom: '20px' }}>
-            <h2 style={{ margin: '0 0 20px 0', color: 'var(--text-dark)', fontSize: '22px' }}>Configuración de la Comparación</h2>
-            
+            <h2 style={{ margin: '0 0 20px 0', fontSize: '22px' }}>Configuración</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '15px', alignItems: 'end' }}>
-              
               <div>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Lista de Precios Previa</label>
-                <div style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', color: '#000', backgroundColor: '#f9fafb', minHeight: '42px' }}>
-                  {filePrevio ? filePrevio.nombre_archivo : 'No hay archivo previo'}
-                </div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Previa</label>
+                <div style={{ padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', backgroundColor: '#f9fafb' }}>{filePrevio ? filePrevio.nombre_archivo : '-'}</div>
               </div>
-
               <div>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Lista de Precios Actual</label>
-                <div style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', color: '#000', backgroundColor: '#f9fafb', minHeight: '42px' }}>
-                  {fileActual ? fileActual.nombre_archivo : 'No hay archivo actual'}
-                </div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Actual</label>
+                <div style={{ padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', backgroundColor: '#f9fafb' }}>{fileActual ? fileActual.nombre_archivo : '-'}</div>
               </div>
-
               <div>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Tipo de Precio (Hoja)</label>
-                <select value={hojaComparar} onChange={(e) => setHojaComparar(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold', height: '42px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Hoja</label>
+                <select value={hojaComparar} onChange={(e) => setHojaComparar(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold' }}>
                   <option value="Precio Base">Precio Base</option>
                   <option value="Precios Planta Sin IGV">Precios Planta Sin IGV</option>
                   <option value="Precios Planta Con IGV">Precios Planta Con IGV</option>
                 </select>
               </div>
-
-              <Boton variante="primary" onClick={generarComparacion} disabled={cargandoComparacion || !idBase || !idNuevo} style={{ height: '42px' }}>
-                {cargandoComparacion ? 'Comparando...' : '⚖️ Comparar Ahora'}
-              </Boton>
+              <Boton variante="primary" onClick={generarComparacion} style={{ height: '42px' }}>⚖️ Comparar</Boton>
             </div>
           </Card>
 
           {datosComparados && (
-            <Card style={{ padding: '30px', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h2 style={{ margin: 0, color: 'var(--text-dark)', fontSize: '22px' }}>
-                  Variación - {hojaComparar}
-                </h2>
-                
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                  <div style={{ display: 'flex', gap: '15px', fontSize: '12px' }}>
-                    <span style={{ color: '#ef4444', fontWeight: 'bold' }}>🔴 Aumentó (+)</span>
-                    <span style={{ color: '#10b981', fontWeight: 'bold' }}>🟢 Bajó (-)</span>
-                    <span style={{ color: '#6b7280', fontWeight: 'bold' }}>⚪ Sin cambios</span>
-                  </div>
-                  
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <Boton variante="danger" onClick={exportarComparacionPDF}>📄 PDF</Boton>
-                    <Boton variante="success" onClick={exportarComparacionExcel}>⬇️ Excel</Boton>
-                  </div>
+            <Card style={{ padding: '30px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+                <h2 style={{ margin: 0, fontSize: '22px' }}>Variación - {hojaComparar}</h2>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <Boton variante="danger" onClick={exportarComparacionPDF}>📄 PDF</Boton>
+                  <Boton variante="success" onClick={exportarComparacionExcel}>⬇️ Excel</Boton>
                 </div>
               </div>
-
               <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'center' }}>
-                  <thead style={{ backgroundColor: '#1e293b', color: 'white', position: 'sticky', top: 0 }}>
+                  <thead style={{ backgroundColor: '#1e293b', color: 'white' }}>
                     <tr>
-                      <th style={{ padding: '12px 8px', borderBottom: '2px solid #0f172a', whiteSpace: 'nowrap' }}>CÓDIGO</th>
-                      <th style={{ padding: '12px 8px', borderBottom: '2px solid #0f172a', whiteSpace: 'nowrap' }}>PLANTAS</th>
-                      {datosComparados.columnas.map((col, i) => (
-                        <th key={i} style={{ padding: '12px 8px', borderBottom: '2px solid #0f172a', wordBreak: 'break-word', minWidth: '80px' }}>
-                          {col}
-                        </th>
-                      ))}
+                      <th style={{ padding: '12px' }}>CÓDIGO</th>
+                      <th style={{ padding: '12px' }}>PLANTAS</th>
+                      {datosComparados.columnas.map((col, i) => <th key={i} style={{ padding: '12px' }}>{col}</th>)}
                     </tr>
                   </thead>
                   <tbody>
-                    {datosComparados.rows.map((fila, rowIndex) => (
-                      <tr key={rowIndex} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: rowIndex % 2 === 0 ? 'white' : '#f9fafb' }}>
-                        <td style={{ padding: '10px 8px', color: 'var(--text-light)' }}>{fila.codigo}</td>
-                        <td style={{ padding: '10px 8px', fontWeight: 'bold', color: 'var(--text-dark)', whiteSpace: 'nowrap' }}>{fila.planta}</td>
-                        
-                        {datosComparados.columnas.map((col, colIndex) => {
+                    {datosComparados.rows.map((fila, rI) => (
+                      <tr key={rI} style={{ borderBottom: '1px solid #eee', backgroundColor: rI % 2 === 0 ? 'white' : '#f9fafb' }}>
+                        <td style={{ padding: '10px' }}>{fila.codigo}</td>
+                        <td style={{ padding: '10px', fontWeight: 'bold' }}>{fila.planta}</td>
+                        {datosComparados.columnas.map((col, cI) => {
                           const item = fila.variaciones[col];
-                          
-                          if (item === 'NUEVO') {
-                             return <td key={colIndex} style={{ padding: '10px 8px', color: '#3b82f6', fontWeight: 'bold', fontSize: '11px' }}>NUEVO</td>;
-                          }
-
-                          if (!item) {
-                            return <td key={colIndex} style={{ padding: '10px 8px', color: '#9ca3af' }}>-</td>;
-                          }
-
+                          if (item === 'NUEVO') return <td key={cI} style={{ color: '#3b82f6', fontWeight: 'bold' }}>NUEVO</td>;
+                          if (!item) return <td key={cI} style={{ color: '#9ca3af' }}>-</td>;
                           if (Math.abs(item.diff) > 0.00001) {
-                            if (item.diff > 0) {
-                              return <td key={colIndex} style={{ padding: '10px 8px', color: '#ef4444', fontWeight: 'bold' }}>+{item.diff.toFixed(4)}</td>;
-                            } else {
-                              return <td key={colIndex} style={{ padding: '10px 8px', color: '#10b981', fontWeight: 'bold' }}>{item.diff.toFixed(4)}</td>;
-                            }
+                            return <td key={cI} style={{ color: item.diff > 0 ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>{item.diff > 0 ? '+' : ''}{item.diff.toFixed(4)}</td>;
                           }
-
-                          return <td key={colIndex} style={{ padding: '10px 8px', color: '#6b7280' }}>0.0000</td>;
+                          return <td key={cI} style={{ color: '#6b7280' }}>0.0000</td>;
                         })}
                       </tr>
                     ))}
@@ -821,100 +811,64 @@ export default function GestionPrecios({ setPantalla, rol }) {
               </div>
             </Card>
           )}
-
         </main>
       </div>
     )
   }
 
-  // --- VISTA VISUALIZAR (CON TABLA DE GESTIÓN) ---
+  // VISTA VISUALIZAR
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
       {renderHeader()}
-      <main style={{ flex: 1, padding: '40px 20px', maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h2 style={{ color: 'var(--text-dark)', fontSize: '22px', margin: 0 }}>Listas de Precios Disponibles</h2>
+      <main style={{ padding: '40px 20px', maxWidth: '1000px', margin: '0 auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+          <h2 style={{ fontSize: '22px', margin: 0 }}>Listas de Precios Disponibles</h2>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <Boton variante="outline" onClick={() => setVista('comparar')} style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>⚖️ Comparar Listas</Boton>
+            <Boton variante="outline" onClick={() => setVista('comparar')} style={{ color: 'var(--primary-blue)' }}>⚖️ Comparar</Boton>
             <Boton variante="outline" onClick={fetchArchivos}>🔄 Refrescar</Boton>
           </div>
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '15px', marginBottom: '20px' }}>
-          <input type="text" placeholder="🔍 Buscar por nombre de archivo o correo..." value={filtroTexto} onChange={(e) => setFiltroTexto(e.target.value)} style={{ padding: '10px 15px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }} />
-          <input type="date" value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} title="Fecha Desde" style={{ padding: '10px 15px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', color: 'var(--text-light)' }} />
-          <input type="date" value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} title="Fecha Hasta" style={{ padding: '10px 15px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', color: 'var(--text-light)' }} />
-        </div>
-
         <Card style={{ padding: 0, overflow: 'hidden' }}>
-          {cargando ? (
-            <p style={{ padding: '30px', textAlign: 'center' }}>Cargando archivos...</p>
-          ) : archivosFiltrados.length === 0 ? (
-            <p style={{ padding: '30px', textAlign: 'center', color: 'var(--text-light)' }}>
-              {archivos.length === 0 ? 'No hay listas de precios cargadas aún.' : 'No se encontraron resultados para tu búsqueda.'}
-            </p>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white' }}>
-                  <tr style={{ textAlign: 'left' }}>
-                    <th style={{ padding: '15px' }}>FECHA</th>
-                    <th style={{ padding: '15px' }}>NOMBRE DEL ARCHIVO</th>
-                    <th style={{ padding: '15px' }}>SUBIDO POR</th>
-                    <th style={{ padding: '15px', textAlign: 'center' }}>ESTADO</th>
-                    <th style={{ padding: '15px', textAlign: 'center' }}>ACCIONES</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {archivosFiltrados.map((file) => (
-                    <tr key={file.id} style={{ borderBottom: '1px solid #eee', backgroundColor: file.es_vigente ? '#f0fdf4' : 'white' }}>
-                      <td style={{ padding: '15px', color: 'var(--text-light)' }}>
-                        {new Date(file.created_at).toLocaleDateString()} {new Date(file.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </td>
-                      <td style={{ padding: '15px', fontWeight: 'bold', color: 'var(--text-dark)' }}>📄 {file.nombre_archivo}</td>
-                      <td style={{ padding: '15px', fontSize: '12px', color: 'var(--text-light)' }}>{file.subido_por || 'SISTEMA'}</td>
-                      <td style={{ padding: '15px', textAlign: 'center' }}>
-                        {file.es_vigente ? (
-                          <span style={{ padding: '4px 10px', backgroundColor: '#DCFCE7', color: '#166534', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>🟢 VIGENTE</span>
-                        ) : (
-                          <span style={{ padding: '4px 10px', backgroundColor: '#F3F4F6', color: '#6B7280', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>HISTÓRICO</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '15px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                          <a href={file.url_archivo} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                            <Boton variante="outline" tamano="sm" style={{ color: 'var(--primary-blue)' }}>⬇️</Boton>
-                          </a>
-                          {puedeGestionar && !file.es_vigente && (
-                            <Boton variante="success" tamano="sm" onClick={() => marcarComoVigente(file.id)} title="Marcar como vigente">✅</Boton>
-                          )}
-                          {puedeGestionar && (
-                            <Boton variante="danger" tamano="sm" onClick={() => abrirModalEliminar(file)} title="Eliminar lista">🗑️</Boton>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+            <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white', textAlign: 'left' }}>
+              <tr>
+                <th style={{ padding: '15px' }}>FECHA</th>
+                <th style={{ padding: '15px' }}>NOMBRE</th>
+                <th style={{ padding: '15px' }}>SUBIDO POR</th>
+                <th style={{ padding: '15px', textAlign: 'center' }}>ESTADO</th>
+                <th style={{ padding: '15px', textAlign: 'center' }}>ACCIONES</th>
+              </tr>
+            </thead>
+            <tbody>
+              {archivos.map(file => (
+                <tr key={file.id} style={{ borderBottom: '1px solid #eee', backgroundColor: file.es_vigente ? '#f0fdf4' : 'white' }}>
+                  <td style={{ padding: '15px', color: 'var(--text-light)' }}>{new Date(file.created_at).toLocaleDateString()}</td>
+                  <td style={{ padding: '15px', fontWeight: 'bold' }}>📄 {file.nombre_archivo}</td>
+                  <td style={{ padding: '15px', fontSize: '12px', color: 'var(--text-light)' }}>{file.subido_por}</td>
+                  <td style={{ padding: '15px', textAlign: 'center' }}>
+                    {file.es_vigente ? <span style={{ padding: '4px 10px', backgroundColor: '#DCFCE7', color: '#166534', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>🟢 VIGENTE</span> : <span style={{ padding: '4px 10px', backgroundColor: '#F3F4F6', color: '#6B7280', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold' }}>HISTÓRICO</span>}
+                  </td>
+                  <td style={{ padding: '15px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                      <a href={file.url_archivo} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}><Boton variante="outline" tamano="sm">⬇️</Boton></a>
+                      {puedeGestionar && !file.es_vigente && <Boton variante="success" tamano="sm" onClick={() => marcarComoVigente(file.id, file.nombre_archivo)}>✅</Boton>}
+                      {puedeGestionar && <Boton variante="danger" tamano="sm" onClick={() => { setArchivoAEliminar(file); setModalEliminarAbierto(true); }}>🗑️</Boton>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </Card>
       </main>
-
-      {/* MODAL DE CONFIRMACIÓN DE ELIMINACIÓN */}
       {modalEliminarAbierto && (
         <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '450px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
-            <h3 style={{ margin: '0 0 10px 0', color: 'var(--danger-red)', fontSize: '22px' }}>⚠️ Confirmar Eliminación</h3>
-            <p style={{ color: 'var(--text-dark)', marginBottom: '20px', fontSize: '14px', lineHeight: '1.5' }}>
-              ¿Estás seguro que deseas eliminar permanentemente la lista <strong>{archivoAEliminar?.nombre_archivo}</strong>?<br/><br/>
-              Esta acción borrará el archivo del almacenamiento y no se podrá recuperar.
-            </p>
-            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-              <Boton variante="outline" onClick={() => setModalEliminarAbierto(false)} style={{ flex: 1 }} disabled={eliminando}>Cancelar</Boton>
-              <Boton variante="danger" onClick={confirmarEliminar} style={{ flex: 2 }} disabled={eliminando}>{eliminando ? 'Eliminando...' : 'Sí, Eliminar'}</Boton>
+          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '450px' }}>
+            <h3 style={{ color: 'var(--danger-red)', marginTop: 0 }}>⚠️ Confirmar Eliminación</h3>
+            <p>¿Eliminar permanentemente <strong>{archivoAEliminar?.nombre_archivo}</strong>?</p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <Boton variante="outline" onClick={() => setModalEliminarAbierto(false)} style={{ flex: 1 }}>Cancelar</Boton>
+              <Boton variante="danger" onClick={confirmarEliminar} style={{ flex: 1 }} disabled={eliminando}>{eliminando ? 'Eliminando...' : 'Sí, Eliminar'}</Boton>
             </div>
           </div>
         </div>
