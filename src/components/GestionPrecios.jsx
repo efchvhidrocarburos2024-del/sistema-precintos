@@ -14,17 +14,22 @@ const cardStyle = {
 }
 const btnHeaderStyle = { background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }
 
-// Paleta de colores para las múltiples líneas
-const COLORS = ['#0B5FA5', '#10b981', '#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#f43f5e', '#84cc16']
+const COLORS = ['#0B5FA5', '#10b981', '#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#f43f5e', '#84cc16', '#f97316', '#6366f1']
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
+    // Ordenar de mayor a menor precio para fácil lectura
+    const sortedPayload = [...payload].sort((a, b) => b.value - a.value);
+    
     return (
-      <div style={{ backgroundColor: '#1e293b', color: 'white', padding: '10px 15px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', maxHeight: '300px', overflowY: 'auto' }}>
-        <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#cbd5e1', fontWeight: 'bold' }}>{label}</p>
-        {payload.map((entry, index) => (
-          <div key={index} style={{ display: 'flex', justifyContent: 'space-between', gap: '15px', fontSize: '12px', marginBottom: '4px' }}>
-            <span style={{ color: entry.color }}>{entry.name}:</span>
+      <div style={{ backgroundColor: '#1e293b', color: 'white', padding: '12px 16px', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', maxHeight: '350px', overflowY: 'auto', border: '1px solid #334155' }}>
+        <p style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#cbd5e1', fontWeight: 'bold', borderBottom: '1px solid #334155', paddingBottom: '5px' }}>{label}</p>
+        {sortedPayload.map((entry, index) => (
+          <div key={index} style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', fontSize: '12px', marginBottom: '6px' }}>
+            <span style={{ color: entry.color, display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: entry.color }}></span>
+              {entry.name}:
+            </span>
             <span style={{ fontWeight: 'bold' }}>S/ {Number(entry.value).toFixed(4)}</span>
           </div>
         ))}
@@ -39,10 +44,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [archivos, setArchivos] = useState([])
   const [cargando, setCargando] = useState(false)
   
-  const [filtroTexto, setFiltroTexto] = useState('')
-  const [fechaDesde, setFechaDesde] = useState('')
-  const [fechaHasta, setFechaHasta] = useState('')
-
+  // Estados de carga
   const [archivoExcel, setArchivoExcel] = useState(null)
   const [subiendo, setSubiendo] = useState(false)
   const [previewData, setPreviewData] = useState([])
@@ -50,12 +52,14 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [tipoCambio, setTipoCambio] = useState('')
   const [valorFise, setValorFise] = useState('')
 
+  // Estados de comparación
   const [idBase, setIdBase] = useState('')
   const [idNuevo, setIdNuevo] = useState('')
   const [hojaComparar, setHojaComparar] = useState('Precio Base')
   const [datosComparados, setDatosComparados] = useState(null)
   const [cargandoComparacion, setCargandoComparacion] = useState(false)
 
+  // Estados de auditoría
   const [auditoria, setAuditoria] = useState([])
 
   // Estados para Tendencias
@@ -70,6 +74,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [opcionesPlantas, setOpcionesPlantas] = useState([])
   const [opcionesProductos, setOpcionesProductos] = useState([])
 
+  // Modales
   const [modalEliminarAbierto, setModalEliminarAbierto] = useState(false)
   const [archivoAEliminar, setArchivoAEliminar] = useState(null)
   const [eliminando, setEliminando] = useState(false)
@@ -78,6 +83,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const puedeCargar = rolesCarga.includes(rol)
   const puedeGestionar = ['admin_sistema', 'jefe_pricing'].includes(rol)
 
+  // --- LÓGICA DE ARCHIVOS ---
   const extraerFecha = (nombre) => {
     if (!nombre) return '1900-01-01';
     const regex = /(\d{4}[-_]\d{2}[-_]\d{2})|(\d{2}[-_]\d{2}[-_]\d{4})/;
@@ -95,9 +101,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     if (vista === 'visualizar' || vista === 'comparar' || vista === 'auditoria' || vista === 'tendencias') {
       fetchArchivos()
     }
-    if (vista === 'auditoria') {
-      fetchAuditoria()
-    }
+    if (vista === 'auditoria') fetchAuditoria()
   }, [vista])
 
   useEffect(() => {
@@ -135,25 +139,17 @@ export default function GestionPrecios({ setPantalla, rol }) {
   }
 
   async function fetchAuditoria() {
-    const { data, error } = await supabase
-      .from('precios_auditoria')
-      .select('*')
-      .order('created_at', { ascending: false })
-    
+    const { data, error } = await supabase.from('precios_auditoria').select('*').order('created_at', { ascending: false })
     if (error) console.error(error)
     else setAuditoria(data || [])
   }
 
   async function registrarAuditoria(id_archivo, nombre_archivo, accion) {
     const { data: { user } } = await supabase.auth.getUser()
-    await supabase.from('precios_auditoria').insert({
-      id_archivo,
-      nombre_archivo,
-      accion,
-      usuario: user.email
-    })
+    await supabase.from('precios_auditoria').insert({ id_archivo, nombre_archivo, accion, usuario: user.email })
   }
 
+  // --- LÓGICA DE EXCEL ---
   const normalizarTexto = (txt) => {
     if (!txt) return '';
     return String(txt).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').replace(/N°/gi, 'N').trim().toUpperCase();
@@ -182,9 +178,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
   const esPlantaValida = (nombre) => {
     const n = normalizarTexto(nombre);
-    if (n.length < 3) return false;
-    if (n.includes('*')) return false;
-    if (!isNaN(Number(n))) return false; 
+    if (n.length < 3 || n.includes('*') || !isNaN(Number(n))) return false;
     if (n.match(/\d{4}-\d{2}-\d{2}/) || n.match(/\d{2}\/\d{2}\/\d{4}/)) return false; 
     if (n.includes('TOTAL') || n.includes('IGV') || n.includes('ISC') || n.includes('RODAJE') || n.includes('INCREMENTO') || n.includes('INCLUSION') || n.includes('DISMINUCION')) return false;
     return true;
@@ -211,6 +205,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     };
   };
 
+  // --- COMPARACIÓN ---
   const generarComparacion = async () => {
     if (!idBase || !idNuevo) return toast.error('Faltan listas para comparar.');
     if (idBase === idNuevo) return toast.error('Las listas deben ser diferentes');
@@ -273,6 +268,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   };
 
+  // --- LÓGICA DE TENDENCIAS (MEJORADA) ---
   const cargarTendencias = async () => {
     if (!plantaSeleccionada || !productoSeleccionado) return toast.error('Selecciona una planta y un producto');
     setCargandoTendencia(true);
@@ -290,8 +286,8 @@ export default function GestionPrecios({ setPantalla, rol }) {
       for (const file of archivosProcesar) {
         const data = await parseExcelFile(file.url_archivo, hojaTendencia);
         const idxPlanta = data.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
-        
         const fecha = extraerFecha(file.nombre_archivo);
+        
         if (!tendenciaAgrupada[fecha]) tendenciaAgrupada[fecha] = { fecha };
 
         if (plantaSeleccionada === 'TODOS' && productoSeleccionado !== 'TODOS') {
@@ -324,6 +320,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
             });
           }
         } else if (plantaSeleccionada === 'TODOS' && productoSeleccionado === 'TODOS') {
+          // Si ambos son TODOS, graficamos el promedio de cada planta
           data.rows.forEach(fila => {
             const nombrePlanta = String(fila[idxPlanta]).trim();
             if (esPlantaValida(nombrePlanta)) {
@@ -359,20 +356,45 @@ export default function GestionPrecios({ setPantalla, rol }) {
       if (datosArray.length < 2) throw new Error("No hay suficientes datos históricos válidos.");
 
       setDatosTendencia(datosArray);
-      setLineasDinamicas(Array.from(nombresLineas));
+      const lineasArray = Array.from(nombresLineas);
+      setLineasDinamicas(lineasArray);
 
-      const primeraLinea = Array.from(nombresLineas)[0];
-      if (primeraLinea) {
-        const precios = datosArray.map(d => d[primeraLinea]).filter(v => v !== undefined);
-        const actual = precios[precios.length - 1];
-        const anterior = precios[precios.length - 2];
-        setMetricas({ 
-          actual, 
-          min: Math.min(...precios), 
-          max: Math.max(...precios), 
-          variacion: actual - anterior,
-          lineaReferencia: primeraLinea
-        });
+      // --- CÁLCULO DE MÉTRICAS INTELIGENTE ---
+      if (lineasArray.length > 0) {
+        let actual = 0, min = Infinity, max = -Infinity, variacion = 0;
+        let labelReferencia = '';
+
+        if (plantaSeleccionada === 'TODOS' && productoSeleccionado === 'TODOS') {
+          labelReferencia = 'Promedio Global (Plantas)';
+          // Calcular el promedio de todos los valores en cada fecha
+          const promediosPorFecha = datosArray.map(d => {
+            const vals = Object.entries(d).filter(([k, v]) => k !== 'fecha' && v !== undefined).map(([_, v]) => v);
+            return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : undefined;
+          }).filter(v => v !== undefined);
+
+          if (promediosPorFecha.length > 0) {
+            actual = promediosPorFecha[promediosPorFecha.length - 1];
+            variacion = promediosPorFecha.length > 1 ? actual - promediosPorFecha[promediosPorFecha.length - 2] : 0;
+            // El min y max se calculan sobre todos los valores individuales
+            const allVals = datosArray.flatMap(d => Object.entries(d).filter(([k, v]) => k !== 'fecha' && v !== undefined).map(([_, v]) => v));
+            min = Math.min(...allVals);
+            max = Math.max(...allVals);
+          }
+        } else {
+          // Si hay un filtro específico (o es de 1 sola línea), calculamos sobre esa línea
+          const primeraLinea = lineasArray[0];
+          labelReferencia = primeraLinea;
+          const precios = datosArray.map(d => d[primeraLinea]).filter(v => v !== undefined);
+          
+          if (precios.length > 0) {
+            actual = precios[precios.length - 1];
+            variacion = precios.length > 1 ? actual - precios[precios.length - 2] : 0;
+            min = Math.min(...precios);
+            max = Math.max(...precios);
+          }
+        }
+        
+        setMetricas({ actual, min, max, variacion, lineaReferencia: labelReferencia });
       } else {
          setMetricas(null);
       }
@@ -398,6 +420,18 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   }, [vista, archivos, opcionesPlantas.length]);
 
+  // Exportar datos del gráfico
+  const exportarTendenciaExcel = () => {
+    if (!datosTendencia || datosTendencia.length === 0) return toast.error('No hay datos para exportar');
+    
+    const ws = XLSX.utils.json_to_sheet(datosTendencia);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Tendencia');
+    XLSX.writeFile(wb, `Tendencia_${hojaTendencia}.xlsx`);
+    toast.success('Datos exportados a Excel');
+  };
+
+  // --- GESTIÓN DE ARCHIVOS ---
   const marcarComoVigente = async (id, nombre) => {
     try {
       await supabase.from('precios_archivos').update({ es_vigente: false }).eq('es_vigente', true)
@@ -501,28 +535,17 @@ export default function GestionPrecios({ setPantalla, rol }) {
     setSubiendo(true)
     
     try {
-      // --- VALIDACIÓN DE DUPLICADOS (Experto) ---
+      // --- VALIDACIÓN DE DUPLICADOS ---
       const nombreNormalizado = archivoExcel.name.trim();
       const fechaNueva = extraerFecha(archivoExcel.name);
 
-      // 1. Validar por nombre exacto
-      const { data: existeNombre } = await supabase
-        .from('precios_archivos')
-        .select('id')
-        .eq('nombre_archivo', nombreNormalizado)
-        .limit(1);
-
+      const { data: existeNombre } = await supabase.from('precios_archivos').select('id').eq('nombre_archivo', nombreNormalizado).limit(1);
       if (existeNombre && existeNombre.length > 0) {
         throw new Error(`El archivo "${nombreNormalizado}" ya fue subido anteriormente.`);
       }
 
-      // 2. Validar por fecha (Evita subir 2 archivos para el mismo día con nombres distintos)
       if (fechaNueva !== '1900-01-01') {
-        const { data: existeFecha } = await supabase
-          .from('precios_archivos')
-          .select('nombre_archivo')
-          .like('nombre_archivo', `%${fechaNueva}%`);
-          
+        const { data: existeFecha } = await supabase.from('precios_archivos').select('nombre_archivo').like('nombre_archivo', `%${fechaNueva}%`);
         if (existeFecha && existeFecha.length > 0) {
           throw new Error(`Ya existe una lista registrada para la fecha ${fechaNueva} ("${existeFecha[0].nombre_archivo}"). Elimine la anterior si desea reemplazarla.`);
         }
@@ -620,7 +643,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
       if (data.section === 'body' && data.column.index > 1) {
         const t = data.cell.text[0];
         if (t.startsWith('+')) { data.cell.styles.textColor = [239, 68, 68]; data.cell.styles.fontStyle = 'bold'; }
-        else if (t.startsWith('-')) { data.cell.styles.textColor = [16, 185, 129]; data.cell.styles.fontStyle = 'bold'; }
+        else if (t.startsWith('-')) { data.cell.styles.textColor = [16, 185, 129]; data.cell.styles.fontWeight = 'bold'; }
         else if (t === 'NUEVO') { data.cell.styles.textColor = [59, 130, 246]; }
       }
     }});
@@ -781,21 +804,21 @@ export default function GestionPrecios({ setPantalla, rol }) {
           {metricas && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '20px' }}>
               <Card style={{ padding: '20px', textAlign: 'center', borderTop: '4px solid var(--primary-blue)' }}>
-                <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: 'var(--text-light)', fontWeight: 'bold' }}>PRECIO ACTUAL ({metricas.lineaReferencia})</p>
+                <p style={{ margin: '0 0 5px 0', fontSize: '12px', color: 'var(--text-light)', fontWeight: 'bold', textTransform: 'uppercase' }}>Precio Actual ({metricas.lineaReferencia})</p>
                 <h3 style={{ margin: 0, fontSize: '24px', color: 'var(--primary-blue)' }}>S/ {metricas.actual.toFixed(4)}</h3>
               </Card>
               <Card style={{ padding: '20px', textAlign: 'center', borderTop: `4px solid ${metricas.variacion > 0 ? '#ef4444' : metricas.variacion < 0 ? '#10b981' : '#6b7280'}` }}>
-                <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: 'var(--text-light)', fontWeight: 'bold' }}>VARIACIÓN RECIENTE</p>
+                <p style={{ margin: '0 0 5px 0', fontSize: '12px', color: 'var(--text-light)', fontWeight: 'bold', textTransform: 'uppercase' }}>Variación Reciente</p>
                 <h3 style={{ margin: 0, fontSize: '24px', color: metricas.variacion > 0 ? '#ef4444' : metricas.variacion < 0 ? '#10b981' : '#6b7280' }}>
                   {metricas.variacion > 0 ? '+' : ''}{metricas.variacion.toFixed(4)}
                 </h3>
               </Card>
               <Card style={{ padding: '20px', textAlign: 'center', borderTop: '4px solid #10b981' }}>
-                <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: 'var(--text-light)', fontWeight: 'bold' }}>PRECIO MÍNIMO</p>
+                <p style={{ margin: '0 0 5px 0', fontSize: '12px', color: 'var(--text-light)', fontWeight: 'bold', textTransform: 'uppercase' }}>Precio Mínimo</p>
                 <h3 style={{ margin: 0, fontSize: '24px', color: '#166534' }}>S/ {metricas.min.toFixed(4)}</h3>
               </Card>
               <Card style={{ padding: '20px', textAlign: 'center', borderTop: '4px solid #ef4444' }}>
-                <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: 'var(--text-light)', fontWeight: 'bold' }}>PRECIO MÁXIMO</p>
+                <p style={{ margin: '0 0 5px 0', fontSize: '12px', color: 'var(--text-light)', fontWeight: 'bold', textTransform: 'uppercase' }}>Precio Máximo</p>
                 <h3 style={{ margin: 0, fontSize: '24px', color: '#991b1b' }}>S/ {metricas.max.toFixed(4)}</h3>
               </Card>
             </div>
@@ -808,30 +831,37 @@ export default function GestionPrecios({ setPantalla, rol }) {
                 <p style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>Analizando historial de archivos...</p>
               </div>
             ) : datosTendencia.length > 0 ? (
-              <div style={{ width: '100%', height: '100%', minHeight: '350px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={datosTendencia} margin={{ top: 20, right: 30, left: 20, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="fecha" tick={{ fontSize: 12, fill: '#64748b' }} tickMargin={10} />
-                    <YAxis domain={['auto', 'auto']} tickFormatter={(val) => val.toFixed(2)} tick={{ fontSize: 12, fill: '#64748b' }} width={60} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                    {lineasDinamicas.map((linea, index) => (
-                      <Line 
-                        key={linea}
-                        type="monotone" 
-                        dataKey={linea} 
-                        name={linea} 
-                        stroke={COLORS[index % COLORS.length]} 
-                        strokeWidth={3} 
-                        dot={{ r: 3, strokeWidth: 2, stroke: '#fff' }} 
-                        activeDot={{ r: 6 }} 
-                        connectNulls
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              <>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+                  <button onClick={exportarTendenciaExcel} style={{ padding: '6px 12px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    ⬇️ Exportar Datos (Excel)
+                  </button>
+                </div>
+                <div style={{ width: '100%', height: '100%', minHeight: '350px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={datosTendencia} margin={{ top: 20, right: 30, left: 20, bottom: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                      <XAxis dataKey="fecha" tick={{ fontSize: 12, fill: '#64748b' }} tickMargin={10} />
+                      <YAxis domain={['auto', 'auto']} tickFormatter={(val) => val.toFixed(2)} tick={{ fontSize: 12, fill: '#64748b' }} width={60} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '15px' }} />
+                      {lineasDinamicas.map((linea, index) => (
+                        <Line 
+                          key={linea}
+                          type="monotone" 
+                          dataKey={linea} 
+                          name={linea} 
+                          stroke={COLORS[index % COLORS.length]} 
+                          strokeWidth={3} 
+                          dot={{ r: 3, strokeWidth: 2, stroke: '#fff' }} 
+                          activeDot={{ r: 6 }} 
+                          connectNulls
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
             ) : (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'var(--text-light)' }}>
                 <div style={{ fontSize: '50px', marginBottom: '15px' }}>📉</div>
@@ -975,6 +1005,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
+  // Vista por defecto (Visualizar Listas)
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
       {renderHeader()}
