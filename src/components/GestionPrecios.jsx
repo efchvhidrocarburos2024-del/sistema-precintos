@@ -16,6 +16,11 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [archivos, setArchivos] = useState([])
   const [cargando, setCargando] = useState(false)
   
+  // --- ESTADOS PARA FILTROS ---
+  const [filtroTexto, setFiltroTexto] = useState('')
+  const [fechaDesde, setFechaDesde] = useState('')
+  const [fechaHasta, setFechaHasta] = useState('')
+
   // --- ESTADOS PARA SUBIDA Y PREVISUALIZACIÓN ---
   const [archivoExcel, setArchivoExcel] = useState(null)
   const [subiendo, setSubiendo] = useState(false)
@@ -44,31 +49,49 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   }, [vista])
 
-  // --- LÓGICA DE ORDENAMIENTO (CORREGIDA) ---
   async function fetchArchivos() {
     setCargando(true)
-    const { data, error } = await supabase
-      .from('precios_archivos')
-      .select('*')
+    const { data, error } = await supabase.from('precios_archivos').select('*')
 
     if (error) {
       toast.error('Error al cargar los archivos')
     } else {
       let lista = data || []
-
-      // Ordenar: 
-      // 1. El VIGENTE siempre arriba.
-      // 2. Si hay varios históricos, el más recién subido (created_at) va primero.
       lista.sort((a, b) => {
         if (a.es_vigente && !b.es_vigente) return -1;
         if (!a.es_vigente && b.es_vigente) return 1;
         return new Date(b.created_at) - new Date(a.created_at);
       });
-
       setArchivos(lista);
     }
     setCargando(false)
   }
+
+  // --- LÓGICA DE FILTRADO ---
+  const archivosFiltrados = archivos.filter(file => {
+    // 1. Filtro por texto (Nombre o Subido por)
+    const coincideTexto = 
+      file.nombre_archivo.toLowerCase().includes(filtroTexto.toLowerCase()) || 
+      (file.subido_por && file.subido_por.toLowerCase().includes(filtroTexto.toLowerCase()));
+
+    // 2. Filtro por Fecha Desde
+    let coincideDesde = true;
+    if (fechaDesde) {
+      const fechaArchivo = new Date(file.created_at).setHours(0,0,0,0);
+      const fechaLimite = new Date(fechaDesde).setHours(0,0,0,0);
+      coincideDesde = fechaArchivo >= fechaLimite;
+    }
+
+    // 3. Filtro por Fecha Hasta
+    let coincideHasta = true;
+    if (fechaHasta) {
+      const fechaArchivo = new Date(file.created_at).setHours(23,59,59,999);
+      const fechaLimite = new Date(fechaHasta).setHours(23,59,59,999);
+      coincideHasta = fechaArchivo <= fechaLimite;
+    }
+
+    return coincideTexto && coincideDesde && coincideHasta;
+  });
 
   // --- LÓGICA: MARCAR COMO VIGENTE MANUALMENTE ---
   const marcarComoVigente = async (id) => {
@@ -218,31 +241,27 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const nombreLimpio = archivoExcel.name.replace(/\s+/g, '_')
       const fileName = `listas_precios/${Date.now()}_${nombreLimpio}`
       
-      // 1. Subir al Storage
       const { error: uploadError } = await supabase.storage
         .from('documentos_sigmo')
         .upload(fileName, archivoExcel)
 
       if (uploadError) throw uploadError
 
-      // 2. Obtener URL Pública
       const { data: { publicUrl } } = supabase.storage
         .from('documentos_sigmo')
         .getPublicUrl(fileName)
 
       const { data: { user } } = await supabase.auth.getUser()
 
-      // 3. Antes de insertar, quitamos el vigente a TODOS los anteriores
       await supabase.from('precios_archivos').update({ es_vigente: false }).eq('es_vigente', true)
 
-      // 4. Insertar la nueva lista como VIGENTE por defecto
       const { error: dbError } = await supabase
         .from('precios_archivos')
         .insert({
           nombre_archivo: archivoExcel.name,
           url_archivo: publicUrl,
           subido_por: user.email,
-          es_vigente: true // <-- SIEMPRE SERÁ VIGENTE AL SUBIR
+          es_vigente: true
         })
 
       if (dbError) throw dbError
@@ -287,7 +306,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
             <div onClick={() => setVista('visualizar')} style={cardStyle} onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary-blue)'} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>👁️</div>
               <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Visualizar Lista</h3>
-              <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Ver y descargar archivos Excel.</p>
+              <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Ver, buscar y descargar archivos Excel.</p>
             </div>
 
             {puedeCargar && (
@@ -438,16 +457,44 @@ export default function GestionPrecios({ setPantalla, rol }) {
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
       {renderHeader()}
       <main style={{ flex: 1, padding: '40px 20px', maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
+        
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h2 style={{ color: 'var(--text-dark)', fontSize: '22px', margin: 0 }}>Listas de Precios Disponibles</h2>
           <Boton variante="outline" onClick={fetchArchivos}>🔄 Refrescar</Boton>
         </div>
 
+        {/* BARRA DE FILTROS */}
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+          <input 
+            type="text" 
+            placeholder="🔍 Buscar por nombre de archivo o correo..." 
+            value={filtroTexto}
+            onChange={(e) => setFiltroTexto(e.target.value)}
+            style={{ padding: '10px 15px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
+          />
+          <input 
+            type="date" 
+            value={fechaDesde}
+            onChange={(e) => setFechaDesde(e.target.value)}
+            title="Fecha Desde"
+            style={{ padding: '10px 15px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', color: 'var(--text-light)' }}
+          />
+          <input 
+            type="date" 
+            value={fechaHasta}
+            onChange={(e) => setFechaHasta(e.target.value)}
+            title="Fecha Hasta"
+            style={{ padding: '10px 15px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', color: 'var(--text-light)' }}
+          />
+        </div>
+
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           {cargando ? (
             <p style={{ padding: '30px', textAlign: 'center' }}>Cargando archivos...</p>
-          ) : archivos.length === 0 ? (
-            <p style={{ padding: '30px', textAlign: 'center', color: 'var(--text-light)' }}>No hay listas de precios cargadas aún.</p>
+          ) : archivosFiltrados.length === 0 ? (
+            <p style={{ padding: '30px', textAlign: 'center', color: 'var(--text-light)' }}>
+              {archivos.length === 0 ? 'No hay listas de precios cargadas aún.' : 'No se encontraron resultados para tu búsqueda.'}
+            </p>
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
@@ -461,7 +508,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {archivos.map((file) => (
+                  {archivosFiltrados.map((file) => (
                     <tr key={file.id} style={{ borderBottom: '1px solid #eee', backgroundColor: file.es_vigente ? '#f0fdf4' : 'white' }}>
                       <td style={{ padding: '15px', color: 'var(--text-light)' }}>
                         {new Date(file.created_at).toLocaleDateString()} {new Date(file.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
