@@ -69,26 +69,18 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   }, [vista])
 
-  // Autocompletado inteligente por fecha del DOCUMENTO (no de subida)
+  // Autocompletado de selectores (solo para la vista comparar)
   useEffect(() => {
     if (vista === 'comparar' && archivos.length > 0) {
-      // Ordenamos estrictamente por la fecha en el nombre del archivo (mayor a menor)
       const ordenados = [...archivos].sort((a, b) => {
         const fA = extraerFecha(a.nombre_archivo);
         const fB = extraerFecha(b.nombre_archivo);
         return fB.localeCompare(fA); 
       });
 
-      // El "Actual" es el más reciente por fecha del documento
-      if (ordenados.length >= 1) {
-        setIdNuevo(ordenados[0].id);
-      }
-      // El "Previo" es el segundo más reciente
-      if (ordenados.length >= 2) {
-        setIdBase(ordenados[1].id);
-      } else {
-        setIdBase('');
-      }
+      if (ordenados.length >= 1) setIdNuevo(ordenados[0].id);
+      if (ordenados.length >= 2) setIdBase(ordenados[1].id);
+      else setIdBase('');
     }
   }, [vista, archivos]);
 
@@ -100,9 +92,20 @@ export default function GestionPrecios({ setPantalla, rol }) {
       toast.error('Error al cargar los archivos')
     } else {
       let lista = data || []
+      // LÓGICA DE ORDENAMIENTO CORREGIDA: Fecha del documento (Nombre) y luego Vigente
       lista.sort((a, b) => {
+        // 1. El vigente siempre va primero
         if (a.es_vigente && !b.es_vigente) return -1;
         if (!a.es_vigente && b.es_vigente) return 1;
+        
+        // 2. Ordenar por la fecha del DOCUMENTO en el nombre (más reciente primero)
+        const fA = extraerFecha(a.nombre_archivo);
+        const fB = extraerFecha(b.nombre_archivo);
+        if (fA !== fB) {
+          return fB.localeCompare(fA);
+        }
+        
+        // 3. Si tienen la misma fecha en el nombre, ordenar por fecha de subida
         return new Date(b.created_at) - new Date(a.created_at);
       });
       setArchivos(lista);
@@ -723,7 +726,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
               
               <div>
                 <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Lista de Precios Previa</label>
-                {/* BLOQUE DE SOLO LECTURA */}
                 <div style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', color: '#000', backgroundColor: '#f9fafb', minHeight: '42px' }}>
                   {filePrevio ? filePrevio.nombre_archivo : 'No hay archivo previo'}
                 </div>
@@ -731,7 +733,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
               <div>
                 <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Lista de Precios Actual</label>
-                {/* BLOQUE DE SOLO LECTURA */}
                 <div style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', color: '#000', backgroundColor: '#f9fafb', minHeight: '42px' }}>
                   {fileActual ? fileActual.nombre_archivo : 'No hay archivo actual'}
                 </div>
