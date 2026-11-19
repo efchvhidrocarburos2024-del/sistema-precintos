@@ -23,11 +23,11 @@ import GestionPlantas from './components/GestionPlantas'
 import PanelRespaldos from './components/PanelRespaldos'
 import RepositorioDocumental from './components/RepositorioDocumental'
 import GestionCatalogos from './components/GestionCatalogos'
+import GestionPrecios from './components/GestionPrecios' // <-- NUEVO IMPORT
 
 const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000;
 const TIEMPO_DE_AVISO = TIEMPO_INACTIVIDAD_TOTAL - (2 * 60 * 1000);
 
-// Estilos reutilizables para las tarjetas
 const cardStyle = {
   backgroundColor: 'white',
   borderRadius: '12px',
@@ -52,7 +52,7 @@ function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
 
   const puedeVerPrecintos = rolesPrecintos.includes(rol);
   const puedeVerRepositorio = rolesRepositorio.includes(rol);
-  const puedeVerCatalogos = rol === 'admin_sistema'; // Solo el admin del sistema
+  const puedeVerCatalogos = rol === 'admin_sistema'; 
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
@@ -119,15 +119,15 @@ function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
             </div>
           )}
 
-          {/* MÓDULO FUTURO: FLOTA (BLOQUEADO) */}
-          <div style={{ ...cardStyle, opacity: 0.6, cursor: 'not-allowed' }}>
-            <div style={{ fontSize: '50px', marginBottom: '15px' }}>🚚</div>
-            <h3 style={{ color: 'var(--text-dark)', marginBottom: '15px', fontSize: '20px' }}>Gestión de Flota</h3>
+          {/* MÓDULO 4: LISTA DE PRECIOS (NUEVO - Visible para todos) */}
+          <div style={{ ...cardStyle, borderColor: 'var(--primary-blue)' }} onClick={() => setPantalla('precios_menu')}>
+            <div style={{ fontSize: '50px', marginBottom: '15px' }}>💰</div>
+            <h3 style={{ color: 'var(--primary-blue)', marginBottom: '15px', fontSize: '20px' }}>Lista de Precios</h3>
             <p style={{ color: 'var(--text-light)', marginBottom: '25px', fontSize: '14px', lineHeight: '1.5' }}>
-              Control de vehículos, rutas y conductores.
+              Consulta y gestión de listas de precios en formato Excel.
             </p>
-            <button disabled style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #ccc', background: '#f3f4f6', color: '#9ca3af', fontWeight: 'bold', fontSize: '15px' }}>
-              Próximamente
+            <button style={{ width: '100%', padding: '12px', borderRadius: '6px', border: 'none', background: 'var(--primary-blue)', color: 'white', fontWeight: 'bold', fontSize: '15px' }}>
+              Entrar al Módulo
             </button>
           </div>
 
@@ -138,7 +138,7 @@ function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
 }
 
 // ============================================================================
-// COMPONENTE: MENÚ INTERNO DEL MÓDULO PRECINTOS (TARJETAS)
+// COMPONENTE: MENÚ INTERNO DEL MÓDULO PRECINTOS
 // ============================================================================
 function MenuPrecintos({ setPantalla, rol, permisos }) {
   const tienePermiso = (permisoExtra, rolesPermitidos) => {
@@ -157,7 +157,6 @@ function MenuPrecintos({ setPantalla, rol, permisos }) {
     { id: 'conciliacion', titulo: 'Conciliación', icono: '🤝', desc: 'Cruce de información de viajes.', permiso: 'conciliacion', roles: ['admin_sistema', 'jefe_proyecto', 'analista_operaciones', 'jefe_operaciones'] },
     { id: 'proyeccion', titulo: 'Proyección Demanda', icono: '🔮', desc: 'Estimación de uso futuro.', permiso: 'proyeccion', roles: ['admin_sistema', 'jefe_proyecto', 'jefe_operaciones', 'analista_operaciones'] },
     { id: 'bitacora', titulo: 'Bitácora', icono: '📋', desc: 'Historial de acciones del sistema.', permiso: 'bitacora', roles: ['admin_sistema', 'auditor', 'jefe_operaciones', 'jefe_proyecto'] },
-    // NOTA: La tarjeta de 'usuarios' ha sido removida de aquí.
     { id: 'plantas', titulo: 'Config. Plantas', icono: '🏭', desc: 'Administración de terminales.', permiso: 'plantas', roles: ['admin_sistema'] },
     { id: 'respaldos', titulo: 'Respaldos', icono: '💾', desc: 'Gestión de copias de seguridad.', permiso: 'respaldos', roles: ['admin_sistema'] },
   ]
@@ -166,17 +165,10 @@ function MenuPrecintos({ setPantalla, rol, permisos }) {
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
       <header style={{ padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <button 
-            onClick={() => setPantalla('')} 
-            style={{ background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
-          >
-            ← SIGMO
-          </button>
+          <button onClick={() => setPantalla('')} style={{ background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}>← SIGMO</button>
           <h1 style={{ margin: 0, color: 'var(--primary-blue)', fontSize: '28px', fontWeight: '900' }}>Módulo de Precintos</h1>
         </div>
-        <button onClick={() => setPantalla('cambiar-password')} style={{ background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
-          Mi Perfil
-        </button>
+        <button onClick={() => setPantalla('cambiar-password')} style={{ background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>Mi Perfil</button>
       </header>
 
       <main style={{ flex: 1, padding: '40px 20px', maxWidth: '1100px', margin: '0 auto', width: '100%' }}>
@@ -189,8 +181,7 @@ function MenuPrecintos({ setPantalla, rol, permisos }) {
           {opciones.map((opc) => (
             tienePermiso(opc.permiso, opc.roles) && (
               <div 
-                key={opc.id}
-                onClick={() => setPantalla(opc.id)}
+                key={opc.id} onClick={() => setPantalla(opc.id)}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--primary-blue)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.transform = 'translateY(0)'; }}
                 style={cardStyle}
@@ -222,94 +213,54 @@ function App() {
   const timerRef = useRef(null)
   const avisoTimerRef = useRef(null)
 
-  // Lógica de Autenticación
   useEffect(() => {
     if (window.location.hash.includes('type=recovery') || window.location.search.includes('type=recovery')) {
       setEsRecuperacion(true)
     }
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSesion(session)
-    })
-
+    supabase.auth.getSession().then(({ data: { session } }) => { setSesion(session) })
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSesion(session)
-      if (_event === 'PASSWORD_RECOVERY') {
-        setEsRecuperacion(true)
-      }
+      if (_event === 'PASSWORD_RECOVERY') setEsRecuperacion(true)
     })
-
     return () => authListener.subscription.unsubscribe()
   }, [])
 
-  // Lógica de Roles y Permisos
   useEffect(() => {
     if (!sesion) {
-      setRol(null)
-      setPermisos([])
-      setCargandoRol(false)
-      return
+      setRol(null); setPermisos([]); setCargandoRol(false); return
     }
-
     async function obtenerRolUsuario() {
       setCargandoRol(true)
-      const { data, error } = await supabase
-        .from('usuarios')
-        .select(`roles ( codigo ), permisos`)
-        .eq('id_usuario', sesion.user.id)
-        .single()
-
-      if (error) {
-        console.error('Error al obtener rol:', error)
-        setRol('auditor')
-        setPermisos([])
-      } else if (data) {
-        setRol(data.roles?.codigo?.toLowerCase() || 'auditor') 
-        setPermisos(data.permisos || [])
+      const { data, error } = await supabase.from('usuarios').select(`roles ( codigo ), permisos`).eq('id_usuario', sesion.user.id).single()
+      if (error || !data) {
+        setRol('auditor'); setPermisos([])
       } else {
-        setRol('auditor')
-        setPermisos([])
+        setRol(data.roles?.codigo?.toLowerCase() || 'auditor'); setPermisos(data.permisos || [])
       }
       setCargandoRol(false)
     }
-
     obtenerRolUsuario()
   }, [sesion])
 
-  // Lógica de Inactividad
   const cerrarSesion = useCallback(async () => {
     await supabase.auth.signOut()
-    setPantalla('')
-    setRol(null)
-    setPermisos([])
-    setMostrarAviso(false)
+    setPantalla(''); setRol(null); setPermisos([]); setMostrarAviso(false)
   }, [])
 
   const reiniciarTemporizador = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
     if (avisoTimerRef.current) clearTimeout(avisoTimerRef.current)
-    
     setMostrarAviso(false)
-
-    avisoTimerRef.current = setTimeout(() => {
-      setMostrarAviso(true)
-    }, TIEMPO_DE_AVISO)
-
-    timerRef.current = setTimeout(() => {
-      cerrarSesion()
-      toast.error("Sesión cerrada por inactividad")
-    }, TIEMPO_INACTIVIDAD_TOTAL)
+    avisoTimerRef.current = setTimeout(() => { setMostrarAviso(true) }, TIEMPO_DE_AVISO)
+    timerRef.current = setTimeout(() => { cerrarSesion(); toast.error("Sesión cerrada por inactividad") }, TIEMPO_INACTIVIDAD_TOTAL)
   }, [cerrarSesion])
 
   useEffect(() => {
     if (!sesion) return
-
     const eventos = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll']
     const manejarActividad = () => { if (!mostrarAviso) reiniciarTemporizador() }
-
     eventos.forEach(evento => window.addEventListener(evento, manejarActividad))
     reiniciarTemporizador()
-
     return () => {
       eventos.forEach(evento => window.removeEventListener(evento, manejarActividad))
       if (timerRef.current) clearTimeout(timerRef.current)
@@ -323,14 +274,12 @@ function App() {
     return false
   }
 
-  // --- VISTAS PÚBLICAS ---
   if (!sesion) {
     if (esRecuperacion) return <ResetPassword />
     if (pantalla === 'forgot') return <ForgotPassword setPantalla={setPantalla} />
     return <Login setPantalla={setPantalla} />
   }
 
-  // --- PANTALLA DE CARGA ---
   if (cargandoRol) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f3f4f6' }}>
@@ -339,7 +288,6 @@ function App() {
     )
   }
 
-  // --- VISTAS CON SESIÓN ---
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
       <Toaster position="top-right" toastOptions={{ duration: 4000, style: { fontWeight: 'bold' } }} />
@@ -357,44 +305,30 @@ function App() {
         </div>
       )}
 
-      {/* 1. LOBBY PRINCIPAL */}
+      {/* VISTAS PRINCIPALES */}
       {pantalla === '' && <LobbyModulos sesion={sesion} cerrarSesion={cerrarSesion} setPantalla={setPantalla} rol={rol} />}
-
-      {/* 2. SUB-MENÚ DE PRECINTOS (TARJETAS) */}
       {pantalla === 'precintos_menu' && <MenuPrecintos setPantalla={setPantalla} rol={rol} permisos={permisos} />}
-
-      {/* 3. MÓDULO REPOSITORIO */}
       {pantalla === 'repositorio' && <RepositorioDocumental setPantalla={setPantalla} rol={rol} />}
-
-      {/* 4. MÓDULO CATÁLOGOS MAESTROS */}
       {pantalla === 'catalogos' && <GestionCatalogos setPantalla={setPantalla} />}
-      
-      {/* 5. GESTIÓN DE USUARIOS (INDEPENDIENTE, SE ABRE DESDE CATÁLOGOS) */}
       {pantalla === 'usuarios' && <GestionUsuarios setPantalla={setPantalla} />}
+      
+      {/* NUEVO MÓDULO DE PRECIOS */}
+      {pantalla === 'precios_menu' && <GestionPrecios setPantalla={setPantalla} rol={rol} />}
 
-      {/* 6. VISTAS INTERNAS DE PRECINTOS (CON HEADER DE VOLVER) */}
-      {pantalla !== '' && pantalla !== 'precintos_menu' && pantalla !== 'repositorio' && pantalla !== 'catalogos' && pantalla !== 'usuarios' && (
+      {/* VISTAS INTERNAS DE PRECINTOS */}
+      {pantalla !== '' && pantalla !== 'precintos_menu' && pantalla !== 'repositorio' && pantalla !== 'catalogos' && pantalla !== 'usuarios' && pantalla !== 'precios_menu' && (
         <div style={{ minHeight: '100vh' }}>
-          {/* Header Común para todas las vistas de Precintos */}
           <nav style={{ backgroundColor: 'white', borderBottom: '1px solid #e5e7eb', padding: '15px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-              <button 
-                onClick={() => setPantalla('precintos_menu')} 
-                style={{ background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
-              >
-                ← Volver al Menú
-              </button>
+              <button onClick={() => setPantalla('precintos_menu')} style={{ background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}>← Volver al Menú</button>
               <span style={{ fontSize: '20px', fontWeight: '900', color: 'var(--primary-blue)' }}>Precintos</span>
             </div>
-            
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
               <span style={{ fontSize: '13px', color: '#4b5563', fontWeight: '500' }}>👤 {sesion.user.email}</span>
               <button onClick={() => setPantalla('cambiar-password')} style={{ background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>Mi Perfil</button>
               <button onClick={cerrarSesion} style={{ background: '#fee2e2', border: 'none', color: '#991b1b', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>Salir</button>
             </div>
           </nav>
-
-          {/* Renderizado de la vista seleccionada */}
           <div style={{ paddingTop: '20px', paddingBottom: '40px' }}>
             {pantalla === 'lotes' && tienePermiso('lotes', ['admin_sistema', 'analista_operaciones', 'jefe_operaciones', 'jefe_proyecto']) && <RegistroLotes />}
             {pantalla === 'admin' && tienePermiso('viajes', ['admin_sistema', 'admin_planta']) && <RegistroViajes />}
