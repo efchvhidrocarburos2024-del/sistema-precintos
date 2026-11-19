@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
 import { Card, Boton } from './ui'
@@ -13,6 +13,21 @@ const cardStyle = {
   transition: 'all 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
 }
 const btnHeaderStyle = { background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }
+
+// Tooltip personalizado para el gráfico
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div style={{ backgroundColor: '#1e293b', color: 'white', padding: '10px 15px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+        <p style={{ margin: 0, fontSize: '12px', color: '#cbd5e1' }}>{label}</p>
+        <p style={{ margin: '5px 0 0 0', fontSize: '16px', fontWeight: 'bold' }}>
+          {Number(payload[0].value).toFixed(4)} <span style={{ fontSize: '12px', fontWeight: 'normal' }}>S/.</span>
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
 
 export default function GestionPrecios({ setPantalla, rol }) {
   const [vista, setVista] = useState('menu')
@@ -46,7 +61,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [plantaSeleccionada, setPlantaSeleccionada] = useState('')
   const [productoSeleccionado, setProductoSeleccionado] = useState('')
   const [datosTendencia, setDatosTendencia] = useState([])
+  const [metricas, setMetricas] = useState(null)
   const [cargandoTendencia, setCargandoTendencia] = useState(false)
+  const [errorTendencia, setErrorTendencia] = useState('')
   const [opcionesPlantas, setOpcionesPlantas] = useState([])
   const [opcionesProductos, setOpcionesProductos] = useState([])
 
@@ -55,7 +72,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [archivoAEliminar, setArchivoAEliminar] = useState(null)
   const [eliminando, setEliminando] = useState(false)
 
-  // Roles permitidos
   const rolesCarga = ['admin_sistema', 'analista_comercial', 'jefe_pricing']
   const puedeCargar = rolesCarga.includes(rol)
   const puedeGestionar = ['admin_sistema', 'jefe_pricing'].includes(rol)
@@ -74,7 +90,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
   };
 
   useEffect(() => {
-    if (vista === 'visualizar' || vista === 'comparar' || vista === 'auditoria') {
+    if (vista === 'visualizar' || vista === 'comparar' || vista === 'auditoria' || vista === 'tendencias') {
       fetchArchivos()
     }
     if (vista === 'auditoria') {
@@ -82,7 +98,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   }, [vista])
 
-  // Autocompletado para comparación
   useEffect(() => {
     if (vista === 'comparar' && archivos.length > 0) {
       const ordenados = [...archivos].sort((a, b) => {
@@ -137,7 +152,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     })
   }
 
-  // --- LÓGICA DE COMPARACIÓN ---
   const normalizarTexto = (txt) => {
     if (!txt) return '';
     return String(txt).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').replace(/N°/gi, 'N').trim().toUpperCase();
@@ -147,14 +161,12 @@ export default function GestionPrecios({ setPantalla, rol }) {
     const p1 = normalizarTexto(prod1);
     const p2 = normalizarTexto(prod2);
     if (p1 === p2) return true;
-    
     if (p1.includes('GASOLINA') && p2.includes('GASOLINA') && p1.includes('PREMIUM') && p2.includes('PREMIUM')) return true;
     if (p1.includes('GASOLINA') && p2.includes('GASOLINA') && p1.includes('REGULAR') && p2.includes('REGULAR')) return true;
     if (p1.includes('GASOHOL') && p2.includes('GASOHOL') && p1.includes('PREMIUM') && p2.includes('PREMIUM')) return true;
     if (p1.includes('GASOHOL') && p2.includes('GASOHOL') && p1.includes('REGULAR') && p2.includes('REGULAR')) return true;
     if (p1.includes('PETROLEO') && p2.includes('PETROLEO') && p1.includes('6') && p2.includes('6')) return true;
     if (p1.includes('PETROLEO') && p2.includes('PETROLEO') && p1.includes('500') && p2.includes('500')) return true;
-    
     if (p1.includes('DIESEL') && p2.includes('DIESEL') && p1.includes('2 S-50') && p2.includes('2 S-50')) {
       if (p1.includes('UV') && p2.includes('UV')) return true;
       if (!p1.includes('UV') && !p2.includes('UV')) return true;
@@ -259,68 +271,73 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   };
 
-  // --- LÓGICA DE TENDENCIAS ---
+  // --- LÓGICA DE TENDENCIAS OPTIMIZADA ---
   const cargarTendencias = async () => {
     if (!plantaSeleccionada || !productoSeleccionado) return toast.error('Selecciona una planta y un producto');
     setCargandoTendencia(true);
     setDatosTendencia([]);
+    setMetricas(null);
+    setErrorTendencia('');
 
     try {
-      // Tomamos hasta los últimos 12 archivos ordenados por fecha (para no colgar el navegador)
-      const archivosProcesar = archivos.slice(0, 12).reverse(); 
-      const tendencia = [];
-      let opcionesPlantaSet = new Set();
-      let opcionesProductoSet = new Set();
+      // Tomamos hasta los últimos 15 archivos ordenados por fecha
+      const archivosProcesar = archivos.slice(0, 15).reverse(); 
+      
+      if (archivosProcesar.length < 2) {
+        throw new Error("Se necesitan al menos 2 listas de precios para calcular una tendencia.");
+      }
 
-      for (const file of archivosProcesar) {
+      const promesas = archivosProcesar.map(async (file) => {
         const data = await parseExcelFile(file.url_archivo, 'Precio Base');
         
-        // Llenar opciones si están vacías
-        if (opcionesPlantas.length === 0 || opcionesProductos.length === 0) {
-          data.rows.forEach(row => {
-            const idxP = data.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
-            if (idxP !== -1 && esPlantaValida(row[idxP])) opcionesPlantaSet.add(String(row[idxP]).trim());
-          });
-          data.headers.forEach(h => {
-            if (h && !normalizarTexto(h).includes('PLANTAS') && !normalizarTexto(h).includes('CODIGO') && !normalizarTexto(h).includes('USO INTERNO')) {
-              opcionesProductoSet.add(String(h).trim());
-            }
-          });
-        }
-
         const idxPlanta = data.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
         const idxProducto = data.headers.findIndex(h => esMismoProducto(h, productoSeleccionado));
         const fila = data.rows.find(r => normalizarTexto(r[idxPlanta]) === normalizarTexto(plantaSeleccionada));
 
         if (fila && idxProducto !== -1) {
-          const valor = parseFloat(String(fila[idxProducto]).replace(',', '.'));
-          if (!isNaN(valor)) {
-            const fecha = extraerFecha(file.nombre_archivo);
-            tendencia.push({
-              fecha: fecha,
+          const valorStr = String(fila[idxProducto]).replace(',', '.');
+          const valor = parseFloat(valorStr);
+          if (!isNaN(valor) && valor > 0) {
+            return {
+              fecha: extraerFecha(file.nombre_archivo),
               precio: valor
-            });
+            };
           }
         }
-      }
+        return null;
+      });
 
-      setOpcionesPlantas(Array.from(opcionesPlantaSet).sort());
-      setOpcionesProductos(Array.from(opcionesProductoSet).filter(p => p.length > 3).sort());
+      const resultados = await Promise.all(promesas);
+      const tendencia = resultados.filter(r => r !== null);
       
       // Ordenar por fecha
       tendencia.sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+      if (tendencia.length < 2) {
+        throw new Error("No hay suficientes datos históricos válidos para esta combinación de Planta y Producto.");
+      }
+
       setDatosTendencia(tendencia);
 
+      // Calcular Métricas
+      const precios = tendencia.map(t => t.precio);
+      const actual = precios[precios.length - 1];
+      const anterior = precios[precios.length - 2];
+      const min = Math.min(...precios);
+      const max = Math.max(...precios);
+      const variacion = actual - anterior;
+
+      setMetricas({ actual, min, max, variacion });
+
     } catch (error) {
-      toast.error('Error al cargar tendencias: ' + error.message);
+      setErrorTendencia(error.message);
     } finally {
       setCargandoTendencia(false);
     }
   };
 
   useEffect(() => {
-    if (vista === 'tendencias' && opcionesPlantas.length === 0 && archivos.length > 0) {
-      // Pre-cargar opciones de la primera lista
+    if (vista === 'tendencias' && archivos.length > 0 && opcionesPlantas.length === 0) {
       parseExcelFile(archivos[0].url_archivo, 'Precio Base').then(data => {
         const idxP = data.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
         const plnts = data.rows.map(r => String(r[idxP]).trim()).filter(p => esPlantaValida(p));
@@ -330,15 +347,13 @@ export default function GestionPrecios({ setPantalla, rol }) {
         setOpcionesProductos([...new Set(prods)].filter(p => p.length > 3).sort());
       });
     }
-  }, [vista, archivos]);
+  }, [vista, archivos, opcionesPlantas.length]);
 
-  // --- GESTIÓN Y SUBIDA ---
   const marcarComoVigente = async (id, nombre) => {
     try {
       await supabase.from('precios_archivos').update({ es_vigente: false }).eq('es_vigente', true)
       const { error } = await supabase.from('precios_archivos').update({ es_vigente: true }).eq('id', id)
       if (error) throw error
-      
       await registrarAuditoria(id, nombre, 'VIGENTE')
       toast.success('Lista marcada como VIGENTE')
       fetchArchivos()
@@ -354,12 +369,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const urlParts = archivoAEliminar.url_archivo.split('/documentos_sigmo/')
       const filePath = urlParts[1]
       if (filePath) await supabase.storage.from('documentos_sigmo').remove([filePath])
-      
       const { error: dbError } = await supabase.from('precios_archivos').delete().eq('id', archivoAEliminar.id)
       if (dbError) throw dbError
-      
       await registrarAuditoria(archivoAEliminar.id, archivoAEliminar.nombre_archivo, 'ELIMINACION')
-      
       toast.success('Lista eliminada')
       setModalEliminarAbierto(false)
       setArchivoAEliminar(null)
@@ -644,52 +656,89 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
+  // --- VISTA DE TENDENCIAS OPTIMIZADA ---
   if (vista === 'tendencias') {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
         {renderHeader()}
         <main style={{ padding: '40px 20px', maxWidth: '1000px', margin: '0 auto' }}>
           <Card style={{ padding: '30px', marginBottom: '20px' }}>
-            <h2 style={{ margin: '0 0 20px 0', fontSize: '22px' }}>Evolución de Precios</h2>
+            <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', color: 'var(--text-dark)' }}>Análisis de Tendencias</h2>
             <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: '200px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Planta</label>
-                <select value={plantaSeleccionada} onChange={(e) => setPlantaSeleccionada(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Planta</label>
+                <select value={plantaSeleccionada} onChange={(e) => setPlantaSeleccionada(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#fff' }}>
                   <option value="">Seleccione...</option>
                   {opcionesPlantas.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
               <div style={{ flex: 1, minWidth: '200px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Producto</label>
-                <select value={productoSeleccionado} onChange={(e) => setProductoSeleccionado(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Producto</label>
+                <select value={productoSeleccionado} onChange={(e) => setProductoSeleccionado(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#fff' }}>
                   <option value="">Seleccione...</option>
                   {opcionesProductos.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
-              <Boton variante="primary" onClick={cargarTendencias} disabled={cargandoTendencia} style={{ height: '42px' }}>
-                {cargandoTendencia ? 'Cargando...' : '📈 Generar Gráfico'}
+              <Boton variante="primary" onClick={cargarTendencias} disabled={cargandoTendencia || !plantaSeleccionada || !productoSeleccionado} style={{ height: '42px' }}>
+                {cargandoTendencia ? 'Generando...' : '📈 Generar Gráfico'}
               </Boton>
             </div>
           </Card>
 
-          {cargandoTendencia ? (
-            <p style={{ textAlign: 'center', color: 'var(--text-light)' }}>Analizando historial de archivos...</p>
-          ) : datosTendencia.length > 0 ? (
-            <Card style={{ padding: '30px', height: '500px' }}>
+          {/* ÁREA DE MÉTRICAS Y GRÁFICO */}
+          {errorTendencia && (
+            <Card style={{ padding: '20px', backgroundColor: '#fef2f2', border: '1px solid #f87171', marginBottom: '20px' }}>
+              <p style={{ margin: 0, color: '#991b1b', fontWeight: 'bold' }}>⚠️ {errorTendencia}</p>
+            </Card>
+          )}
+
+          {metricas && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '20px' }}>
+              <Card style={{ padding: '20px', textAlign: 'center', borderTop: '4px solid var(--primary-blue)' }}>
+                <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: 'var(--text-light)', fontWeight: 'bold' }}>PRECIO ACTUAL</p>
+                <h3 style={{ margin: 0, fontSize: '24px', color: 'var(--primary-blue)' }}>S/ {metricas.actual.toFixed(4)}</h3>
+              </Card>
+              <Card style={{ padding: '20px', textAlign: 'center', borderTop: `4px solid ${metricas.variacion > 0 ? '#ef4444' : metricas.variacion < 0 ? '#10b981' : '#6b7280'}` }}>
+                <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: 'var(--text-light)', fontWeight: 'bold' }}>VARIACIÓN RECIENTE</p>
+                <h3 style={{ margin: 0, fontSize: '24px', color: metricas.variacion > 0 ? '#ef4444' : metricas.variacion < 0 ? '#10b981' : '#6b7280' }}>
+                  {metricas.variacion > 0 ? '+' : ''}{metricas.variacion.toFixed(4)}
+                </h3>
+              </Card>
+              <Card style={{ padding: '20px', textAlign: 'center', borderTop: '4px solid #10b981' }}>
+                <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: 'var(--text-light)', fontWeight: 'bold' }}>PRECIO MÍNIMO</p>
+                <h3 style={{ margin: 0, fontSize: '24px', color: '#166534' }}>S/ {metricas.min.toFixed(4)}</h3>
+              </Card>
+              <Card style={{ padding: '20px', textAlign: 'center', borderTop: '4px solid #ef4444' }}>
+                <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: 'var(--text-light)', fontWeight: 'bold' }}>PRECIO MÁXIMO</p>
+                <h3 style={{ margin: 0, fontSize: '24px', color: '#991b1b' }}>S/ {metricas.max.toFixed(4)}</h3>
+              </Card>
+            </div>
+          )}
+
+          <Card style={{ padding: '30px', height: '450px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            {cargandoTendencia ? (
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '40px', marginBottom: '10px', animation: 'spin 2s linear infinite' }}>⏳</div>
+                <p style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>Analizando historial de archivos...</p>
+              </div>
+            ) : datosTendencia.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={datosTendencia} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="fecha" />
-                  <YAxis domain={['auto', 'auto']} tickFormatter={(val) => val.toFixed(2)} />
-                  <Tooltip formatter={(value) => [`${value.toFixed(4)}`, 'Precio']} />
-                  <Legend />
-                  <Line type="monotone" dataKey="precio" name={productoSeleccionado} stroke="#0B5FA5" strokeWidth={3} activeDot={{ r: 8 }} />
+                <LineChart data={datosTendencia} margin={{ top: 20, right: 30, left: 20, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="fecha" tick={{ fontSize: 12, fill: '#64748b' }} tickMargin={10} />
+                  <YAxis domain={['auto', 'auto']} tickFormatter={(val) => val.toFixed(2)} tick={{ fontSize: 12, fill: '#64748b' }} width={60} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Line type="monotone" dataKey="precio" name={productoSeleccionado} stroke="#0B5FA5" strokeWidth={3} dot={{ r: 4, fill: '#0B5FA5', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
                 </LineChart>
               </ResponsiveContainer>
-            </Card>
-          ) : (
-            <p style={{ textAlign: 'center', color: 'var(--text-light)' }}>Selecciona una planta y producto para ver la tendencia histórica.</p>
-          )}
+            ) : (
+              <div style={{ textAlign: 'center', color: 'var(--text-light)' }}>
+                <div style={{ fontSize: '50px', marginBottom: '15px' }}>📉</div>
+                <h3 style={{ margin: 0 }}>Sin datos para mostrar</h3>
+                <p>Selecciona una planta y un producto para generar el gráfico.</p>
+              </div>
+            )}
+          </Card>
         </main>
       </div>
     )
@@ -741,7 +790,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
-  // VISTA COMPARAR
   if (vista === 'comparar') {
     const filePrevio = archivos.find(a => a.id === idBase);
     const fileActual = archivos.find(a => a.id === idNuevo);
@@ -816,7 +864,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
-  // VISTA VISUALIZAR
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
       {renderHeader()}
