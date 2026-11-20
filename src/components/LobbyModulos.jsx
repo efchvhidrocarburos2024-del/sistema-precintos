@@ -9,61 +9,36 @@ export default function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol })
 
   return (
     <div className="page-container" style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 20px' }}>
-      {/* Header con logo + cierre de sesión */}
-      <header
-        style={{
-          padding: '20px 0',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '15px',
-          borderBottom: '1px solid #e5e7eb',
-          marginBottom: '20px',
-        }}
-      >
+      <header style={{ padding: '20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', borderBottom: '1px solid #e5e7eb', marginBottom: '20px' }}>
         <div>
-          <h1 style={{ margin: 0, color: 'var(--primary-blue)', fontSize: '32px', fontWeight: '900', letterSpacing: '1.5px' }}>
-            SIGMO
-          </h1>
-          <span style={{ color: 'var(--text-light)', fontSize: '14px', fontWeight: '500' }}>
-            Sistema de Gestión Modular
-          </span>
+          <h1 style={{ margin: 0, color: 'var(--primary-blue)', fontSize: '32px', fontWeight: '900', letterSpacing: '1.5px' }}>SIGMO</h1>
+          <span style={{ color: 'var(--text-light)', fontSize: '14px', fontWeight: '500' }}>Sistema de Gestión Modular</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
           <span style={{ color: 'var(--text-dark)', fontWeight: '600', fontSize: '14px' }}>
             👤 {sesion.user.email} ({rol?.toUpperCase() || 'SIN ROL'})
           </span>
-          <Boton variante="outline" onClick={cerrarSesion}>
-            Cerrar Sesión
-          </Boton>
+          <Boton variante="outline" onClick={cerrarSesion}>Cerrar Sesión</Boton>
         </div>
       </header>
 
-      <PageHeader
-        titulo="Bienvenido a SIGMO"
-        subtitulo="Selecciona el módulo que deseas gestionar"
-      />
+      <PageHeader titulo="Bienvenido a SIGMO" subtitulo="Selecciona el módulo que deseas gestionar" />
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-          gap: '20px',
-          marginTop: '30px',
-        }}
-      >
-        {/* MÓDULO: PRECIOS */}
-        <Card style={{ textAlign: 'center', padding: '30px 20px' }}>
-          <div style={{ fontSize: '40px', marginBottom: '15px' }}>💰</div>
-          <h3 style={{ margin: '0 0 10px 0', color: 'var(--primary-blue)' }}>Precios, Topes & Cotización</h3>
-          <p style={{ color: 'var(--text-light)', fontSize: '14px', marginBottom: '20px' }}>
-            Consulta y gestión de listas de precios, topes y cotizaciones.
-          </p>
-          <Boton variante="primary" onClick={() => setPantalla('precios_menu')} style={{ width: '100%' }}>
-            Entrar al Módulo
-          </Boton>
-        </Card>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginTop: '30px' }}>
+        
+        {/* MÓDULO: PRECINTOS (Restaurado) */}
+        {puedeVerPrecintos && (
+          <Card style={{ textAlign: 'center', padding: '30px 20px' }}>
+            <div style={{ fontSize: '40px', marginBottom: '15px' }}>📦</div>
+            <h3 style={{ margin: '0 0 10px 0', color: 'var(--primary-blue)' }}>Gestión de Precintos</h3>
+            <p style={{ color: 'var(--text-light)', fontSize: '14px', marginBottom: '20px' }}>
+              Control de viajes, SCOP, inventario de plantas y reportes.
+            </p>
+            <Boton variante="primary" onClick={() => setPantalla('precintos_menu')} style={{ width: '100%' }}>
+              Entrar al Módulo
+            </Boton>
+          </Card>
+        )}
 
         {/* MÓDULO: REPOSITORIO */}
         {puedeVerRepositorio && (
@@ -93,41 +68,32 @@ export default function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol })
           </Card>
         )}
 
-        {/* MÓDULO: PRECIOS */}
+        {/* MÓDULO: PRECIOS, TOPES & COTIZACIÓN */}
         <Card style={{ textAlign: 'center', padding: '30px 20px' }}>
           <div style={{ fontSize: '40px', marginBottom: '15px' }}>💰</div>
-          <h3 style={{ margin: '0 0 10px 0', color: 'var(--primary-blue)' }}>Lista de Precios</h3>
+          <h3 style={{ margin: '0 0 10px 0', color: 'var(--primary-blue)' }}>Precios, Topes & Cotización</h3>
           <p style={{ color: 'var(--text-light)', fontSize: '14px', marginBottom: '20px' }}>
-            Consulta y gestión de listas en formato Excel.
+            Consulta y gestión de listas de precios, topes y cotizaciones.
           </p>
           <Boton variante="primary" onClick={() => setPantalla('precios_menu')} style={{ width: '100%' }}>
             Entrar al Módulo
           </Boton>
         </Card>
 
-        {/* FUTUROS MÓDULOS (solo admin los ve) */}
+        {/* FUTUROS MÓDULOS */}
         {esAdmin && (
           <>
             <Card style={{ textAlign: 'center', padding: '30px 20px', opacity: 0.6 }}>
               <div style={{ fontSize: '40px', marginBottom: '15px' }}>🚚</div>
               <h3 style={{ margin: '0 0 10px 0', color: 'var(--text-dark)' }}>Gestión de Flota</h3>
-              <p style={{ color: 'var(--text-light)', fontSize: '14px', marginBottom: '20px' }}>
-                Control de vehículos y conductores.
-              </p>
-              <Boton variante="outline" disabled style={{ width: '100%' }}>
-                Próximamente
-              </Boton>
+              <p style={{ color: 'var(--text-light)', fontSize: '14px', marginBottom: '20px' }}>Control de vehículos y conductores.</p>
+              <Boton variante="outline" disabled style={{ width: '100%' }}>Próximamente</Boton>
             </Card>
-
             <Card style={{ textAlign: 'center', padding: '30px 20px', opacity: 0.6 }}>
               <div style={{ fontSize: '40px', marginBottom: '15px' }}>📊</div>
               <h3 style={{ margin: '0 0 10px 0', color: 'var(--text-dark)' }}>Business Intelligence</h3>
-              <p style={{ color: 'var(--text-light)', fontSize: '14px', marginBottom: '20px' }}>
-                Dashboards avanzados y KPIs.
-              </p>
-              <Boton variante="outline" disabled style={{ width: '100%' }}>
-                Próximamente
-              </Boton>
+              <p style={{ color: 'var(--text-light)', fontSize: '14px', marginBottom: '20px' }}>Dashboards avanzados y KPIs.</p>
+              <Boton variante="outline" disabled style={{ width: '100%' }}>Próximamente</Boton>
             </Card>
           </>
         )}
