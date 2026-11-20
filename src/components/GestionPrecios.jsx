@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
 import { Card, Boton } from './ui'
@@ -18,6 +19,29 @@ const btnTabStyle = (activo) => ({
   color: activo ? 'white' : '#4b5563',
   transition: 'all 0.2s'
 })
+
+const COLORS = ['#0B5FA5', '#10b981', '#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#f43f5e', '#84cc16', '#f97316', '#6366f1']
+
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    const sortedPayload = [...payload].sort((a, b) => b.value - a.value);
+    return (
+      <div style={{ backgroundColor: '#1e293b', color: 'white', padding: '12px 16px', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', maxHeight: '350px', overflowY: 'auto', border: '1px solid #334155' }}>
+        <p style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#cbd5e1', fontWeight: 'bold', borderBottom: '1px solid #334155', paddingBottom: '5px' }}>{label}</p>
+        {sortedPayload.map((entry, index) => (
+          <div key={index} style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', fontSize: '12px', marginBottom: '6px' }}>
+            <span style={{ color: entry.color, display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: entry.color }}></span>
+              {entry.name}:
+            </span>
+            <span style={{ fontWeight: 'bold' }}>S/ {Number(entry.value).toFixed(4)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return null;
+};
 
 export default function GestionPrecios({ setPantalla, rol }) {
   const [vista, setVista] = useState('menu')
@@ -48,6 +72,18 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [cargandoComparacionTope, setCargandoComparacionTope] = useState(false)
 
   const [auditoria, setAuditoria] = useState([])
+
+  // ESTADOS DE TENDENCIAS
+  const [plantaSeleccionada, setPlantaSeleccionada] = useState('')
+  const [productoSeleccionado, setProductoSeleccionado] = useState('')
+  const [hojaTendencia, setHojaTendencia] = useState('Precio Base')
+  const [datosTendencia, setDatosTendencia] = useState([])
+  const [lineasDinamicas, setLineasDinamicas] = useState([])
+  const [metricas, setMetricas] = useState(null)
+  const [cargandoTendencia, setCargandoTendencia] = useState(false)
+  const [errorTendencia, setErrorTendencia] = useState('')
+  const [opcionesPlantas, setOpcionesPlantas] = useState([])
+  const [opcionesProductos, setOpcionesProductos] = useState([])
 
   const [modalEliminarAbierto, setModalEliminarAbierto] = useState(false)
   const [archivoAEliminar, setArchivoAEliminar] = useState(null)
@@ -88,6 +124,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     if (vista === 'visualizar' && subVista === 'topes') fetchArchivosTopes()
     if (vista === 'comparar') { fetchArchivos(); fetchArchivosTopes(); }
     if (vista === 'auditoria') fetchAuditoria()
+    if (vista === 'tendencias') fetchArchivos()
   }, [vista, subVista])
 
   useEffect(() => {
@@ -384,6 +421,162 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   };
 
+  // --- LÓGICA DE TENDENCIAS ---
+  const cargarTendencias = async () => {
+    if (!plantaSeleccionada || !productoSeleccionado) return toast.error('Selecciona una planta y un producto');
+    setCargandoTendencia(true);
+    setDatosTendencia([]);
+    setMetricas(null);
+    setErrorTendencia('');
+
+    try {
+      const archivosProcesar = archivos.slice(0, 15).reverse(); 
+      if (archivosProcesar.length < 2) throw new Error("Se necesitan al menos 2 listas para calcular una tendencia.");
+
+      const tendenciaAgrupada = {}; 
+      let nombresLineas = new Set();
+
+      for (const file of archivosProcesar) {
+        const data = await parseExcelFile(file.url_archivo, hojaTendencia);
+        const idxPlanta = data.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
+        const fecha = extraerFecha(file.nombre_archivo);
+        
+        if (!tendenciaAgrupada[fecha]) tendenciaAgrupada[fecha] = { fecha };
+
+        if (plantaSeleccionada === 'TODOS' && productoSeleccionado !== 'TODOS') {
+          const idxProducto = data.headers.findIndex(h => normalizarTexto(h) === normalizarTexto(productoSeleccionado));
+          if (idxProducto !== -1) {
+            data.rows.forEach(fila => {
+              const nombrePlanta = String(fila[idxPlanta]).trim();
+              if (esPlantaValida(nombrePlanta)) {
+                const valor = parseFloat(String(fila[idxProducto]).replace(',', '.'));
+                if (!isNaN(valor) && valor > 0 && isFinite(valor)) {
+                  tendenciaAgrupada[fecha][nombrePlanta] = valor;
+                  nombresLineas.add(nombrePlanta);
+                }
+              }
+            });
+          }
+        } else if (plantaSeleccionada !== 'TODOS' && productoSeleccionado === 'TODOS') {
+          const fila = data.rows.find(r => normalizarTexto(r[idxPlanta]) === normalizarTexto(plantaSeleccionada));
+          if (fila) {
+            data.headers.forEach((h, i) => {
+              const hNorm = normalizarTexto(h);
+              if (hNorm.includes('PLANTAS') || hNorm.includes('CODIGO') || hNorm.includes('USO INTERNO') || !hNorm) return;
+              
+              const nombreProducto = String(h).trim();
+              const valor = parseFloat(String(fila[i]).replace(',', '.'));
+              if (!isNaN(valor) && valor > 0 && isFinite(valor)) {
+                tendenciaAgrupada[fecha][nombreProducto] = valor;
+                nombresLineas.add(nombreProducto);
+              }
+            });
+          }
+        } else if (plantaSeleccionada === 'TODOS' && productoSeleccionado === 'TODOS') {
+          data.rows.forEach(fila => {
+            const nombrePlanta = String(fila[idxPlanta]).trim();
+            if (esPlantaValida(nombrePlanta)) {
+              let suma = 0, count = 0;
+              data.headers.forEach((h, i) => {
+                const hNorm = normalizarTexto(h);
+                if (hNorm.includes('PLANTAS') || hNorm.includes('CODIGO') || hNorm.includes('USO INTERNO') || !hNorm) return;
+                const valor = parseFloat(String(fila[i]).replace(',', '.'));
+                if (!isNaN(valor) && valor > 0 && isFinite(valor)) { suma += valor; count++; }
+              });
+              if (count > 0) {
+                tendenciaAgrupada[fecha][nombrePlanta] = suma / count;
+                nombresLineas.add(nombrePlanta);
+              }
+            }
+          });
+        } else {
+          const idxProducto = data.headers.findIndex(h => normalizarTexto(h) === normalizarTexto(productoSeleccionado));
+          const fila = data.rows.find(r => normalizarTexto(r[idxPlanta]) === normalizarTexto(plantaSeleccionada));
+          if (fila && idxProducto !== -1) {
+            const valor = parseFloat(String(fila[idxProducto]).replace(',', '.'));
+            const nombreLinea = `${plantaSeleccionada} - ${productoSeleccionado}`;
+            if (!isNaN(valor) && valor > 0 && isFinite(valor)) {
+              tendenciaAgrupada[fecha][nombreLinea] = valor;
+              nombresLineas.add(nombreLinea);
+            }
+          }
+        }
+      }
+
+      const datosArray = Object.values(tendenciaAgrupada).sort((a, b) => a.fecha.localeCompare(b.fecha));
+      
+      if (datosArray.length < 2) throw new Error("No hay suficientes datos históricos válidos.");
+
+      setDatosTendencia(datosArray);
+      const lineasArray = Array.from(nombresLineas);
+      setLineasDinamicas(lineasArray);
+
+      if (lineasArray.length > 0) {
+        let actual = 0, min = Infinity, max = -Infinity, variacion = 0;
+        let labelReferencia = '';
+
+        if (plantaSeleccionada === 'TODOS' && productoSeleccionado === 'TODOS') {
+          labelReferencia = 'Promedio Global (Plantas)';
+          const promediosPorFecha = datosArray.map(d => {
+            const vals = Object.entries(d).filter(([k, v]) => k !== 'fecha' && v !== undefined).map(([_, v]) => v);
+            return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : undefined;
+          }).filter(v => v !== undefined);
+
+          if (promediosPorFecha.length > 0) {
+            actual = promediosPorFecha[promediosPorFecha.length - 1];
+            variacion = promediosPorFecha.length > 1 ? actual - promediosPorFecha[promediosPorFecha.length - 2] : 0;
+            const allVals = datosArray.flatMap(d => Object.entries(d).filter(([k, v]) => k !== 'fecha' && v !== undefined).map(([_, v]) => v));
+            min = Math.min(...allVals);
+            max = Math.max(...allVals);
+          }
+        } else {
+          const primeraLinea = lineasArray[0];
+          labelReferencia = primeraLinea;
+          const precios = datosArray.map(d => d[primeraLinea]).filter(v => v !== undefined);
+          
+          if (precios.length > 0) {
+            actual = precios[precios.length - 1];
+            variacion = precios.length > 1 ? actual - precios[precios.length - 2] : 0;
+            min = Math.min(...precios);
+            max = Math.max(...precios);
+          }
+        }
+        
+        setMetricas({ actual, min, max, variacion, lineaReferencia: labelReferencia });
+      } else {
+         setMetricas(null);
+      }
+
+    } catch (error) {
+      setErrorTendencia(error.message);
+    } finally {
+      setCargandoTendencia(false);
+    }
+  };
+
+  useEffect(() => {
+    if (vista === 'tendencias' && archivos.length > 0 && opcionesPlantas.length === 0) {
+      parseExcelFile(archivos[0].url_archivo, 'Precio Base').then(data => {
+        const idxP = data.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
+        const plnts = data.rows.map(r => String(r[idxP]).trim()).filter(p => esPlantaValida(p));
+        
+        setOpcionesPlantas(['TODOS', ...new Set(plnts)].sort((a,b) => a === 'TODOS' ? -1 : b === 'TODOS' ? 1 : a.localeCompare(b)));
+        
+        const prods = data.headers.map(h => String(h).trim()).filter(h => h && !normalizarTexto(h).includes('PLANTAS') && !normalizarTexto(h).includes('CODIGO') && !normalizarTexto(h).includes('USO INTERNO'));
+        setOpcionesProductos(['TODOS', ...new Set(prods)].filter(p => p.length >= 3).sort((a,b) => a === 'TODOS' ? -1 : b === 'TODOS' ? 1 : a.localeCompare(b)));
+      });
+    }
+  }, [vista, archivos, opcionesPlantas.length]);
+
+  const exportarTendenciaExcel = () => {
+    if (!datosTendencia || datosTendencia.length === 0) return toast.error('No hay datos para exportar');
+    const ws = XLSX.utils.json_to_sheet(datosTendencia);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Tendencia');
+    XLSX.writeFile(wb, `Tendencia_${hojaTendencia}.xlsx`);
+    toast.success('Datos exportados a Excel');
+  };
+
   const renderHeader = () => (
     <header style={{ padding: '20px 40px', display: 'flex', alignItems: 'center', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
       <button onClick={() => vista === 'menu' ? setPantalla('') : setVista('menu')} style={btnHeaderStyle}>← {vista === 'menu' ? 'SIGMO' : 'Volver al Menú'}</button>
@@ -486,7 +679,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
           </Card>
         </main>
 
-        {/* MODAL DE ELIMINAR (Ubicado aquí para que se muestre en esta vista) */}
+        {/* MODAL DE ELIMINAR */}
         {modalEliminarAbierto && (
           <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
             <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '450px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
@@ -677,6 +870,129 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
+  if (vista === 'tendencias') {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
+        {renderHeader()}
+        <main style={{ padding: '40px 20px', maxWidth: '1100px', margin: '0 auto' }}>
+          <Card style={{ padding: '30px', marginBottom: '20px' }}>
+            <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', color: 'var(--text-dark)' }}>Análisis de Tendencias</h2>
+            <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              
+              <div style={{ flex: 1, minWidth: '150px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Hoja de Precio</label>
+                <select value={hojaTendencia} onChange={(e) => setHojaTendencia(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold' }}>
+                  <option value="Precio Base">Precio Base</option>
+                  <option value="Precios Planta Sin IGV">Precios Planta Sin IGV</option>
+                  <option value="Precios Planta Con IGV">Precios Planta Con IGV</option>
+                </select>
+              </div>
+
+              <div style={{ flex: 1, minWidth: '150px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Planta</label>
+                <select value={plantaSeleccionada} onChange={(e) => setPlantaSeleccionada(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold' }}>
+                  <option value="">Seleccione...</option>
+                  {opcionesPlantas.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+
+              <div style={{ flex: 1, minWidth: '150px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Producto</label>
+                <select value={productoSeleccionado} onChange={(e) => setProductoSeleccionado(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold' }}>
+                  <option value="">Seleccione...</option>
+                  {opcionesProductos.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              
+              <Boton variante="primary" onClick={cargarTendencias} disabled={cargandoTendencia || !plantaSeleccionada || !productoSeleccionado} style={{ height: '42px' }}>
+                {cargandoTendencia ? 'Generando...' : '📈 Generar Gráfico'}
+              </Boton>
+            </div>
+          </Card>
+
+          {errorTendencia && (
+            <Card style={{ padding: '20px', backgroundColor: '#fef2f2', border: '1px solid #f87171', marginBottom: '20px' }}>
+              <p style={{ margin: 0, color: '#991b1b', fontWeight: 'bold' }}>⚠️ {errorTendencia}</p>
+            </Card>
+          )}
+
+          {metricas && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '20px' }}>
+              <Card style={{ padding: '20px', textAlign: 'center', borderTop: '4px solid var(--primary-blue)' }}>
+                <p style={{ margin: '0 0 5px 0', fontSize: '12px', color: 'var(--text-light)', fontWeight: 'bold', textTransform: 'uppercase' }}>Precio Actual ({metricas.lineaReferencia})</p>
+                <h3 style={{ margin: 0, fontSize: '24px', color: 'var(--primary-blue)' }}>S/ {metricas.actual.toFixed(4)}</h3>
+              </Card>
+              <Card style={{ padding: '20px', textAlign: 'center', borderTop: `4px solid ${metricas.variacion > 0 ? '#ef4444' : metricas.variacion < 0 ? '#10b981' : '#6b7280'}` }}>
+                <p style={{ margin: '0 0 5px 0', fontSize: '12px', color: 'var(--text-light)', fontWeight: 'bold', textTransform: 'uppercase' }}>Variación Reciente</p>
+                <h3 style={{ margin: 0, fontSize: '24px', color: metricas.variacion > 0 ? '#ef4444' : metricas.variacion < 0 ? '#10b981' : '#6b7280' }}>
+                  {metricas.variacion > 0 ? '+' : ''}{metricas.variacion.toFixed(4)}
+                </h3>
+              </Card>
+              <Card style={{ padding: '20px', textAlign: 'center', borderTop: '4px solid #10b981' }}>
+                <p style={{ margin: '0 0 5px 0', fontSize: '12px', color: 'var(--text-light)', fontWeight: 'bold', textTransform: 'uppercase' }}>Precio Mínimo</p>
+                <h3 style={{ margin: 0, fontSize: '24px', color: '#166534' }}>S/ {metricas.min.toFixed(4)}</h3>
+              </Card>
+              <Card style={{ padding: '20px', textAlign: 'center', borderTop: '4px solid #ef4444' }}>
+                <p style={{ margin: '0 0 5px 0', fontSize: '12px', color: 'var(--text-light)', fontWeight: 'bold', textTransform: 'uppercase' }}>Precio Máximo</p>
+                <h3 style={{ margin: 0, fontSize: '24px', color: '#991b1b' }}>S/ {metricas.max.toFixed(4)}</h3>
+              </Card>
+            </div>
+          )}
+
+          <Card style={{ padding: '20px', height: '500px', display: 'flex', flexDirection: 'column' }}>
+            {cargandoTendencia ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>⏳</div>
+                <p style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>Analizando historial de archivos...</p>
+              </div>
+            ) : datosTendencia.length > 0 ? (
+              <>
+                <h3 style={{ textAlign: 'center', color: 'var(--primary-blue)', margin: '0 0 15px 0', fontSize: '18px', fontWeight: 'bold' }}>
+                  Tendencia Histórica: {hojaTendencia} ({plantaSeleccionada !== 'TODOS' ? plantaSeleccionada : 'Todas las Plantas'} - {productoSeleccionado !== 'TODOS' ? productoSeleccionado : 'Todos los Productos'})
+                </h3>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+                  <button onClick={exportarTendenciaExcel} style={{ padding: '6px 12px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    ⬇️ Exportar Datos (Excel)
+                  </button>
+                </div>
+                <div style={{ width: '100%', height: '100%', minHeight: '350px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={datosTendencia} margin={{ top: 20, right: 30, left: 20, bottom: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                      <XAxis dataKey="fecha" tick={{ fontSize: 12, fill: '#64748b' }} tickMargin={10} />
+                      <YAxis domain={['auto', 'auto']} tickFormatter={(val) => val.toFixed(2)} tick={{ fontSize: 12, fill: '#64748b' }} width={60} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '15px' }} />
+                      {lineasDinamicas.map((linea, index) => (
+                        <Line 
+                          key={linea}
+                          type="monotone" 
+                          dataKey={linea} 
+                          name={linea} 
+                          stroke={COLORS[index % COLORS.length]} 
+                          strokeWidth={3} 
+                          dot={{ r: 3, strokeWidth: 2, stroke: '#fff' }} 
+                          activeDot={{ r: 6 }} 
+                          connectNulls
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            ) : (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'var(--text-light)' }}>
+                <div style={{ fontSize: '50px', marginBottom: '15px' }}>📉</div>
+                <h3 style={{ margin: 0 }}>Sin datos para mostrar</h3>
+                <p>Selecciona una planta y un producto para generar el gráfico.</p>
+              </div>
+            )}
+          </Card>
+        </main>
+      </div>
+    )
+  }
+
   if (vista === 'auditoria') {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
@@ -699,22 +1015,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
                 ))}
               </tbody>
             </table>
-          </Card>
-        </main>
-      </div>
-    )
-  }
-
-  if (vista === 'tendencias') {
-    return (
-      <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
-        {renderHeader()}
-        <main style={{ padding: '40px 20px', maxWidth: '1100px', margin: '0 auto' }}>
-          <Card style={{ padding: '40px', textAlign: 'center' }}>
-             <div style={{ fontSize: '50px', marginBottom: '20px' }}>📈</div>
-             <h2 style={{ color: 'var(--primary-blue)' }}>Módulo de Tendencias</h2>
-             <p style={{ color: 'var(--text-light)' }}>El gráfico histórico se mantiene operando con los archivos de Precios.</p>
-             <Boton variante="outline" onClick={() => setVista('menu')} style={{ marginTop: '20px' }}>Volver al Menú</Boton>
           </Card>
         </main>
       </div>
