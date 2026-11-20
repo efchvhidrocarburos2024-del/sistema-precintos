@@ -123,9 +123,10 @@ export default function GestionUsuarios({ setPantalla }) {
     setNuevoRol('')
     setNuevaPlanta('')
   }
-      async function crearUsuario(e) {
+    async function crearUsuario(e) {
     e.preventDefault()
-    // ... (tus validaciones existentes)
+    if (!nuevoEmail || !nuevaPassword || !nuevoRol) return toast.error('Completa los campos requeridos')
+    if (nuevaPassword.length < 6) return toast.error('La contraseña debe tener al menos 6 caracteres')
 
     setCreando(true)
     try {
@@ -140,19 +141,22 @@ export default function GestionUsuarios({ setPantalla }) {
       })
 
       if (error) {
-        // 👇 AQUÍ CAPTURAMOS EL ERROR REAL DEL SERVIDOR 👇
-        if (error.context) {
+        let errorMsg = error.message;
+        // 👇 LEEMOS LA RESPUESTA UNA SOLA VEZ PARA EVITAR EL ERROR DEL STREAM 👇
+        if (error.context && typeof error.context.text === 'function') {
           try {
-            const errorBody = await error.context.json();
-            console.error('Error detallado del servidor:', errorBody);
-            throw new Error(errorBody.message || errorBody.error || JSON.stringify(errorBody));
-          } catch (parseError) {
-            const errorText = await error.context.text();
-            console.error('Error de texto:', errorText);
-            throw new Error(errorText || error.message);
+            const text = await error.context.text();
+            try {
+              const parsed = JSON.parse(text);
+              errorMsg = parsed.message || parsed.error || text;
+            } catch {
+              errorMsg = text || errorMsg;
+            }
+          } catch (err) {
+            console.error("No se pudo leer el detalle del error", err);
           }
         }
-        throw error;
+        throw new Error(errorMsg);
       }
 
       if (data && data.error) throw new Error(data.error)
@@ -162,12 +166,11 @@ export default function GestionUsuarios({ setPantalla }) {
       await cargarDatos()
     } catch (error) {
       console.error('Error al crear usuario:', error)
-      toast.error('Error al crear usuario: ' + error.message)
+      toast.error('Error: ' + error.message)
     } finally {
       setCreando(false)
     }
   }
-
   // Variables para saber qué rol se está seleccionando en los forms
   const rolEdicionCodigo = roles.find(r => String(r.id_rol) === formRol)?.codigo
   const rolCreacionCodigo = roles.find(r => String(r.id_rol) === nuevoRol)?.codigo
