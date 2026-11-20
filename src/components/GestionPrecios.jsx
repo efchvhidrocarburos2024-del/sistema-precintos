@@ -75,6 +75,14 @@ export default function GestionPrecios({ setPantalla, rol }) {
     return String(txt).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').replace(/N°/gi, 'N').trim().toUpperCase();
   };
 
+  const esPlantaValida = (nombre) => {
+    const n = normalizarTexto(nombre);
+    if (!n || n.length < 3 || n.includes('*') || !isNaN(Number(n))) return false;
+    if (n.match(/\d{4}-\d{2}-\d{2}/) || n.match(/\d{2}\/\d{2}\/\d{4}/)) return false; 
+    if (n.includes('TOTAL') || n.includes('IGV') || n.includes('ISC') || n.includes('RODAJE') || n.includes('INCREMENTO') || n.includes('INCLUSION') || n.includes('DISMINUCION') || n.includes('SISE') || n.includes('INGRESO')) return false;
+    return true;
+  };
+
   useEffect(() => {
     if (vista === 'visualizar' && subVista === 'precios') fetchArchivos()
     if (vista === 'visualizar' && subVista === 'topes') fetchArchivosTopes()
@@ -82,7 +90,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     if (vista === 'auditoria') fetchAuditoria()
   }, [vista, subVista])
 
-  // AUTO-SELECCIÓN DE ARCHIVOS
   useEffect(() => {
     if (vista === 'comparar' && archivos.length > 0) {
       const ordenados = [...archivos].sort((a, b) => extraerFecha(b.nombre_archivo).localeCompare(extraerFecha(a.nombre_archivo)));
@@ -222,15 +229,24 @@ export default function GestionPrecios({ setPantalla, rol }) {
   }
 
   const confirmarEliminar = async () => {
-    const esTope = archivoAEliminar.tipo === 'topes'; const tabla = esTope ? 'topes_archivos' : 'precios_archivos'
-    await supabase.storage.from('documentos_sigmo').remove([archivoAEliminar.url_archivo.split('/documentos_sigmo/')[1]])
-    await supabase.from(tabla).delete().eq('id', archivoAEliminar.id)
-    await registrarAuditoria(archivoAEliminar.id, archivoAEliminar.nombre_archivo, 'ELIMINACION', esTope ? 'topes' : 'precios')
-    setModalEliminarAbierto(false); if (esTope) fetchArchivosTopes(); else fetchArchivos();
-    setEliminando(false); toast.success('Eliminado');
+    const esTope = archivoAEliminar.tipo === 'topes'; 
+    const tabla = esTope ? 'topes_archivos' : 'precios_archivos'
+    setEliminando(true)
+    try {
+      await supabase.storage.from('documentos_sigmo').remove([archivoAEliminar.url_archivo.split('/documentos_sigmo/')[1]])
+      await supabase.from(tabla).delete().eq('id', archivoAEliminar.id)
+      await registrarAuditoria(archivoAEliminar.id, archivoAEliminar.nombre_archivo, 'ELIMINACION', esTope ? 'topes' : 'precios')
+      toast.success('Archivo eliminado correctamente');
+      if (esTope) fetchArchivosTopes(); else fetchArchivos();
+    } catch (error) {
+      toast.error('Error al eliminar: ' + error.message)
+    } finally {
+      setModalEliminarAbierto(false)
+      setEliminando(false)
+      setArchivoAEliminar(null)
+    }
   }
 
-  // LÓGICA DE COMPARACIÓN PRECIOS (Restaurada)
   const parseExcelFile = async (url, targetSheetName) => {
     const response = await fetch(url);
     const arrayBuffer = await response.arrayBuffer();
@@ -262,8 +278,10 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
       const baseMap = {};
       dataBase.rows.forEach(row => {
-        const planta = normalizarTexto(row[idxPlantaBase]);
-        if (planta && !planta.includes('TOTAL')) baseMap[planta] = row;
+        const plantaRaw = row[idxPlantaBase];
+        if (esPlantaValida(plantaRaw)) {
+          baseMap[normalizarTexto(plantaRaw)] = row;
+        }
       });
 
       const columnasComparar = [];
@@ -276,8 +294,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
       const comparacion = [];
       dataNuevo.rows.forEach(nuevaRow => {
-        const planta = normalizarTexto(nuevaRow[idxPlantaNew]);
-        if (!planta || planta.includes('TOTAL')) return;
+        const plantaRaw = nuevaRow[idxPlantaNew];
+        if (!esPlantaValida(plantaRaw)) return; 
+        const planta = normalizarTexto(plantaRaw);
         const baseRow = baseMap[planta];
         const variaciones = {};
         if (baseRow) {
@@ -293,7 +312,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
             }
           });
         }
-        comparacion.push({ codigo: idxCodigoNew !== -1 ? nuevaRow[idxCodigoNew] : '', planta: nuevaRow[idxPlantaNew], variaciones });
+        comparacion.push({ codigo: idxCodigoNew !== -1 ? nuevaRow[idxCodigoNew] : '', planta: plantaRaw, variaciones });
       });
 
       setDatosComparados({ columnas: columnasComparar.map(c => c.titulo), rows: comparacion });
@@ -304,11 +323,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   };
 
-  // LÓGICA DE COMPARACIÓN TOPES
   const generarComparacionTopes = async () => {
     if (!idBaseTope || !idNuevoTope) return toast.error('Faltan archivos de topes para comparar.');
     if (idBaseTope === idNuevoTope) return toast.error('Los archivos deben ser diferentes');
-
     setCargandoComparacionTope(true);
     setDatosComparadosTope(null);
 
@@ -344,7 +361,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
         const articulo = String(row['ARTICULO'] || row['Articulo']).trim();
         const valorNuevo = parseFloat(String(row['TOPE S/IGV'] || row['Tope'] || row['TOPE']).replace(',', '.'));
 
-        if (!planta || !articulo || isNaN(valorNuevo)) return;
+        if (!esPlantaValida(planta) || !articulo || isNaN(valorNuevo)) return;
 
         const llave = `${normalizarTexto(planta)}|${normalizarTexto(almacen)}|${normalizarTexto(articulo)}`;
         const valorBase = baseMap[llave];
@@ -569,7 +586,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
             )}
           </Card>
 
-          {/* TABLA DE RESULTADOS PRECIOS */}
           {tipoComparacion === 'precios' && datosComparados && (
             <Card style={{ padding: '20px' }}>
               <h2 style={{ margin: '0 0 15px 0', fontSize: '20px', color: 'var(--primary-blue)', textAlign: 'center' }}>Variación - {hojaComparar}</h2>
@@ -604,7 +620,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
             </Card>
           )}
 
-          {/* TABLA DE RESULTADOS TOPES */}
           {tipoComparacion === 'topes' && datosComparadosTope && (
             <Card style={{ padding: '20px' }}>
               <h2 style={{ margin: '0 0 15px 0', fontSize: '20px', color: '#059669', textAlign: 'center' }}>Variación de Topes</h2>
@@ -690,4 +705,23 @@ export default function GestionPrecios({ setPantalla, rol }) {
       </div>
     )
   }
+
+  // --- MODAL DE ELIMINAR (Agregado aquí para que funcione globalmente) ---
+  return (
+    <>
+      {modalEliminarAbierto && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '450px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ color: 'var(--danger-red)', marginTop: 0 }}>⚠️ Confirmar Eliminación</h3>
+            <p>¿Eliminar permanentemente el archivo <strong>{archivoAEliminar?.nombre_archivo}</strong>?</p>
+            <p style={{ fontSize: '13px', color: 'var(--text-light)' }}>Esta acción también borrará el archivo físico del servidor y no se puede deshacer.</p>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+              <Boton variante="outline" onClick={() => setModalEliminarAbierto(false)} style={{ flex: 1 }} disabled={eliminando}>Cancelar</Boton>
+              <Boton variante="danger" onClick={confirmarEliminar} style={{ flex: 1 }} disabled={eliminando}>{eliminando ? 'Eliminando...' : 'Sí, Eliminar'}</Boton>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
 }
