@@ -485,6 +485,21 @@ export default function GestionPrecios({ setPantalla, rol }) {
             )}
           </Card>
         </main>
+
+        {/* MODAL DE ELIMINAR (Ubicado aquí para que se muestre en esta vista) */}
+        {modalEliminarAbierto && (
+          <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+            <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '450px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+              <h3 style={{ color: 'var(--danger-red)', marginTop: 0 }}>⚠️ Confirmar Eliminación</h3>
+              <p>¿Eliminar permanentemente el archivo <strong>{archivoAEliminar?.nombre_archivo}</strong>?</p>
+              <p style={{ fontSize: '13px', color: 'var(--text-light)' }}>Esta acción también borrará el archivo físico del servidor y no se puede deshacer.</p>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                <Boton variante="outline" onClick={() => setModalEliminarAbierto(false)} style={{ flex: 1 }} disabled={eliminando}>Cancelar</Boton>
+                <Boton variante="danger" onClick={confirmarEliminar} style={{ flex: 1 }} disabled={eliminando}>{eliminando ? 'Eliminando...' : 'Sí, Eliminar'}</Boton>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -705,23 +720,4 @@ export default function GestionPrecios({ setPantalla, rol }) {
       </div>
     )
   }
-
-  // --- MODAL DE ELIMINAR (Agregado aquí para que funcione globalmente) ---
-  return (
-    <>
-      {modalEliminarAbierto && (
-        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '450px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
-            <h3 style={{ color: 'var(--danger-red)', marginTop: 0 }}>⚠️ Confirmar Eliminación</h3>
-            <p>¿Eliminar permanentemente el archivo <strong>{archivoAEliminar?.nombre_archivo}</strong>?</p>
-            <p style={{ fontSize: '13px', color: 'var(--text-light)' }}>Esta acción también borrará el archivo físico del servidor y no se puede deshacer.</p>
-            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-              <Boton variante="outline" onClick={() => setModalEliminarAbierto(false)} style={{ flex: 1 }} disabled={eliminando}>Cancelar</Boton>
-              <Boton variante="danger" onClick={confirmarEliminar} style={{ flex: 1 }} disabled={eliminando}>{eliminando ? 'Eliminando...' : 'Sí, Eliminar'}</Boton>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  )
 }
