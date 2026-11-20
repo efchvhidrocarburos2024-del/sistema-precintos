@@ -68,14 +68,27 @@ export default function GestionCatalogos({ setPantalla }) {
     
     try {
       if (editandoId) {
-        // Editar
-        const { error } = await supabase.from(tabla).update({ codigo: formCodigo, nombre: formNombre }).eq(idColumn, editandoId)
+        // EDICIÓN: Agregamos .select()
+        const { data, error } = await supabase
+          .from(tabla)
+          .update({ codigo: formCodigo, nombre: formNombre })
+          .eq(idColumn, editandoId)
+          .select()
+
         if (error) throw error
+        if (!data || data.length === 0) throw new Error('No se pudo actualizar (bloqueado por RLS).')
+
         toast.success('Actualizado correctamente')
       } else {
-        // Crear
-        const { error } = await supabase.from(tabla).insert({ codigo: formCodigo, nombre: formNombre, activo: true })
+        // CREACIÓN: Agregamos .select()
+        const { data, error } = await supabase
+          .from(tabla)
+          .insert({ codigo: formCodigo, nombre: formNombre, activo: true })
+          .select()
+
         if (error) throw error
+        if (!data || data.length === 0) throw new Error('No se pudo crear (bloqueado por RLS).')
+
         toast.success('Creado correctamente')
       }
       cerrarModal()
@@ -92,11 +105,21 @@ export default function GestionCatalogos({ setPantalla }) {
     const idColumn = vista === 'proveedores' ? 'id_proveedor' : vista === 'productos' ? 'id_producto' : 'id_planta'
     const nuevoEstado = !item.activo
 
-    const { error } = await supabase.from(tabla).update({ activo: nuevoEstado }).eq(idColumn, item.id_proveedor || item.id_producto || item.id_planta)
-    if (error) toast.error('Error al cambiar estado')
-    else {
+    try {
+      // Agregamos .select()
+      const { data, error } = await supabase
+        .from(tabla)
+        .update({ activo: nuevoEstado })
+        .eq(idColumn, item.id_proveedor || item.id_producto || item.id_planta)
+        .select()
+
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error('No se pudo cambiar el estado (bloqueado por RLS).')
+
       toast.success(nuevoEstado ? 'Activado' : 'Desactivado')
       cargarDatos()
+    } catch (error) {
+      toast.error(error.message)
     }
   }
 

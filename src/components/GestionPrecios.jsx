@@ -479,8 +479,17 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const marcarComoVigente = async (id, nombre) => {
     try {
       await supabase.from('precios_archivos').update({ es_vigente: false }).eq('es_vigente', true)
-      const { error } = await supabase.from('precios_archivos').update({ es_vigente: true }).eq('id', id)
+      
+      // Agregamos .select() para verificar que sí se actualizó
+      const { data, error } = await supabase
+        .from('precios_archivos')
+        .update({ es_vigente: true })
+        .eq('id', id)
+        .select()
+
       if (error) throw error
+      if (!data || data.length === 0) throw new Error('No se pudo marcar como vigente. Revisa las políticas RLS.')
+
       await registrarAuditoria(id, nombre, 'VIGENTE')
       toast.success('Lista marcada como VIGENTE')
       fetchArchivos()
@@ -496,8 +505,17 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const urlParts = archivoAEliminar.url_archivo.split('/documentos_sigmo/')
       const filePath = urlParts[1]
       if (filePath) await supabase.storage.from('documentos_sigmo').remove([filePath])
-      const { error: dbError } = await supabase.from('precios_archivos').delete().eq('id', archivoAEliminar.id)
+      
+      // Agregamos .select() para validar la eliminación
+      const { data, error: dbError } = await supabase
+        .from('precios_archivos')
+        .delete()
+        .eq('id', archivoAEliminar.id)
+        .select()
+
       if (dbError) throw dbError
+      if (!data || data.length === 0) throw new Error('No se pudo eliminar el registro. Revisa las políticas RLS.')
+
       await registrarAuditoria(archivoAEliminar.id, archivoAEliminar.nombre_archivo, 'ELIMINACION')
       toast.success('Lista eliminada')
       setModalEliminarAbierto(false)
@@ -628,10 +646,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
       }).select()
 
       if (dbError) throw dbError
+      if (!insertedData || insertedData.length === 0) throw new Error('No se pudo registrar el archivo en la base de datos. Revisa las políticas RLS.')
       
-      if (insertedData && insertedData.length > 0) {
-        await registrarAuditoria(insertedData[0].id, archivoExcel.name, 'SUBIDA')
-      }
+      await registrarAuditoria(insertedData[0].id, archivoExcel.name, 'SUBIDA')
 
       toast.success(debeSerVigente ? 'Lista subida como VIGENTE' : 'Lista subida como HISTÓRICO')
       limpiarPrevisualizacion()
@@ -874,6 +891,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
               </div>
             ) : datosTendencia.length > 0 ? (
               <>
+                <h3 style={{ textAlign: 'center', color: 'var(--primary-blue)', margin: '0 0 15px 0', fontSize: '18px', fontWeight: 'bold' }}>
+                  Tendencia Histórica: {hojaTendencia} ({plantaSeleccionada !== 'TODOS' ? plantaSeleccionada : 'Todas las Plantas'} - {productoSeleccionado !== 'TODOS' ? productoSeleccionado : 'Todos los Productos'})
+                </h3>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
                   <button onClick={exportarTendenciaExcel} style={{ padding: '6px 12px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
                     ⬇️ Exportar Datos (Excel)
@@ -1082,7 +1102,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
                   <td style={{ padding: '15px', textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                       
-                      {/* NUEVO BOTÓN PARA VER EN PDF */}
+                      {/* BOTÓN PARA VER EN PDF */}
                       <Boton variante="outline" tamano="sm" onClick={() => verComoPDF(file)} title="Visualizar en PDF" style={{ color: '#0B5FA5', borderColor: '#0B5FA5' }}>
                         👁️
                       </Boton>
