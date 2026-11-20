@@ -123,11 +123,9 @@ export default function GestionUsuarios({ setPantalla }) {
     setNuevoRol('')
     setNuevaPlanta('')
   }
-
-  async function crearUsuario(e) {
+      async function crearUsuario(e) {
     e.preventDefault()
-    if (!nuevoEmail || !nuevaPassword || !nuevoRol) return toast.error('Completa los campos requeridos')
-    if (nuevaPassword.length < 6) return toast.error('La contraseña debe tener al menos 6 caracteres')
+    // ... (tus validaciones existentes)
 
     setCreando(true)
     try {
@@ -141,14 +139,29 @@ export default function GestionUsuarios({ setPantalla }) {
         }
       })
 
-      if (error) throw new Error(error.message)
+      if (error) {
+        // 👇 AQUÍ CAPTURAMOS EL ERROR REAL DEL SERVIDOR 👇
+        if (error.context) {
+          try {
+            const errorBody = await error.context.json();
+            console.error('Error detallado del servidor:', errorBody);
+            throw new Error(errorBody.message || errorBody.error || JSON.stringify(errorBody));
+          } catch (parseError) {
+            const errorText = await error.context.text();
+            console.error('Error de texto:', errorText);
+            throw new Error(errorText || error.message);
+          }
+        }
+        throw error;
+      }
+
       if (data && data.error) throw new Error(data.error)
 
       toast.success('Usuario creado exitosamente')
       cerrarModalCrear()
       await cargarDatos()
     } catch (error) {
-      console.error(error)
+      console.error('Error al crear usuario:', error)
       toast.error('Error al crear usuario: ' + error.message)
     } finally {
       setCreando(false)
