@@ -20,6 +20,7 @@ export default function GestionUsuarios({ setPantalla }) {
 
   // --- ESTADOS PARA CREAR ---
   const [modalCrearAbierto, setModalCrearAbierto] = useState(false)
+  const [nuevoNombre, setNuevoNombre] = useState('') // 👈 NUEVO ESTADO
   const [nuevoEmail, setNuevoEmail] = useState('')
   const [nuevaPassword, setNuevaPassword] = useState('')
   const [nuevoRol, setNuevoRol] = useState('')
@@ -40,6 +41,7 @@ export default function GestionUsuarios({ setPantalla }) {
       .select(`
         id_usuario,
         email,
+        nombre_completo,
         activo,
         roles ( id_rol, codigo, nombre ),
         plantas ( id_planta, nombre )
@@ -65,7 +67,6 @@ export default function GestionUsuarios({ setPantalla }) {
   // --- LÓGICA DE EDICIÓN ---
   const abrirModalEditar = (usuario) => {
     setUsuarioEditando(usuario)
-    // Forzamos a String para que el <Select> lo reconozca sin problemas
     setFormRol(String(usuario.roles?.id_rol || ''))
     setFormPlanta(String(usuario.plantas?.id_planta || ''))
     setFormActivo(usuario.activo !== false)
@@ -77,7 +78,7 @@ export default function GestionUsuarios({ setPantalla }) {
     setUsuarioEditando(null)
   }
 
-      async function guardarCambiosEdicion(e) {
+  async function guardarCambiosEdicion(e) {
     e.preventDefault()
     if (!formRol) return toast.error('Debes seleccionar un rol')
     
@@ -86,7 +87,6 @@ export default function GestionUsuarios({ setPantalla }) {
       const idRolParsed = isNaN(Number(formRol)) ? formRol : Number(formRol);
       const idPlantaParsed = formPlanta ? (isNaN(Number(formPlanta)) ? formPlanta : Number(formPlanta)) : null;
 
-      // .select() nos dice si realmente se modificó la fila
       const { data, error } = await supabase
         .from('usuarios')
         .update({
@@ -98,18 +98,13 @@ export default function GestionUsuarios({ setPantalla }) {
         .select()
 
       if (error) throw error
-
-      // Si RLS bloquea, data vendrá vacío [] sin dar error. Aquí lo detectamos:
-      if (!data || data.length === 0) {
-        throw new Error('La base de datos rechazó el cambio (Revisa que tu usuario tenga el rol ADMIN_SISTEMA en la tabla).')
-      }
+      if (!data || data.length === 0) throw new Error('No se pudo actualizar. Revisa las políticas RLS en Supabase.')
 
       toast.success('Usuario actualizado correctamente')
       cerrarModalEditar()
-      await cargarDatos() // Refresca la tabla
-      
+      await cargarDatos()
     } catch (error) {
-      toast.error(error.message)
+      toast.error('Error: ' + error.message)
     } finally {
       setGuardando(false)
     }
@@ -118,20 +113,23 @@ export default function GestionUsuarios({ setPantalla }) {
   // --- LÓGICA DE CREACIÓN (EDGE FUNCTION) ---
   const cerrarModalCrear = () => {
     setModalCrearAbierto(false)
+    setNuevoNombre('') // 👈 LIMPIAMOS EL NOMBRE
     setNuevoEmail('')
     setNuevaPassword('')
     setNuevoRol('')
     setNuevaPlanta('')
   }
-    async function crearUsuario(e) {
+
+  async function crearUsuario(e) {
     e.preventDefault()
-    if (!nuevoEmail || !nuevaPassword || !nuevoRol) return toast.error('Completa los campos requeridos')
+    if (!nuevoNombre || !nuevoEmail || !nuevaPassword || !nuevoRol) return toast.error('Completa los campos requeridos')
     if (nuevaPassword.length < 6) return toast.error('La contraseña debe tener al menos 6 caracteres')
 
     setCreando(true)
     try {
       const { data, error } = await supabase.functions.invoke('create-user', {
         body: {
+          nombre_completo: nuevoNombre, // 👈 ENVIAMOS EL NOMBRE
           email: nuevoEmail,
           password: nuevaPassword,
           id_rol: isNaN(Number(nuevoRol)) ? nuevoRol : Number(nuevoRol),
@@ -142,7 +140,6 @@ export default function GestionUsuarios({ setPantalla }) {
 
       if (error) {
         let errorMsg = error.message;
-        // 👇 LEEMOS LA RESPUESTA UNA SOLA VEZ PARA EVITAR EL ERROR DEL STREAM 👇
         if (error.context && typeof error.context.text === 'function') {
           try {
             const text = await error.context.text();
@@ -165,13 +162,13 @@ export default function GestionUsuarios({ setPantalla }) {
       cerrarModalCrear()
       await cargarDatos()
     } catch (error) {
-      console.error('Error al crear usuario:', error)
+      console.error(error)
       toast.error('Error: ' + error.message)
     } finally {
       setCreando(false)
     }
   }
-  // Variables para saber qué rol se está seleccionando en los forms
+
   const rolEdicionCodigo = roles.find(r => String(r.id_rol) === formRol)?.codigo
   const rolCreacionCodigo = roles.find(r => String(r.id_rol) === nuevoRol)?.codigo
 
@@ -208,7 +205,7 @@ export default function GestionUsuarios({ setPantalla }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
                 <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white' }}>
                   <tr style={{ textAlign: 'left' }}>
-                    <th style={{ padding: '15px' }}>USUARIO (EMAIL)</th>
+                    <th style={{ padding: '15px' }}>USUARIO (NOMBRE / EMAIL)</th>
                     <th style={{ padding: '15px' }}>ROL</th>
                     <th style={{ padding: '15px' }}>PLANTA / TERMINAL</th>
                     <th style={{ padding: '15px' }}>ESTADO</th>
@@ -218,8 +215,9 @@ export default function GestionUsuarios({ setPantalla }) {
                 <tbody>
                   {usuarios.map((u) => (
                     <tr key={u.id_usuario} style={{ borderBottom: '1px solid #eee' }}>
-                      <td style={{ padding: '15px', fontWeight: 'bold', color: 'var(--text-dark)' }}>
-                        {u.email || 'Sin correo registrado'}
+                      <td style={{ padding: '15px' }}>
+                        <div style={{ fontWeight: 'bold', color: 'var(--text-dark)' }}>{u.nombre_completo || 'Sin nombre'}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-light)' }}>{u.email}</div>
                       </td>
                       <td style={{ padding: '15px' }}>
                         <span style={{ padding: '4px 10px', backgroundColor: '#e0f2fe', color: '#0369a1', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase' }}>
@@ -266,7 +264,7 @@ export default function GestionUsuarios({ setPantalla }) {
                 required 
                 options={[
                   { value: '', label: 'Seleccione...' }, 
-                  ...roles.map(r => ({ value: String(r.id_rol), label: r.nombre })) // Aseguramos String
+                  ...roles.map(r => ({ value: String(r.id_rol), label: r.nombre }))
                 ]} 
               />
               
@@ -278,7 +276,7 @@ export default function GestionUsuarios({ setPantalla }) {
                   required 
                   options={[
                     { value: '', label: 'Seleccione...' }, 
-                    ...plantas.map(p => ({ value: String(p.id_planta), label: p.nombre })) // Aseguramos String
+                    ...plantas.map(p => ({ value: String(p.id_planta), label: p.nombre }))
                   ]} 
                 />
               )}
@@ -297,13 +295,24 @@ export default function GestionUsuarios({ setPantalla }) {
         </div>
       )}
 
-      {/* MODAL: CREAR USUARIO (Edge Function) */}
+      {/* MODAL: CREAR USUARIO */}
       {modalCrearAbierto && (
         <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '450px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
             <h3 style={{ margin: '0 0 20px 0', color: 'var(--text-dark)', fontSize: '20px' }}>Crear Nuevo Usuario</h3>
             
             <form onSubmit={crearUsuario} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              
+              {/* 👇 NUEVO CAMPO DE NOMBRE COMPLETO 👇 */}
+              <Input 
+                label="Nombre Completo" 
+                type="text" 
+                value={nuevoNombre} 
+                onChange={(e) => setNuevoNombre(e.target.value)} 
+                placeholder="Ej. Luis Vilca" 
+                required 
+              />
+
               <Input label="Correo Electrónico" type="email" value={nuevoEmail} onChange={(e) => setNuevoEmail(e.target.value)} placeholder="ejemplo@petroamerica.com.pe" required />
               
               <Input label="Contraseña Temporal" type="text" value={nuevaPassword} onChange={(e) => setNuevaPassword(e.target.value)} placeholder="Mínimo 6 caracteres" required />
