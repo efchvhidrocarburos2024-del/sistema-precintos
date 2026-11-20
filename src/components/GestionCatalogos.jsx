@@ -22,6 +22,19 @@ export default function GestionCatalogos({ setPantalla }) {
   const [formNombre, setFormNombre] = useState('')
   const [guardando, setGuardando] = useState(false)
 
+  // Función auxiliar para obtener el nombre real de la columna ID según la tabla
+  const obtenerColumnaId = () => {
+    if (vista === 'proveedores') return 'id_proveedor' // (A menos que en tu BD también sea 'id', entonces cambia a 'id')
+    if (vista === 'plantas') return 'id_planta'
+    if (vista === 'productos') return 'id'
+    return 'id'
+  }
+
+  // Función auxiliar para obtener el valor del ID sin importar cómo se llame la propiedad en el objeto
+  const obtenerValorId = (item) => {
+    return item.id || item.id_producto || item.id_proveedor || item.id_planta
+  }
+
   // Cargar datos según la vista
   useEffect(() => {
     if (vista === 'menu') return
@@ -40,7 +53,7 @@ export default function GestionCatalogos({ setPantalla }) {
 
   const abrirModal = (item = null) => {
     if (item) {
-      setEditandoId(item.id_proveedor || item.id_producto || item.id_planta)
+      setEditandoId(obtenerValorId(item))
       setFormCodigo(item.codigo || '')
       setFormNombre(item.nombre || '')
     } else {
@@ -64,11 +77,11 @@ export default function GestionCatalogos({ setPantalla }) {
     
     setGuardando(true)
     const tabla = vista === 'proveedores' ? 'proveedores' : vista === 'productos' ? 'productos' : 'plantas'
-    const idColumn = vista === 'proveedores' ? 'id_proveedor' : vista === 'productos' ? 'id_producto' : 'id_planta'
+    const idColumn = obtenerColumnaId()
     
     try {
       if (editandoId) {
-        // EDICIÓN: Agregamos .select()
+        // EDICIÓN
         const { data, error } = await supabase
           .from(tabla)
           .update({ codigo: formCodigo, nombre: formNombre })
@@ -80,7 +93,7 @@ export default function GestionCatalogos({ setPantalla }) {
 
         toast.success('Actualizado correctamente')
       } else {
-        // CREACIÓN: Agregamos .select()
+        // CREACIÓN
         const { data, error } = await supabase
           .from(tabla)
           .insert({ codigo: formCodigo, nombre: formNombre, activo: true })
@@ -102,15 +115,15 @@ export default function GestionCatalogos({ setPantalla }) {
 
   async function toggleActivo(item) {
     const tabla = vista === 'proveedores' ? 'proveedores' : vista === 'productos' ? 'productos' : 'plantas'
-    const idColumn = vista === 'proveedores' ? 'id_proveedor' : vista === 'productos' ? 'id_producto' : 'id_planta'
+    const idColumn = obtenerColumnaId()
+    const itemId = obtenerValorId(item)
     const nuevoEstado = !item.activo
 
     try {
-      // Agregamos .select()
       const { data, error } = await supabase
         .from(tabla)
         .update({ activo: nuevoEstado })
-        .eq(idColumn, item.id_proveedor || item.id_producto || item.id_planta)
+        .eq(idColumn, itemId)
         .select()
 
       if (error) throw error
@@ -167,7 +180,6 @@ export default function GestionCatalogos({ setPantalla }) {
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Administración de terminales de despacho.</p>
             </div>
 
-            {/* NUEVA TARJETA: ADMINISTRAR USUARIOS */}
             <div onClick={() => setPantalla('usuarios')} style={cardStyle} onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary-blue)'} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>👥</div>
               <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Administrar Usuarios</h3>
@@ -182,7 +194,7 @@ export default function GestionCatalogos({ setPantalla }) {
 
   // --- VISTA 2: TABLA DE DATOS (Proveedores, Productos o Plantas) ---
   const tituloTabla = vista === 'proveedores' ? 'Proveedores' : vista === 'productos' ? 'Productos' : 'Plantas / Terminales'
-  const idColumn = vista === 'proveedores' ? 'id_proveedor' : vista === 'productos' ? 'id_producto' : 'id_planta'
+  const idColumn = obtenerColumnaId()
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
@@ -212,7 +224,7 @@ export default function GestionCatalogos({ setPantalla }) {
                 </thead>
                 <tbody>
                   {datos.map((item) => (
-                    <tr key={item[idColumn]} style={{ borderBottom: '1px solid #eee', backgroundColor: item.activo ? 'white' : '#f9fafb' }}>
+                    <tr key={obtenerValorId(item)} style={{ borderBottom: '1px solid #eee', backgroundColor: item.activo ? 'white' : '#f9fafb' }}>
                       <td style={{ padding: '15px', fontWeight: 'bold' }}>{item.codigo}</td>
                       <td style={{ padding: '15px' }}>{item.nombre}</td>
                       <td style={{ padding: '15px' }}>
