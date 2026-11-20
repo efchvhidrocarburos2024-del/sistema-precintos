@@ -1008,7 +1008,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
           {datosComparados && (
             <Card style={{ padding: '20px' }}>
-              <h2 style={{ margin: '0 0 15px 0', fontSize: '20px' }}>Variación - {hojaComparar}</h2>
+              <h2 style={{ margin: '0 0 15px 0', fontSize: '20px', color: 'var(--primary-blue)', textAlign: 'center' }}>Variación - {hojaComparar}</h2>
               
               <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'center', tableLayout: 'fixed' }}>
