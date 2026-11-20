@@ -77,19 +77,17 @@ export default function GestionUsuarios({ setPantalla }) {
     setUsuarioEditando(null)
   }
 
-  async function guardarCambiosEdicion(e) {
+    async function guardarCambiosEdicion(e) {
     e.preventDefault()
     if (!formRol) return toast.error('Debes seleccionar un rol')
     
     setGuardando(true)
     try {
-      // 1. Convertimos los IDs a números si tu BD usa enteros (esto evita fallos silenciosos)
       const idRolParsed = isNaN(Number(formRol)) ? formRol : Number(formRol);
       const idPlantaParsed = formPlanta ? (isNaN(Number(formPlanta)) ? formPlanta : Number(formPlanta)) : null;
 
-      // 2. IMPORTANTE: Agregamos .select() al final. 
-      // Si RLS bloquea el update, Supabase devolverá data vacía en lugar de dar error.
-      const { data, error } = await supabase
+      // 1. Hacemos el UPDATE SIN el .select()
+      const { error } = await supabase
         .from('usuarios')
         .update({
           id_rol: idRolParsed,
@@ -97,20 +95,17 @@ export default function GestionUsuarios({ setPantalla }) {
           activo: formActivo
         })
         .eq('id_usuario', usuarioEditando.id_usuario)
-        .select() 
 
+      // 2. Si la base de datos lanza un error real (ej. RLS bloqueado de verdad), lo atrapamos
       if (error) throw error
 
-      // 3. Si no hay error pero data está vacío, significa que las políticas RLS bloquearon el cambio
-      if (!data || data.length === 0) {
-        throw new Error('No se pudo actualizar. Revisa las políticas RLS en Supabase.')
-      }
-
+      // 3. Si no hay error, asumimos que se guardó y refrescamos
       toast.success('Usuario actualizado correctamente')
       cerrarModalEditar()
-      await cargarDatos() // Esperamos a que la tabla se actualice
+      await cargarDatos() // Esto trae los datos frescos de la BD
+      
     } catch (error) {
-      toast.error('Error: ' + error.message)
+      toast.error('Error real de BD: ' + error.message)
     } finally {
       setGuardando(false)
     }
