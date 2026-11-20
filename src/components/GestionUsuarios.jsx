@@ -65,8 +65,9 @@ export default function GestionUsuarios({ setPantalla }) {
   // --- LÓGICA DE EDICIÓN ---
   const abrirModalEditar = (usuario) => {
     setUsuarioEditando(usuario)
-    setFormRol(usuario.roles?.id_rol || '')
-    setFormPlanta(usuario.plantas?.id_planta || '')
+    // Forzamos a String para que el <Select> lo reconozca sin problemas
+    setFormRol(String(usuario.roles?.id_rol || ''))
+    setFormPlanta(String(usuario.plantas?.id_planta || ''))
     setFormActivo(usuario.activo !== false)
     setModalEditarAbierto(true)
   }
@@ -82,20 +83,32 @@ export default function GestionUsuarios({ setPantalla }) {
     
     setGuardando(true)
     try {
-      const { error } = await supabase
+      // 1. Convertimos los IDs a números si tu BD usa enteros (esto evita fallos silenciosos)
+      const idRolParsed = isNaN(Number(formRol)) ? formRol : Number(formRol);
+      const idPlantaParsed = formPlanta ? (isNaN(Number(formPlanta)) ? formPlanta : Number(formPlanta)) : null;
+
+      // 2. IMPORTANTE: Agregamos .select() al final. 
+      // Si RLS bloquea el update, Supabase devolverá data vacía en lugar de dar error.
+      const { data, error } = await supabase
         .from('usuarios')
         .update({
-          id_rol: formRol,
-          id_planta: formPlanta || null,
+          id_rol: idRolParsed,
+          id_planta: idPlantaParsed,
           activo: formActivo
         })
         .eq('id_usuario', usuarioEditando.id_usuario)
+        .select() 
 
       if (error) throw error
 
+      // 3. Si no hay error pero data está vacío, significa que las políticas RLS bloquearon el cambio
+      if (!data || data.length === 0) {
+        throw new Error('No se pudo actualizar. Revisa las políticas RLS en Supabase.')
+      }
+
       toast.success('Usuario actualizado correctamente')
       cerrarModalEditar()
-      cargarDatos()
+      await cargarDatos() // Esperamos a que la tabla se actualice
     } catch (error) {
       toast.error('Error: ' + error.message)
     } finally {
@@ -123,21 +136,18 @@ export default function GestionUsuarios({ setPantalla }) {
         body: {
           email: nuevoEmail,
           password: nuevaPassword,
-          id_rol: nuevoRol,
-          id_planta: nuevaPlanta || null,
+          id_rol: isNaN(Number(nuevoRol)) ? nuevoRol : Number(nuevoRol),
+          id_planta: nuevaPlanta ? (isNaN(Number(nuevaPlanta)) ? nuevaPlanta : Number(nuevaPlanta)) : null,
           activo: true
         }
       })
 
-      // Supabase Functions devuelve el error en 'error' si falla la petición HTTP
       if (error) throw new Error(error.message)
-      
-      // Si la función devuelve un JSON con campo 'error', lo lanzamos
       if (data && data.error) throw new Error(data.error)
 
       toast.success('Usuario creado exitosamente')
       cerrarModalCrear()
-      cargarDatos()
+      await cargarDatos()
     } catch (error) {
       console.error(error)
       toast.error('Error al crear usuario: ' + error.message)
@@ -147,15 +157,14 @@ export default function GestionUsuarios({ setPantalla }) {
   }
 
   // Variables para saber qué rol se está seleccionando en los forms
-  const rolEdicionCodigo = roles.find(r => r.id_rol === formRol)?.codigo
-  const rolCreacionCodigo = roles.find(r => r.id_rol === nuevoRol)?.codigo
+  const rolEdicionCodigo = roles.find(r => String(r.id_rol) === formRol)?.codigo
+  const rolCreacionCodigo = roles.find(r => String(r.id_rol) === nuevoRol)?.codigo
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
       
       <header style={{ padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          {/* BOTÓN ACTUALIZADO PARA VOLVER A CATÁLOGOS */}
           <button onClick={() => setPantalla('catalogos')} style={btnHeaderStyle}>← Volver a Catálogos</button>
           <h1 style={{ margin: 0, color: 'var(--primary-blue)', fontSize: '28px', fontWeight: '900' }}>Gestión de Usuarios</h1>
         </div>
@@ -234,10 +243,29 @@ export default function GestionUsuarios({ setPantalla }) {
             <p style={{ margin: '0 0 20px 0', color: 'var(--text-light)', fontSize: '14px' }}>{usuarioEditando?.email}</p>
             
             <form onSubmit={guardarCambiosEdicion} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <Select label="Rol del Usuario" value={formRol} onChange={(e) => setFormRol(e.target.value)} required options={[{ value: '', label: 'Seleccione...' }, ...roles.map(r => ({ value: r.id_rol, label: r.nombre }))]} />
+              
+              <Select 
+                label="Rol del Usuario" 
+                value={formRol} 
+                onChange={(e) => setFormRol(e.target.value)} 
+                required 
+                options={[
+                  { value: '', label: 'Seleccione...' }, 
+                  ...roles.map(r => ({ value: String(r.id_rol), label: r.nombre })) // Aseguramos String
+                ]} 
+              />
               
               {rolEdicionCodigo === 'admin_planta' && (
-                <Select label="Planta Asignada (Requerido)" value={formPlanta} onChange={(e) => setFormPlanta(e.target.value)} required options={[{ value: '', label: 'Seleccione...' }, ...plantas.map(p => ({ value: p.id_planta, label: p.nombre }))]} />
+                <Select 
+                  label="Planta Asignada (Requerido)" 
+                  value={formPlanta} 
+                  onChange={(e) => setFormPlanta(e.target.value)} 
+                  required 
+                  options={[
+                    { value: '', label: 'Seleccione...' }, 
+                    ...plantas.map(p => ({ value: String(p.id_planta), label: p.nombre })) // Aseguramos String
+                  ]} 
+                />
               )}
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '5px' }}>
@@ -265,10 +293,28 @@ export default function GestionUsuarios({ setPantalla }) {
               
               <Input label="Contraseña Temporal" type="text" value={nuevaPassword} onChange={(e) => setNuevaPassword(e.target.value)} placeholder="Mínimo 6 caracteres" required />
               
-              <Select label="Rol del Usuario" value={nuevoRol} onChange={(e) => setNuevoRol(e.target.value)} required options={[{ value: '', label: 'Seleccione un rol...' }, ...roles.map(r => ({ value: r.id_rol, label: r.nombre }))]} />
+              <Select 
+                label="Rol del Usuario" 
+                value={nuevoRol} 
+                onChange={(e) => setNuevoRol(e.target.value)} 
+                required 
+                options={[
+                  { value: '', label: 'Seleccione un rol...' }, 
+                  ...roles.map(r => ({ value: String(r.id_rol), label: r.nombre }))
+                ]} 
+              />
               
               {rolCreacionCodigo === 'admin_planta' && (
-                <Select label="Planta Asignada (Requerido)" value={nuevaPlanta} onChange={(e) => setNuevaPlanta(e.target.value)} required options={[{ value: '', label: 'Seleccione una planta...' }, ...plantas.map(p => ({ value: p.id_planta, label: p.nombre }))]} />
+                <Select 
+                  label="Planta Asignada (Requerido)" 
+                  value={nuevaPlanta} 
+                  onChange={(e) => setNuevaPlanta(e.target.value)} 
+                  required 
+                  options={[
+                    { value: '', label: 'Seleccione una planta...' }, 
+                    ...plantas.map(p => ({ value: String(p.id_planta), label: p.nombre }))
+                  ]} 
+                />
               )}
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
