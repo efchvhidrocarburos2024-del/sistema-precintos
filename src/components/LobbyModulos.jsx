@@ -53,19 +53,17 @@ export default function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol })
           marginTop: '30px',
         }}
       >
-        {/* MÓDULO: PRECINTOS */}
-        {puedeVerPrecintos && (
-          <Card style={{ textAlign: 'center', padding: '30px 20px' }}>
-            <div style={{ fontSize: '40px', marginBottom: '15px' }}>📦</div>
-            <h3 style={{ margin: '0 0 10px 0', color: 'var(--primary-blue)' }}>Gestión de Precintos</h3>
-            <p style={{ color: 'var(--text-light)', fontSize: '14px', marginBottom: '20px' }}>
-              Control de viajes, SCOP, inventario de plantas y reportes.
-            </p>
-            <Boton variante="primary" onClick={() => setPantalla('precintos_menu')} style={{ width: '100%' }}>
-              Entrar al Módulo
-            </Boton>
-          </Card>
-        )}
+        {/* MÓDULO: PRECIOS */}
+        <Card style={{ textAlign: 'center', padding: '30px 20px' }}>
+          <div style={{ fontSize: '40px', marginBottom: '15px' }}>💰</div>
+          <h3 style={{ margin: '0 0 10px 0', color: 'var(--primary-blue)' }}>Precios, Topes & Cotización</h3>
+          <p style={{ color: 'var(--text-light)', fontSize: '14px', marginBottom: '20px' }}>
+            Consulta y gestión de listas de precios, topes y cotizaciones.
+          </p>
+          <Boton variante="primary" onClick={() => setPantalla('precios_menu')} style={{ width: '100%' }}>
+            Entrar al Módulo
+          </Boton>
+        </Card>
 
         {/* MÓDULO: REPOSITORIO */}
         {puedeVerRepositorio && (
