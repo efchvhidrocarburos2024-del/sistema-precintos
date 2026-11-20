@@ -24,13 +24,11 @@ export default function GestionCatalogos({ setPantalla }) {
 
   // Función auxiliar para obtener el nombre real de la columna ID según la tabla
   const obtenerColumnaId = () => {
-    if (vista === 'proveedores') return 'id_proveedor' // (A menos que en tu BD también sea 'id', entonces cambia a 'id')
-    if (vista === 'plantas') return 'id_planta'
-    if (vista === 'productos') return 'id'
-    return 'id'
+    if (vista === 'plantas') return 'id_planta' // Si plantas llegara a fallar, cámbialo a 'id'
+    return 'id' // Proveedores y productos usan 'id'
   }
 
-  // Función auxiliar para obtener el valor del ID sin importar cómo se llame la propiedad en el objeto
+  // Función auxiliar para obtener el valor del ID del objeto
   const obtenerValorId = (item) => {
     return item.id || item.id_producto || item.id_proveedor || item.id_planta
   }
