@@ -89,12 +89,20 @@ export default function RegistroViajes() {
       return
     }
 
+    // --- NUEVA VALIDACIÓN DE CANTIDAD ---
+    const cantidadNum = parseInt(cantidad, 10);
+    if (isNaN(cantidadNum) || cantidadNum <= 0) {
+      toast.error('La cantidad de precintos debe ser un número mayor a 0.');
+      return;
+    }
+
     setCargando(true)
 
+    // Pasamos la cantidad ya validada a la función RPC
     const { data, error } = await supabase.rpc('fn_registrar_viaje_scop', {
       p_id_planta: idPlanta,
       p_scop: scop,
-      p_cantidad: parseInt(cantidad)
+      p_cantidad: cantidadNum
     })
 
     if (error) {

@@ -25,14 +25,42 @@ export default function RegistroLotes() {
 
   const registrarLote = async (e) => {
     e.preventDefault()
+
+    // --- NUEVAS VALIDACIONES DE SEGURIDAD ---
+    if (!idPlanta) {
+      return toast.error('Debe seleccionar una planta destino.')
+    }
+
+    const inicioNum = parseInt(inicio, 10)
+    const finNum = parseInt(fin, 10)
+    const valorNum = parseFloat(valorSinIgv)
+
+    if (isNaN(inicioNum) || isNaN(finNum) || inicioNum <= 0 || finNum <= 0) {
+      return toast.error('Los correlativos deben ser números enteros positivos.')
+    }
+
+    if (finNum < inicioNum) {
+      return toast.error('El correlativo "AL" (Fin) no puede ser menor que el "DEL" (Inicio).')
+    }
+
+    if (isNaN(valorNum) || valorNum < 0) {
+      return toast.error('El valor sin IGV debe ser un número válido.')
+    }
+
+    if (!color.trim()) {
+      return toast.error('El color es obligatorio.')
+    }
+    // ---------------------------------------
+
     setCargando(true)
 
+    // Enviamos los datos ya validados y limpios
     const { data, error } = await supabase.rpc('fn_registrar_lote_precintos', {
       p_id_planta: idPlanta,
-      p_correlativo_inicio: parseInt(inicio),
-      p_correlativo_fin: parseInt(fin),
-      p_valor_sin_igv: parseFloat(valorSinIgv),
-      p_color: color
+      p_correlativo_inicio: inicioNum,
+      p_correlativo_fin: finNum,
+      p_valor_sin_igv: valorNum,
+      p_color: color.trim()
     })
 
     if (error) {
