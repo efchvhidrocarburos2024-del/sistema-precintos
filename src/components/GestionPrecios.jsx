@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
 import { Card, Boton } from './ui'
@@ -19,8 +18,6 @@ const btnTabStyle = (activo) => ({
   color: activo ? 'white' : '#4b5563',
   transition: 'all 0.2s'
 })
-
-const COLORS = ['#0B5FA5', '#10b981', '#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#f43f5e', '#84cc16', '#f97316', '#6366f1']
 
 export default function GestionPrecios({ setPantalla, rol }) {
   const [vista, setVista] = useState('menu')
@@ -43,10 +40,12 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [idNuevo, setIdNuevo] = useState('')
   const [hojaComparar, setHojaComparar] = useState('Precio Base')
   const [datosComparados, setDatosComparados] = useState(null)
+  const [cargandoComparacion, setCargandoComparacion] = useState(false)
   
   const [idBaseTope, setIdBaseTope] = useState('')
   const [idNuevoTope, setIdNuevoTope] = useState('')
   const [datosComparadosTope, setDatosComparadosTope] = useState(null)
+  const [cargandoComparacionTope, setCargandoComparacionTope] = useState(false)
 
   const [auditoria, setAuditoria] = useState([])
 
@@ -83,7 +82,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     if (vista === 'auditoria') fetchAuditoria()
   }, [vista, subVista])
 
-  // AUTO-SELECCIÓN DE ARCHIVOS PARA COMPARAR
+  // AUTO-SELECCIÓN DE ARCHIVOS
   useEffect(() => {
     if (vista === 'comparar' && archivos.length > 0) {
       const ordenados = [...archivos].sort((a, b) => extraerFecha(b.nombre_archivo).localeCompare(extraerFecha(a.nombre_archivo)));
@@ -114,7 +113,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     const { data: pAud } = await supabase.from('precios_auditoria').select('*').order('created_at', { ascending: false })
     const { data: tAud } = await supabase.from('topes_auditoria').select('*').order('created_at', { ascending: false })
     let combinada = [...(pAud || []).map(x => ({...x, origen: 'PRECIOS'})), ...(tAud || []).map(x => ({...x, origen: 'TOPES'}))].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    setAuditoria(combINADA) // corregido aquí
+    setAuditoria(combinada)
   }
 
   async function registrarAuditoria(id_archivo, nombre_archivo, accion, tipo = 'precios') {
@@ -231,51 +230,141 @@ export default function GestionPrecios({ setPantalla, rol }) {
     setEliminando(false); toast.success('Eliminado');
   }
 
-  const parseExcelFile = async (url) => {
-    const res = await fetch(url); const wb = XLSX.read(await res.arrayBuffer(), { type: 'array' });
-    const ws = wb.Sheets[wb.SheetNames[0]]; const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  // LÓGICA DE COMPARACIÓN PRECIOS (Restaurada)
+  const parseExcelFile = async (url, targetSheetName) => {
+    const response = await fetch(url);
+    const arrayBuffer = await response.arrayBuffer();
+    const wb = XLSX.read(arrayBuffer, { type: 'array' });
+    const searchTerm = targetSheetName.toLowerCase().replace('precios planta ', '').replace('precio ', '');
+    let sheetName = wb.SheetNames.find(name => name.toLowerCase().includes(searchTerm)) || wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
     let headerIndex = data.findIndex(row => row.some(cell => normalizarTexto(cell).includes('PLANTAS')));
+    if (headerIndex === -1) headerIndex = 0;
     return { headers: data[headerIndex], rows: data.slice(headerIndex + 1).filter(row => row.some(cell => cell !== '')) };
   };
 
   const generarComparacion = async () => {
-    if (!idBase || !idNuevo) return toast.error('Faltan listas');
-    const fileBase = archivos.find(a => a.id === idBase); const fileNuevo = archivos.find(a => a.id === idNuevo);
-    const dataBase = await parseExcelFile(fileBase.url_archivo); const dataNuevo = await parseExcelFile(fileNuevo.url_archivo);
-    const idxPlantaNew = dataNuevo.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
-    const idxCodigoNew = dataNuevo.headers.findIndex(h => normalizarTexto(h).includes('CODIGO'));
-    const baseMap = {}; dataBase.rows.forEach(row => { const p = normalizarTexto(row[dataBase.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'))]); if (p) baseMap[p] = row; });
-    const columnas = [];
-    dataNuevo.headers.forEach((h, i) => {
-      const hNorm = normalizarTexto(h); if (!hNorm || hNorm.includes('PLANTAS') || hNorm.includes('CODIGO') || hNorm.includes('USO INTERNO')) return;
-      const baseCol = dataBase.headers.findIndex(bh => normalizarTexto(bh) === hNorm);
-      if (baseCol !== -1) columnas.push({ titulo: h, idxN: i, idxB: baseCol });
-    });
-    const comparacion = [];
-    dataNuevo.rows.forEach(nRow => {
-      const p = normalizarTexto(nRow[idxPlantaNew]); if (!p) return; const bRow = baseMap[p]; const vars = {};
-      if (bRow) columnas.forEach(c => {
-        const vN = parseFloat(String(nRow[c.idxN]).replace(',', '.')); const vB = parseFloat(String(bRow[c.idxB]).replace(',', '.'));
-        if (!isNaN(vN) && !isNaN(vB) && vN > 0 && vB > 0) vars[c.titulo] = { diff: vN - vB };
-        else if (!isNaN(vN) && vN > 0) vars[c.titulo] = 'NUEVO'; else vars[c.titulo] = null;
+    if (!idBase || !idNuevo) return toast.error('Faltan listas para comparar.');
+    if (idBase === idNuevo) return toast.error('Las listas deben ser diferentes');
+    setCargandoComparacion(true);
+    setDatosComparados(null);
+
+    try {
+      const fileBase = archivos.find(a => a.id === idBase);
+      const fileNuevo = archivos.find(a => a.id === idNuevo);
+      const dataBase = await parseExcelFile(fileBase.url_archivo, hojaComparar);
+      const dataNuevo = await parseExcelFile(fileNuevo.url_archivo, hojaComparar);
+
+      const idxPlantaNew = dataNuevo.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
+      const idxCodigoNew = dataNuevo.headers.findIndex(h => normalizarTexto(h).includes('CODIGO'));
+      const idxPlantaBase = dataBase.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
+
+      const baseMap = {};
+      dataBase.rows.forEach(row => {
+        const planta = normalizarTexto(row[idxPlantaBase]);
+        if (planta && !planta.includes('TOTAL')) baseMap[planta] = row;
       });
-      comparacion.push({ codigo: idxCodigoNew !== -1 ? nRow[idxCodigoNew] : '', planta: nRow[idxPlantaNew], variaciones: vars });
-    });
-    setDatosComparados({ columnas: columnas.map(c => c.titulo), rows: comparacion });
+
+      const columnasComparar = [];
+      dataNuevo.headers.forEach((h, i) => {
+        const hNorm = normalizarTexto(h);
+        if (!hNorm || hNorm.includes('PLANTAS') || hNorm.includes('CODIGO') || hNorm.includes('USO INTERNO')) return;
+        const baseColIndex = dataBase.headers.findIndex(baseH => normalizarTexto(baseH) === hNorm);
+        if (baseColIndex !== -1) columnasComparar.push({ titulo: h, indexNuevo: i, indexBase: baseColIndex });
+      });
+
+      const comparacion = [];
+      dataNuevo.rows.forEach(nuevaRow => {
+        const planta = normalizarTexto(nuevaRow[idxPlantaNew]);
+        if (!planta || planta.includes('TOTAL')) return;
+        const baseRow = baseMap[planta];
+        const variaciones = {};
+        if (baseRow) {
+          columnasComparar.forEach(col => {
+            const valNuevo = parseFloat(String(nuevaRow[col.indexNuevo]).replace(',', '.'));
+            const valBase = parseFloat(String(baseRow[col.indexBase]).replace(',', '.'));
+            if (!isNaN(valNuevo) && !isNaN(valBase) && valNuevo > 0 && valBase > 0) {
+              variaciones[col.titulo] = { diff: valNuevo - valBase };
+            } else if (!isNaN(valNuevo) && valNuevo > 0 && (isNaN(valBase) || valBase === 0)) {
+              variaciones[col.titulo] = 'NUEVO';
+            } else {
+              variaciones[col.titulo] = null;
+            }
+          });
+        }
+        comparacion.push({ codigo: idxCodigoNew !== -1 ? nuevaRow[idxCodigoNew] : '', planta: nuevaRow[idxPlantaNew], variaciones });
+      });
+
+      setDatosComparados({ columnas: columnasComparar.map(c => c.titulo), rows: comparacion });
+    } catch (error) {
+      toast.error('Error al comparar: ' + error.message);
+    } finally {
+      setCargandoComparacion(false);
+    }
   };
 
+  // LÓGICA DE COMPARACIÓN TOPES
   const generarComparacionTopes = async () => {
-    if (!idBaseTope || !idNuevoTope) return toast.error('Faltan archivos');
-    const fBase = archivosTopes.find(a => a.id === idBaseTope); const fNuevo = archivosTopes.find(a => a.id === idNuevoTope);
-    const dBase = XLSX.utils.sheet_to_json(XLSX.read(await (await fetch(fBase.url_archivo)).arrayBuffer(), { type: 'array' }).Sheets[XLSX.read(await (await fetch(fBase.url_archivo)).arrayBuffer(), { type: 'array' }).SheetNames[0]]);
-    const dNuevo = XLSX.utils.sheet_to_json(XLSX.read(await (await fetch(fNuevo.url_archivo)).arrayBuffer(), { type: 'array' }).Sheets[XLSX.read(await (await fetch(fNuevo.url_archivo)).arrayBuffer(), { type: 'array' }).SheetNames[0]]);
-    const map = {}; dBase.forEach(r => { const ll = `${normalizarTexto(r['PLANTA'])}|${normalizarTexto(r['ALMACEN'])}|${normalizarTexto(r['ARTICULO'])}`; map[ll] = parseFloat(String(r['TOPE S/IGV']).replace(',', '.')); });
-    const comp = []; dNuevo.forEach(r => {
-      const ll = `${normalizarTexto(r['PLANTA'])}|${normalizarTexto(r['ALMACEN'])}|${normalizarTexto(r['ARTICULO'])}`; const vN = parseFloat(String(r['TOPE S/IGV']).replace(',', '.'));
-      if (!r['PLANTA'] || isNaN(vN)) return;
-      const vB = map[ll]; comp.push({ planta: r['PLANTA'], almacen: r['ALMACEN'], articulo: r['ARTICULO'], variacion: vB !== undefined ? { diff: vN - vB } : 'NUEVO' });
-    });
-    setDatosComparadosTope(comp);
+    if (!idBaseTope || !idNuevoTope) return toast.error('Faltan archivos de topes para comparar.');
+    if (idBaseTope === idNuevoTope) return toast.error('Los archivos deben ser diferentes');
+
+    setCargandoComparacionTope(true);
+    setDatosComparadosTope(null);
+
+    try {
+      const fileBase = archivosTopes.find(a => a.id === idBaseTope);
+      const fileNuevo = archivosTopes.find(a => a.id === idNuevoTope);
+
+      const parseTope = async (url) => {
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+        const wb = XLSX.read(arrayBuffer, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        return XLSX.utils.sheet_to_json(ws, { defval: '' });
+      };
+
+      const dataBase = await parseTope(fileBase.url_archivo);
+      const dataNuevo = await parseTope(fileNuevo.url_archivo);
+
+      const baseMap = {};
+      dataBase.forEach(row => {
+        const planta = normalizarTexto(row['PLANTA'] || row['Planta']);
+        const almacen = normalizarTexto(row['ALMACEN'] || row['Almacen']);
+        const articulo = normalizarTexto(row['ARTICULO'] || row['Articulo']);
+        const llave = `${planta}|${almacen}|${articulo}`;
+        const valor = parseFloat(String(row['TOPE S/IGV'] || row['Tope'] || row['TOPE']).replace(',', '.'));
+        if (!isNaN(valor)) baseMap[llave] = valor;
+      });
+
+      const comparacion = [];
+      dataNuevo.forEach(row => {
+        const planta = String(row['PLANTA'] || row['Planta']).trim();
+        const almacen = String(row['ALMACEN'] || row['Almacen']).trim();
+        const articulo = String(row['ARTICULO'] || row['Articulo']).trim();
+        const valorNuevo = parseFloat(String(row['TOPE S/IGV'] || row['Tope'] || row['TOPE']).replace(',', '.'));
+
+        if (!planta || !articulo || isNaN(valorNuevo)) return;
+
+        const llave = `${normalizarTexto(planta)}|${normalizarTexto(almacen)}|${normalizarTexto(articulo)}`;
+        const valorBase = baseMap[llave];
+
+        let variacion = null;
+        if (valorBase !== undefined) {
+          variacion = { diff: valorNuevo - valorBase };
+        } else {
+          variacion = 'NUEVO';
+        }
+
+        comparacion.push({ planta, almacen, articulo, variacion });
+      });
+
+      setDatosComparadosTope(comparacion);
+    } catch (error) {
+      toast.error('Error al comparar Topes: ' + error.message);
+    } finally {
+      setCargandoComparacionTope(false);
+    }
   };
 
   const renderHeader = () => (
@@ -414,6 +503,11 @@ export default function GestionPrecios({ setPantalla, rol }) {
   }
 
   if (vista === 'comparar') {
+    const filePrevio = archivos.find(a => a.id === idBase);
+    const fileActual = archivos.find(a => a.id === idNuevo);
+    const filePrevioTope = archivosTopes.find(a => a.id === idBaseTope);
+    const fileActualTope = archivosTopes.find(a => a.id === idNuevoTope);
+
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
         {renderHeader()}
@@ -425,47 +519,127 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
           <Card style={{ padding: '30px', marginBottom: '20px' }}>
             {tipoComparacion === 'precios' ? (
-              <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-end' }}>
-                <div style={{ flex: 1 }}><label>Lista Previa</label><select value={idBase} onChange={e => setIdBase(e.target.value)} style={{ width: '100%', padding: '10px' }}>{archivos.map(a => <option key={a.id} value={a.id}>{a.nombre_archivo}</option>)}</select></div>
-                <div style={{ flex: 1 }}><label>Lista Actual</label><select value={idNuevo} onChange={e => setIdNuevo(e.target.value)} style={{ width: '100%', padding: '10px' }}>{archivos.map(a => <option key={a.id} value={a.id}>{a.nombre_archivo}</option>)}</select></div>
-                <Boton variante="primary" onClick={generarComparacion} style={{ height: '42px' }}>⚖️ Comparar</Boton>
+              <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '200px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Lista Previa (Automática)</label>
+                  <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '8px', border: '1px solid #d1d5db', color: '#374151', fontWeight: 'bold' }}>
+                    {filePrevio ? filePrevio.nombre_archivo : 'Cargando...'}
+                  </div>
+                </div>
+                <div style={{ flex: 1, minWidth: '200px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Lista Actual (Automática)</label>
+                  <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '8px', border: '1px solid #d1d5db', color: '#374151', fontWeight: 'bold' }}>
+                    {fileActual ? fileActual.nombre_archivo : 'Cargando...'}
+                  </div>
+                </div>
+                <div style={{ width: '200px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Hoja</label>
+                  <select value={hojaComparar} onChange={(e) => setHojaComparar(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: '#1e293b', color: 'white', fontWeight: 'bold' }}>
+                    <option value="Precio Base">Precio Base</option>
+                    <option value="Precios Planta Sin IGV">Precios Planta Sin IGV</option>
+                    <option value="Precios Planta Con IGV">Precios Planta Con IGV</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                  <Boton variante="primary" onClick={generarComparacion} style={{ height: '42px' }} disabled={cargandoComparacion}>
+                    {cargandoComparacion ? 'Comparando...' : '⚖️ Comparar Ahora'}
+                  </Boton>
+                </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-end' }}>
-                <div style={{ flex: 1 }}><label>Topes Previos</label><select value={idBaseTope} onChange={e => setIdBaseTope(e.target.value)} style={{ width: '100%', padding: '10px' }}>{archivosTopes.map(a => <option key={a.id} value={a.id}>{a.nombre_archivo}</option>)}</select></div>
-                <div style={{ flex: 1 }}><label>Topes Actuales</label><select value={idNuevoTope} onChange={e => setIdNuevoTope(e.target.value)} style={{ width: '100%', padding: '10px' }}>{archivosTopes.map(a => <option key={a.id} value={a.id}>{a.nombre_archivo}</option>)}</select></div>
-                <Boton variante="success" onClick={generarComparacionTopes} style={{ height: '42px' }}>⚖️ Comparar</Boton>
+              <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '200px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Topes Previos (Automático)</label>
+                  <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '8px', border: '1px solid #d1d5db', color: '#374151', fontWeight: 'bold' }}>
+                    {filePrevioTope ? filePrevioTope.nombre_archivo : 'Cargando...'}
+                  </div>
+                </div>
+                <div style={{ flex: 1, minWidth: '200px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Topes Actuales (Automático)</label>
+                  <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '8px', border: '1px solid #d1d5db', color: '#374151', fontWeight: 'bold' }}>
+                    {fileActualTope ? fileActualTope.nombre_archivo : 'Cargando...'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                  <Boton variante="success" onClick={generarComparacionTopes} style={{ height: '42px' }} disabled={cargandoComparacionTope}>
+                    {cargandoComparacionTope ? 'Comparando...' : '⚖️ Comparar Ahora'}
+                  </Boton>
+                </div>
               </div>
             )}
           </Card>
 
+          {/* TABLA DE RESULTADOS PRECIOS */}
           {tipoComparacion === 'precios' && datosComparados && (
             <Card style={{ padding: '20px' }}>
-              <h2 style={{ textAlign: 'center', color: 'var(--primary-blue)' }}>Variación de Precios</h2>
-              {/* Tabla precios aquí */}
+              <h2 style={{ margin: '0 0 15px 0', fontSize: '20px', color: 'var(--primary-blue)', textAlign: 'center' }}>Variación - {hojaComparar}</h2>
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'center', tableLayout: 'fixed' }}>
+                  <thead style={{ backgroundColor: '#1e293b', color: 'white' }}>
+                    <tr>
+                      <th style={{ padding: '10px 4px', width: '60px' }}>CÓD</th>
+                      <th style={{ padding: '10px 4px', width: '90px' }}>PLANTAS</th>
+                      {datosComparados.columnas.map((col, i) => <th key={i} style={{ padding: '10px 4px', wordBreak: 'break-word' }}>{col}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {datosComparados.rows.map((fila, rI) => (
+                      <tr key={rI} style={{ borderBottom: '1px solid #eee', backgroundColor: rI % 2 === 0 ? 'white' : '#f9fafb' }}>
+                        <td style={{ padding: '8px 4px', color: 'var(--text-light)' }}>{fila.codigo}</td>
+                        <td style={{ padding: '8px 4px', fontWeight: 'bold', color: 'var(--text-dark)' }}>{fila.planta}</td>
+                        {datosComparados.columnas.map((col, cI) => {
+                          const item = fila.variaciones[col];
+                          if (item === 'NUEVO') return <td key={cI} style={{ color: '#3b82f6', fontWeight: 'bold' }}>NUEVO</td>;
+                          if (!item) return <td key={cI} style={{ color: '#9ca3af' }}>-</td>;
+                          if (Math.abs(item.diff) > 0.00001) {
+                            return <td key={cI} style={{ color: item.diff > 0 ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>{item.diff > 0 ? '+' : ''}{item.diff.toFixed(4)}</td>;
+                          }
+                          return <td key={cI} style={{ color: '#6b7280' }}>0.0000</td>;
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </Card>
           )}
 
+          {/* TABLA DE RESULTADOS TOPES */}
           {tipoComparacion === 'topes' && datosComparadosTope && (
             <Card style={{ padding: '20px' }}>
-              <h2 style={{ textAlign: 'center', color: '#059669' }}>Variación de Topes</h2>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'center' }}>
-                <thead style={{ backgroundColor: '#059669', color: 'white' }}>
-                  <tr><th>PLANTA</th><th>ALMACÉN</th><th>ARTÍCULO</th><th>VARIACIÓN</th></tr>
-                </thead>
-                <tbody>
-                  {datosComparadosTope.map((fila, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-                      <td style={{ padding: '8px', fontWeight: 'bold' }}>{fila.planta}</td>
-                      <td style={{ padding: '8px' }}>{fila.almacen}</td>
-                      <td style={{ padding: '8px' }}>{fila.articulo}</td>
-                      <td style={{ padding: '8px' }}>
-                        {fila.variacion === 'NUEVO' ? <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>NUEVO</span> : fila.variacion && Math.abs(fila.variacion.diff) > 0.00001 ? <span style={{ color: fila.variacion.diff > 0 ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>{fila.variacion.diff > 0 ? '+' : ''}{fila.variacion.diff.toFixed(2)}</span> : <span style={{ color: '#9ca3af' }}>0.00</span>}
-                      </td>
+              <h2 style={{ margin: '0 0 15px 0', fontSize: '20px', color: '#059669', textAlign: 'center' }}>Variación de Topes</h2>
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'center' }}>
+                  <thead style={{ backgroundColor: '#059669', color: 'white' }}>
+                    <tr>
+                      <th style={{ padding: '10px' }}>PLANTA</th>
+                      <th style={{ padding: '10px' }}>ALMACÉN</th>
+                      <th style={{ padding: '10px' }}>ARTÍCULO</th>
+                      <th style={{ padding: '10px' }}>VARIACIÓN (S/)</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {datosComparadosTope.map((fila, rI) => (
+                      <tr key={rI} style={{ borderBottom: '1px solid #eee', backgroundColor: rI % 2 === 0 ? 'white' : '#f9fafb' }}>
+                        <td style={{ padding: '8px', fontWeight: 'bold' }}>{fila.planta}</td>
+                        <td style={{ padding: '8px' }}>{fila.almacen}</td>
+                        <td style={{ padding: '8px' }}>{fila.articulo}</td>
+                        <td style={{ padding: '8px' }}>
+                          {fila.variacion === 'NUEVO' ? (
+                            <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>NUEVO</span>
+                          ) : fila.variacion && Math.abs(fila.variacion.diff) > 0.00001 ? (
+                            <span style={{ color: fila.variacion.diff > 0 ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>
+                              {fila.variacion.diff > 0 ? '+' : ''}{fila.variacion.diff.toFixed(2)}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#9ca3af' }}>0.00</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </Card>
           )}
         </main>
