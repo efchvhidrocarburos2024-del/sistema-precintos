@@ -243,37 +243,46 @@ export default function GestionPrecios({ setPantalla, rol }) {
   };
 
   const handleFileChange = (e) => {
-    const file = e.target.files[0]; if (!file) return
-    setArchivoExcel(file)
-    const reader = new FileReader()
-    reader.onload = (evt) => {
-      const wb = XLSX.read(evt.target.result, { type: 'binary' })
-      const hojas = wb.SheetNames.map(sheetName => {
-        const ws = wb.Sheets[sheetName]
-        const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
-        
-        // Detectar fila de encabezados
-        let headerIndex = data.findIndex(row => row.some(cell => normalizarTexto(cell).includes('PLANTA')))
-        if (headerIndex === -1) headerIndex = 0
-        
-        const headers = data[headerIndex]
-        const idxPlanta = headers.findIndex(c => normalizarTexto(c).includes('PLANTA'))
-        
-        // Filtrar solo filas con plantas válidas (elimina fila de códigos)
-        const rows = data.slice(headerIndex + 1).filter(row => esPlantaValida(row[idxPlanta]))
-        
-        return {
-          nombre: sheetName,
-          headers: headers,
-          rows: rows
-        }
-      })
-      
-      setHojasPreview(hojas)
-      setHojaActiva(0)
-    }
-    reader.readAsBinaryString(file)
+  const file = e.target.files[0]; if (!file) return
+  setArchivoExcel(file)
+  const reader = new FileReader()
+  reader.onload = (evt) => {
+    const wb = XLSX.read(evt.target.result, { type: 'binary' })
+    const hojas = wb.SheetNames.map(sheetName => {
+      const ws = wb.Sheets[sheetName]
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+
+      // Detectar fila de encabezados
+      const headerIndex = data.findIndex(row => row.some(cell => normalizarTexto(cell).includes('PLANTA')))
+      if (headerIndex === -1) return null
+
+      const headers = data[headerIndex]
+      const idxPlanta = headers.findIndex(c => normalizarTexto(c).includes('PLANTA'))
+      const idxCodigo = headers.findIndex(c => normalizarTexto(c).includes('CODIGO'))
+
+      // Recortar columnas: desde CODIGO (o PLANTA) hasta la última con título
+      const colInicio = Math.max(0, idxCodigo !== -1 ? idxCodigo : idxPlanta)
+      let colFin = -1
+      headers.forEach((c, i) => { if (String(c).trim() !== '') colFin = i })
+      if (colFin < colInicio) return null
+
+      // Solo filas con plantas válidas (elimina fila de códigos y textos fuera de tabla)
+      const rows = data.slice(headerIndex + 1)
+        .filter(row => esPlantaValida(row[idxPlanta]))
+        .map(row => row.slice(colInicio, colFin + 1))
+
+      return {
+        nombre: sheetName,
+        headers: headers.slice(colInicio, colFin + 1),
+        rows: rows
+      }
+    }).filter(h => h && h.rows.length > 0)
+
+    setHojasPreview(hojas)
+    setHojaActiva(0)
   }
+  reader.readAsBinaryString(file)
+}
 
   const handleFileChangeTope = (e) => {
     const file = e.target.files[0]; if (!file) return
@@ -766,7 +775,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
         {renderHeader()}
-        <main style={{ padding: '40px 20px', maxWidth: '1400px', margin: '0 auto' }}>
+        <main style={{ padding: '40px 20px', maxWidth: '1500px', margin: '0 auto' }}>
           <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
             <button style={btnTabStyle(subVista === 'precios')} onClick={() => { setSubVista('precios'); setHojasPreview([]); setHojaActiva(0); setArchivoExcel(null); }}>📄 Cargar Precios</button>
             <button style={btnTabStyle(subVista === 'topes')} onClick={() => { setSubVista('topes'); setPreviewDataTope([]); setPreviewHeadersTope([]); setArchivoExcelTope(null); }}>📊 Cargar Topes</button>
@@ -809,36 +818,56 @@ export default function GestionPrecios({ setPantalla, rol }) {
                     )}
                     
                     {/* Tabla de la hoja activa */}
-                    {hojasPreview[hojaActiva].rows.length > 0 ? (
-                      <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '20px' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
-                          <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white' }}>
-                            <tr>
-                              {hojasPreview[hojaActiva].headers.map((h, i) => (
-                                <th key={i} style={{ padding: '8px 6px', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '2px solid #1e293b' }}>
-                                  {String(h).trim()}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {hojasPreview[hojaActiva].rows.map((row, rI) => (
-                              <tr key={rI} style={{ backgroundColor: rI % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                                {row.map((cell, cI) => (
-                                  <td key={cI} style={{ padding: '6px 4px', color: '#374151' }}>
-                                    {typeof cell === 'number' ? (Number.isInteger(cell) ? cell : cell.toFixed(4)) : String(cell).trim()}
-                                  </td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', backgroundColor: '#f9fafb', borderRadius: '8px', marginBottom: '20px' }}>
-                        No hay datos de plantas válidos en esta hoja.
-                      </div>
-                    )}
+{hojasPreview[hojaActiva].rows.length > 0 ? (
+  <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '20px' }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', tableLayout: 'fixed' }}>
+      <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white' }}>
+        <tr>
+          {hojasPreview[hojaActiva].headers.map((h, i) => {
+            const hn = normalizarTexto(h)
+            const esCodigo = hn.includes('CODIGO')
+            const esPlanta = hn.includes('PLANTA')
+            return (
+              <th key={i} style={{
+                padding: '6px 3px',
+                textAlign: esCodigo || esPlanta ? 'left' : 'center',
+                whiteSpace: 'normal',
+                wordBreak: 'break-word',
+                fontSize: '9px',
+                lineHeight: '1.2',
+                borderBottom: '2px solid #1e293b',
+                width: esCodigo ? '4.5%' : esPlanta ? '9%' : undefined
+              }}>
+                {String(h).trim()}
+              </th>
+            )
+          })}
+        </tr>
+      </thead>
+      <tbody>
+        {hojasPreview[hojaActiva].rows.map((row, rI) => (
+          <tr key={rI} style={{ backgroundColor: rI % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+            {row.map((cell, cI) => (
+              <td key={cI} style={{
+                padding: '5px 3px',
+                color: '#374151',
+                textAlign: cI <= 1 ? 'left' : 'center',
+                whiteSpace: 'normal',
+                wordBreak: 'break-word'
+              }}>
+                {typeof cell === 'number' ? (Number.isInteger(cell) ? cell : cell.toFixed(4)) : String(cell).trim()}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+) : (
+  <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', backgroundColor: '#f9fafb', borderRadius: '8px', marginBottom: '20px' }}>
+    No hay datos de plantas válidos en esta hoja.
+  </div>
+)}
                     
                     <div style={{ display: 'flex', gap: '10px' }}>
                       <Boton variante="success" onClick={handleSubirArchivo} disabled={subiendo}>
