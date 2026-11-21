@@ -180,23 +180,20 @@ export default function GestionPrecios({ setPantalla, rol }) {
         const ws = wb.Sheets[sheetName];
         const filas = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-        // 1) Detectar la fila de encabezados (acepta PLANTA y PLANTAS → sirve para topes)
         const headerIndex = filas.findIndex(row =>
           row.some(cell => normalizarTexto(cell).includes('PLANTA'))
         );
-        if (headerIndex === -1) return; // hoja sin tabla: se omite
+        if (headerIndex === -1) return;
 
         const headerRow = filas[headerIndex];
         const idxPlanta = headerRow.findIndex(c => normalizarTexto(c).includes('PLANTA'));
         const idxCodigo = headerRow.findIndex(c => normalizarTexto(c).includes('CODIGO'));
 
-        // 2) Rango de columnas: desde CODIGO (o PLANTA) hasta la última con título
         const colInicio = Math.max(0, idxCodigo !== -1 ? idxCodigo : idxPlanta);
         let colFin = -1;
         headerRow.forEach((c, i) => { if (String(c).trim() !== '') colFin = i; });
         if (colFin < colInicio) return;
 
-        // 3) Solo filas que pertenezcan a la tabla (planta válida)
         const cuerpo = filas
           .slice(headerIndex + 1)
           .filter(row => esPlantaValida(row[idxPlanta]))
@@ -206,7 +203,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
         const encabezado = headerRow.slice(colInicio, colFin + 1).map(c => String(c).trim());
 
-        // 4) Formato de valores: enteros tal cual, decimales a máximo 4 cifras
         const formatear = (v) => {
           if (typeof v === 'number') {
             if (Number.isInteger(v)) return String(v);
@@ -287,7 +283,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const { data } = await supabase.from('precios_archivos').insert({ nombre_archivo: archivoExcel.name, url_archivo: publicUrl, subido_por: user.email, es_vigente: true }).select()
       if (!data) throw new Error('Bloqueado por RLS')
       await registrarAuditoria(data[0].id, archivoExcel.name, 'SUBIDA', 'precios')
-      toast.success('Lista subida'); setArchivoExcel(null); setPreviewData([]); setVista('menu')
+      toast.success('Lista subida'); setArchivoExcel(null); setPreviewData([]); setPreviewHeaders([]); setVista('menu')
     } catch (error) { toast.error(error.message) } finally { setSubiendo(false) }
   }
 
@@ -302,7 +298,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const { data } = await supabase.from('topes_archivos').insert({ nombre_archivo: archivoExcelTope.name, url_archivo: publicUrl, subido_por: user.email, es_vigente: true }).select()
       if (!data) throw new Error('Bloqueado por RLS')
       await registrarAuditoria(data[0].id, archivoExcelTope.name, 'SUBIDA', 'topes')
-      toast.success('Topes subidos'); setArchivoExcelTope(null); setPreviewDataTope([]); setVista('menu')
+      toast.success('Topes subidos'); setArchivoExcelTope(null); setPreviewDataTope([]); setPreviewHeadersTope([]); setVista('menu')
     } catch (error) { toast.error(error.message) } finally { setSubiendoTope(false) }
   }
 
@@ -753,21 +749,109 @@ export default function GestionPrecios({ setPantalla, rol }) {
         {renderHeader()}
         <main style={{ padding: '40px 20px', maxWidth: '1200px', margin: '0 auto' }}>
           <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-            <button style={btnTabStyle(subVista === 'precios')} onClick={() => setSubVista('precios')}>📄 Cargar Precios</button>
-            <button style={btnTabStyle(subVista === 'topes')} onClick={() => setSubVista('topes')}>📊 Cargar Topes</button>
+            <button style={btnTabStyle(subVista === 'precios')} onClick={() => { setSubVista('precios'); setPreviewData([]); setPreviewHeaders([]); setArchivoExcel(null); }}>📄 Cargar Precios</button>
+            <button style={btnTabStyle(subVista === 'topes')} onClick={() => { setSubVista('topes'); setPreviewDataTope([]); setPreviewHeadersTope([]); setArchivoExcelTope(null); }}>📊 Cargar Topes</button>
           </div>
           <Card style={{ padding: '30px' }}>
             {subVista === 'precios' ? (
               <>
                 <h2>Subir Lista de Precios</h2>
                 <input type="file" accept=".xlsx" onChange={handleFileChange} style={{ marginTop: '15px' }} />
-                {archivoExcel && <div style={{ marginTop: '15px' }}><Boton variante="success" onClick={handleSubirArchivo} disabled={subiendo}>{subiendo ? 'Subiendo...' : 'Confirmar y Subir'}</Boton></div>}
+                
+                {previewData.length > 0 && (
+                  <div style={{ marginTop: '30px' }}>
+                    <h3 style={{ color: 'var(--primary-blue)', marginBottom: '15px', fontSize: '18px' }}>
+                      📋 Vista Previa: {archivoExcel.name}
+                    </h3>
+                    <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '20px', maxHeight: '500px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                        <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white', position: 'sticky', top: 0, zIndex: 1 }}>
+                          <tr>
+                            {previewHeaders.map((h, i) => (
+                              <th key={i} style={{ padding: '10px 8px', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '2px solid #1e293b' }}>
+                                {String(h).trim()}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {previewData.slice(0, 20).map((row, rI) => (
+                            <tr key={rI} style={{ backgroundColor: rI % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                              {row.map((cell, cI) => (
+                                <td key={cI} style={{ padding: '8px', color: '#374151' }}>
+                                  {typeof cell === 'number' ? (Number.isInteger(cell) ? cell : cell.toFixed(4)) : String(cell).trim()}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {previewData.length > 20 && (
+                      <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '15px' }}>
+                        Mostrando las primeras 20 filas de {previewData.length} totales.
+                      </p>
+                    )}
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <Boton variante="success" onClick={handleSubirArchivo} disabled={subiendo}>
+                        {subiendo ? '⏳ Subiendo...' : '✅ Confirmar y Subir'}
+                      </Boton>
+                      <Boton variante="outline" onClick={() => { setArchivoExcel(null); setPreviewData([]); setPreviewHeaders([]); }}>
+                        ❌ Cancelar
+                      </Boton>
+                    </div>
+                  </div>
+                )}
               </>
             ) : (
               <>
                 <h2>Subir Archivo de Topes</h2>
                 <input type="file" accept=".xlsx" onChange={handleFileChangeTope} style={{ marginTop: '15px' }} />
-                {archivoExcelTope && <div style={{ marginTop: '15px' }}><Boton variante="success" onClick={handleSubirTope} disabled={subiendoTope}>{subiendoTope ? 'Subiendo...' : 'Confirmar y Subir'}</Boton></div>}
+                
+                {previewDataTope.length > 0 && (
+                  <div style={{ marginTop: '30px' }}>
+                    <h3 style={{ color: '#059669', marginBottom: '15px', fontSize: '18px' }}>
+                      📋 Vista Previa: {archivoExcelTope.name}
+                    </h3>
+                    <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '20px', maxHeight: '500px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                        <thead style={{ backgroundColor: '#059669', color: 'white', position: 'sticky', top: 0, zIndex: 1 }}>
+                          <tr>
+                            {previewHeadersTope.map((h, i) => (
+                              <th key={i} style={{ padding: '10px 8px', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '2px solid #059669' }}>
+                                {String(h).trim()}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {previewDataTope.slice(0, 20).map((row, rI) => (
+                            <tr key={rI} style={{ backgroundColor: rI % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                              {row.map((cell, cI) => (
+                                <td key={cI} style={{ padding: '8px', color: '#374151' }}>
+                                  {typeof cell === 'number' ? (Number.isInteger(cell) ? cell : cell.toFixed(4)) : String(cell).trim()}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {previewDataTope.length > 20 && (
+                      <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '15px' }}>
+                        Mostrando las primeras 20 filas de {previewDataTope.length} totales.
+                      </p>
+                    )}
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <Boton variante="success" onClick={handleSubirTope} disabled={subiendoTope}>
+                        {subiendoTope ? '⏳ Subiendo...' : '✅ Confirmar y Subir'}
+                      </Boton>
+                      <Boton variante="outline" onClick={() => { setArchivoExcelTope(null); setPreviewDataTope([]); setPreviewHeadersTope([]); }}>
+                        ❌ Cancelar
+                      </Boton>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </Card>
