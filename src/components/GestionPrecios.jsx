@@ -173,21 +173,70 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const arrayBuffer = await res.arrayBuffer();
       const wb = XLSX.read(arrayBuffer, { type: 'array' });
       const doc = new jsPDF('landscape');
-      
-      wb.SheetNames.forEach((sheetName, index) => {
-        if (index > 0) doc.addPage();
+
+      let hayTabla = false;
+
+      wb.SheetNames.forEach((sheetName) => {
+        const ws = wb.Sheets[sheetName];
+        const filas = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+        // 1) Detectar la fila de encabezados (acepta PLANTA y PLANTAS → sirve para topes)
+        const headerIndex = filas.findIndex(row =>
+          row.some(cell => normalizarTexto(cell).includes('PLANTA'))
+        );
+        if (headerIndex === -1) return; // hoja sin tabla: se omite
+
+        const headerRow = filas[headerIndex];
+        const idxPlanta = headerRow.findIndex(c => normalizarTexto(c).includes('PLANTA'));
+        const idxCodigo = headerRow.findIndex(c => normalizarTexto(c).includes('CODIGO'));
+
+        // 2) Rango de columnas: desde CODIGO (o PLANTA) hasta la última con título
+        const colInicio = Math.max(0, idxCodigo !== -1 ? idxCodigo : idxPlanta);
+        let colFin = -1;
+        headerRow.forEach((c, i) => { if (String(c).trim() !== '') colFin = i; });
+        if (colFin < colInicio) return;
+
+        // 3) Solo filas que pertenezcan a la tabla (planta válida)
+        const cuerpo = filas
+          .slice(headerIndex + 1)
+          .filter(row => esPlantaValida(row[idxPlanta]))
+          .map(row => row.slice(colInicio, colFin + 1));
+
+        if (cuerpo.length === 0) return;
+
+        const encabezado = headerRow.slice(colInicio, colFin + 1).map(c => String(c).trim());
+
+        // 4) Formato de valores: enteros tal cual, decimales a máximo 4 cifras
+        const formatear = (v) => {
+          if (typeof v === 'number') {
+            if (Number.isInteger(v)) return String(v);
+            return String(Number(v.toFixed(4)));
+          }
+          return String(v).trim();
+        };
+
+        if (hayTabla) doc.addPage();
+        hayTabla = true;
+
         doc.setFontSize(14); doc.setTextColor(11, 95, 165);
         doc.text(`Archivo: ${file.nombre_archivo}`, 14, 15);
         doc.setFontSize(10); doc.setTextColor(100, 100, 100);
         doc.text(`Hoja: ${sheetName}`, 14, 22);
-        
-        const ws = wb.Sheets[sheetName];
-        const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }).filter(row => row.some(c => String(c).trim() !== ''));
-        
-        if (data.length > 0) {
-          autoTable(doc, { head: [data[0].map(c => String(c))], body: data.slice(1).map(row => row.map(c => String(c))), startY: 28, styles: { fontSize: 7 }, headStyles: { fillColor: [11, 95, 165] } });
-        }
+
+        autoTable(doc, {
+          head: [encabezado],
+          body: cuerpo.map(row => row.map(formatear)),
+          startY: 28,
+          styles: { fontSize: 7 },
+          headStyles: { fillColor: [11, 95, 165] }
+        });
       });
+
+      if (!hayTabla) {
+        toast.error('No se encontró ninguna tabla en el archivo', { id: toastId });
+        return;
+      }
+
       window.open(doc.output('bloburl'), '_blank');
       toast.success('PDF generado', { id: toastId });
     } catch (error) {
