@@ -50,14 +50,16 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [archivos, setArchivos] = useState([])
   const [archivoExcel, setArchivoExcel] = useState(null)
   const [subiendo, setSubiendo] = useState(false)
-  const [previewData, setPreviewData] = useState([])
-  const [previewHeaders, setPreviewHeaders] = useState([])
 
   const [archivosTopes, setArchivosTopes] = useState([])
   const [archivoExcelTope, setArchivoExcelTope] = useState(null)
   const [subiendoTope, setSubiendoTope] = useState(false)
   const [previewDataTope, setPreviewDataTope] = useState([])
   const [previewHeadersTope, setPreviewHeadersTope] = useState([])
+
+  // Estados para previsualización de múltiples hojas
+  const [hojasPreview, setHojasPreview] = useState([])
+  const [hojaActiva, setHojaActiva] = useState(0)
 
   const [tipoComparacion, setTipoComparacion] = useState('precios')
   const [idBase, setIdBase] = useState('')
@@ -246,12 +248,29 @@ export default function GestionPrecios({ setPantalla, rol }) {
     const reader = new FileReader()
     reader.onload = (evt) => {
       const wb = XLSX.read(evt.target.result, { type: 'binary' })
-      const ws = wb.Sheets[wb.SheetNames[0]]
-      const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
-      let headerIndex = data.findIndex(row => row.includes('PLANTAS'))
-      if (headerIndex === -1) headerIndex = 0
-      setPreviewHeaders(data[headerIndex])
-      setPreviewData(data.slice(headerIndex + 1).filter(row => row.some(cell => cell !== '')))
+      const hojas = wb.SheetNames.map(sheetName => {
+        const ws = wb.Sheets[sheetName]
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+        
+        // Detectar fila de encabezados
+        let headerIndex = data.findIndex(row => row.some(cell => normalizarTexto(cell).includes('PLANTA')))
+        if (headerIndex === -1) headerIndex = 0
+        
+        const headers = data[headerIndex]
+        const idxPlanta = headers.findIndex(c => normalizarTexto(c).includes('PLANTA'))
+        
+        // Filtrar solo filas con plantas válidas (elimina fila de códigos)
+        const rows = data.slice(headerIndex + 1).filter(row => esPlantaValida(row[idxPlanta]))
+        
+        return {
+          nombre: sheetName,
+          headers: headers,
+          rows: rows
+        }
+      })
+      
+      setHojasPreview(hojas)
+      setHojaActiva(0)
     }
     reader.readAsBinaryString(file)
   }
@@ -283,7 +302,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const { data } = await supabase.from('precios_archivos').insert({ nombre_archivo: archivoExcel.name, url_archivo: publicUrl, subido_por: user.email, es_vigente: true }).select()
       if (!data) throw new Error('Bloqueado por RLS')
       await registrarAuditoria(data[0].id, archivoExcel.name, 'SUBIDA', 'precios')
-      toast.success('Lista subida'); setArchivoExcel(null); setPreviewData([]); setPreviewHeaders([]); setVista('menu')
+      toast.success('Lista subida'); setArchivoExcel(null); setHojasPreview([]); setHojaActiva(0); setVista('menu')
     } catch (error) { toast.error(error.message) } finally { setSubiendo(false) }
   }
 
@@ -747,9 +766,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
         {renderHeader()}
-        <main style={{ padding: '40px 20px', maxWidth: '1200px', margin: '0 auto' }}>
+        <main style={{ padding: '40px 20px', maxWidth: '1400px', margin: '0 auto' }}>
           <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-            <button style={btnTabStyle(subVista === 'precios')} onClick={() => { setSubVista('precios'); setPreviewData([]); setPreviewHeaders([]); setArchivoExcel(null); }}>📄 Cargar Precios</button>
+            <button style={btnTabStyle(subVista === 'precios')} onClick={() => { setSubVista('precios'); setHojasPreview([]); setHojaActiva(0); setArchivoExcel(null); }}>📄 Cargar Precios</button>
             <button style={btnTabStyle(subVista === 'topes')} onClick={() => { setSubVista('topes'); setPreviewDataTope([]); setPreviewHeadersTope([]); setArchivoExcelTope(null); }}>📊 Cargar Topes</button>
           </div>
           <Card style={{ padding: '30px' }}>
@@ -758,45 +777,74 @@ export default function GestionPrecios({ setPantalla, rol }) {
                 <h2>Subir Lista de Precios</h2>
                 <input type="file" accept=".xlsx" onChange={handleFileChange} style={{ marginTop: '15px' }} />
                 
-                {previewData.length > 0 && (
+                {hojasPreview.length > 0 && (
                   <div style={{ marginTop: '30px' }}>
                     <h3 style={{ color: 'var(--primary-blue)', marginBottom: '15px', fontSize: '18px' }}>
                       📋 Vista Previa: {archivoExcel.name}
                     </h3>
-                    <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '20px', maxHeight: '500px' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                        <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white', position: 'sticky', top: 0, zIndex: 1 }}>
-                          <tr>
-                            {previewHeaders.map((h, i) => (
-                              <th key={i} style={{ padding: '10px 8px', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '2px solid #1e293b' }}>
-                                {String(h).trim()}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {previewData.slice(0, 20).map((row, rI) => (
-                            <tr key={rI} style={{ backgroundColor: rI % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                              {row.map((cell, cI) => (
-                                <td key={cI} style={{ padding: '8px', color: '#374151' }}>
-                                  {typeof cell === 'number' ? (Number.isInteger(cell) ? cell : cell.toFixed(4)) : String(cell).trim()}
-                                </td>
+                    
+                    {/* Pestañas de hojas */}
+                    {hojasPreview.length > 1 && (
+                      <div style={{ display: 'flex', gap: '5px', marginBottom: '15px', flexWrap: 'wrap' }}>
+                        {hojasPreview.map((hoja, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setHojaActiva(i)}
+                            style={{
+                              padding: '8px 16px',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontWeight: 'bold',
+                              fontSize: '13px',
+                              backgroundColor: hojaActiva === i ? 'var(--primary-blue)' : '#f3f4f6',
+                              color: hojaActiva === i ? 'white' : '#4b5563',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            {hoja.nombre}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Tabla de la hoja activa */}
+                    {hojasPreview[hojaActiva].rows.length > 0 ? (
+                      <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '20px' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                          <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white' }}>
+                            <tr>
+                              {hojasPreview[hojaActiva].headers.map((h, i) => (
+                                <th key={i} style={{ padding: '8px 6px', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '2px solid #1e293b' }}>
+                                  {String(h).trim()}
+                                </th>
                               ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {previewData.length > 20 && (
-                      <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '15px' }}>
-                        Mostrando las primeras 20 filas de {previewData.length} totales.
-                      </p>
+                          </thead>
+                          <tbody>
+                            {hojasPreview[hojaActiva].rows.map((row, rI) => (
+                              <tr key={rI} style={{ backgroundColor: rI % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                                {row.map((cell, cI) => (
+                                  <td key={cI} style={{ padding: '6px 4px', color: '#374151' }}>
+                                    {typeof cell === 'number' ? (Number.isInteger(cell) ? cell : cell.toFixed(4)) : String(cell).trim()}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', backgroundColor: '#f9fafb', borderRadius: '8px', marginBottom: '20px' }}>
+                        No hay datos de plantas válidos en esta hoja.
+                      </div>
                     )}
+                    
                     <div style={{ display: 'flex', gap: '10px' }}>
                       <Boton variante="success" onClick={handleSubirArchivo} disabled={subiendo}>
                         {subiendo ? '⏳ Subiendo...' : '✅ Confirmar y Subir'}
                       </Boton>
-                      <Boton variante="outline" onClick={() => { setArchivoExcel(null); setPreviewData([]); setPreviewHeaders([]); }}>
+                      <Boton variante="outline" onClick={() => { setArchivoExcel(null); setHojasPreview([]); setHojaActiva(0); }}>
                         ❌ Cancelar
                       </Boton>
                     </div>
@@ -813,9 +861,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
                     <h3 style={{ color: '#059669', marginBottom: '15px', fontSize: '18px' }}>
                       📋 Vista Previa: {archivoExcelTope.name}
                     </h3>
-                    <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '20px', maxHeight: '500px' }}>
+                    <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '20px' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                        <thead style={{ backgroundColor: '#059669', color: 'white', position: 'sticky', top: 0, zIndex: 1 }}>
+                        <thead style={{ backgroundColor: '#059669', color: 'white' }}>
                           <tr>
                             {previewHeadersTope.map((h, i) => (
                               <th key={i} style={{ padding: '10px 8px', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '2px solid #059669' }}>
