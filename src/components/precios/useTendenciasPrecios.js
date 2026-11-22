@@ -2,171 +2,138 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../../supabase'
 
-const PALETA = {
-  azulProfundo: '#0033A0',
-  cyanVibrante: '#00AEEF',
-  exito: '#28A745',
-  alerta: '#FFC107',
-  peligro: '#DC3545',
-  grisClaro: '#F5F5F5',
-  grisMedio: '#CCCCCC',
+// ============================================================
+// UTILIDADES
+// ============================================================
+const norm = (v) => String(v ?? '').trim().toUpperCase()
+
+// Normaliza cualquier representación de mes a 'YYYY-MM'
+const mesClave = (v) => {
+  const m = String(v ?? '').match(/^(\d{4})-(\d{2})/)
+  return m ? `${m[1]}-${m[2]}` : null
 }
 
-export function useTendenciasPrecios({ fechaDesde, fechaHasta, productos, planta, usarVistaMaterializada = false }) {
+const num = (v) => {
+  const n = parseFloat(v)
+  return Number.isFinite(n) ? n : null
+}
+
+export const formatCurrency = (v) => `S/ ${Number(v ?? 0).toFixed(4)}`
+
+export const formatPercentage = (v) => {
+  const n = Number(v ?? 0)
+  return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`
+}
+
+export const getTrendColor = (v) => {
+  const n = Number(v ?? 0)
+  if (n > 0) return '#DC3545' // sube
+  if (n < 0) return '#28A745' // baja
+  return '#6B7280' // estable
+}
+
+// ============================================================
+// HOOK
+// ============================================================
+export function useTendenciasPrecios({ fechaDesde, fechaHasta, productos = [], planta = null } = {}) {
   const [datos, setDatos] = useState([])
-  const [cargando, setCargando] = useState(false)
-  const [error, setError] = useState(null)
-  const [estadisticas, setEstadisticas] = useState(null)
+  const [cargando, setCargando] = useState(true)
+  const [error, setError] = useState('')
+  const [tick, setTick] = useState(0)
 
-  const queryKey = useMemo(() => 
-    `${fechaDesde}|${fechaHasta}|${productos?.join(',') || ''}|${planta || ''}`,
-    [fechaDesde, fechaHasta, productos, planta]
-  )
+  const recargar = useCallback(() => setTick((t) => t + 1), [])
 
-  const cargarDatos = useCallback(async () => {
-    if (!fechaDesde || !fechaHasta || !productos?.length) {
-      setDatos([])
-      setEstadisticas(null)
-      return
-    }
-
-    setCargando(true)
-    setError(null)
-
-    try {
-      let query = supabase
-        .from(usarVistaMaterializada ? 'mv_tendencias_mensuales' : 'historial_precios')
-        .select('*')
-        .gte('fecha_lista' in (usarVistaMaterializada ? {} : { fecha_lista: fechaDesde }), fechaDesde)
-        .lte('fecha_lista' in (usarVistaMaterializada ? {} : { fecha_lista: fechaHasta }), fechaHasta)
-
-      if (productos?.length) {
-        query = query.in('producto', productos)
-      }
-      if (planta) {
-        query = query.eq('planta', planta)
-      }
-
-      if (!usarVistaMaterializada) {
-        query = query.order('fecha_lista', { ascending: true })
-      }
-
-      const { data, error: queryError } = await query
-
-      if (queryError) throw queryError
-
-      // Procesamiento de datos según fuente
-      let resultados
-      if (usarVistaMaterializada) {
-        resultados = data.map(row => ({
-          mes: row.mes,
-          producto: row.producto,
-          planta: row.planta,
-          promedio: parseFloat(row.precio_promedio) || 0,
-          minimo: parseFloat(row.precio_minimo) || 0,
-          maximo: parseFloat(row.precio_maximo) || 0,
-          desviacion: parseFloat(row.desviacion_estandar) || 0,
-          registros: parseInt(row.registros) || 0,
-          inicio: parseFloat(row.precio_inicio_mes) || 0,
-          fin: parseFloat(row.precio_fin_mes) || 0,
-          variacion: row.precio_fin_mes && row.precio_inicio_mes 
-            ? ((row.precio_fin_mes - row.precio_inicio_mes) / row.precio_inicio_mes * 100).toFixed(2)
-            : 0,
-        }))
-      } else {
-        // Agrupación manual si no usa vista materializada
-        const agrupado = data.reduce((acc, row) => {
-          const mes = row.fecha_lista.slice(0, 7)
-          const key = `${mes}|${row.producto}|${row.planta || 'todas'}`
-          if (!acc[key]) {
-            acc[key] = {
-              mes,
-              producto: row.producto,
-              planta: row.planta || 'todas',
-              precios: [],
-            }
-          }
-          acc[key].precios.push(parseFloat(row.precio) || 0)
-          return acc
-        }, {})
-
-        resultados = Object.values(agrupado).map(item => {
-          const avg = item.precios.reduce((a, b) => a + b, 0) / item.precios.length
-          return {
-            mes: item.mes,
-            producto: item.producto,
-            planta: item.planta,
-            promedio: avg,
-            minimo: Math.min(...item.precios),
-            maximo: Math.max(...item.precios),
-            desviacion: Math.sqrt(item.precios.reduce((sum, p) => sum + Math.pow(p - avg, 2), 0) / item.precios.length),
-            registros: item.precios.length,
-            inicio: item.precios[0],
-            fin: item.precios[item.precios.length - 1],
-            variacion: ((item.precios[item.precios.length - 1] - item.precios[0]) / item.precios[0] * 100).toFixed(2),
-          }
-        })
-      }
-
-      setDatos(resultados.sort((a, b) => a.mes.localeCompare(b.mes)))
-
-      // Calcular estadísticas globales
-      const stats = {
-        totalRegistros: resultados.reduce((sum, r) => sum + r.registros, 0),
-        productosAnalizados: [...new Set(resultados.map(r => r.producto))].length,
-        rangoPrecio: {
-          min: Math.min(...resultados.map(r => r.minimo)),
-          max: Math.max(...resultados.map(r => r.maximo)),
-        },
-        tendenciaGeneral: resultados.length > 1 
-          ? ((resultados[resultados.length - 1].promedio - resultados[0].promedio) / resultados[0].promedio * 100).toFixed(2)
-          : 0,
-        volatilidadPromedio: resultados.reduce((sum, r) => sum + r.desviacion, 0) / resultados.length || 0,
-      }
-      setEstadisticas(stats)
-
-    } catch (err) {
-      console.error('Error cargando tendencias:', err)
-      setError(err.message || 'Error desconocido al cargar datos')
-    } finally {
-      setCargando(false)
-    }
-  }, [fechaDesde, fechaHasta, productos, planta, usarVistaMaterializada])
+  const productosKey = (productos || []).join('|')
 
   useEffect(() => {
-    cargarDatos()
-  }, [cargarDatos])
+    let cancelado = false
 
-  // Escuchar cambios en tiempo real (opcional)
-  useEffect(() => {
-    const channel = supabase
-      .channel('tendencias_changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'historial_precios' },
-        () => cargarDatos()
+    async function cargar() {
+      setCargando(true)
+      setError('')
+      try {
+        // Lectura completa de la vista + filtrado en memoria.
+        // Nunca se envían booleanos ni nombres de columna dinámicos a PostgREST,
+        // lo que elimina el error "column mv_tendencias_mensuales.false does not exist".
+        const { data, error: err } = await supabase.from('mv_tendencias_mensuales').select('*')
+        if (err) throw err
+
+        const desde = mesClave(fechaDesde) || '0000-01'
+        const hasta = mesClave(fechaHasta) || '9999-12'
+        const prods = (productos || []).map(norm).filter(Boolean)
+        const plantaNorm = planta ? norm(planta) : null
+
+        const filtradas = (data || [])
+          .map((r) => ({ ...r, mesNorm: mesClave(r.mes) }))
+          .filter((r) => r.mesNorm)
+          .filter((r) => r.mesNorm >= desde && r.mesNorm <= hasta)
+          .filter((r) => !plantaNorm || norm(r.planta) === plantaNorm)
+          .filter((r) => prods.length === 0 || prods.includes(norm(r.producto)))
+          .map((r) => ({
+            mes: r.mesNorm,
+            producto: r.producto,
+            planta: r.planta,
+            promedio: num(r.promedio) ?? 0,
+            minimo: num(r.minimo) ?? 0,
+            maximo: num(r.maximo) ?? 0,
+            variacion: num(r.variacion) ?? 0,
+            registros: num(r.registros) ?? 0,
+          }))
+          .sort((a, b) => a.mes.localeCompare(b.mes) || String(a.producto).localeCompare(String(b.producto)))
+
+        if (!cancelado) setDatos(filtradas)
+      } catch (e) {
+        if (!cancelado) {
+          setDatos([])
+          setError(e?.message || 'Error al consultar la vista de tendencias.')
+        }
+      } finally {
+        if (!cancelado) setCargando(false)
+      }
+    }
+
+    cargar()
+    return () => { cancelado = true }
+  }, [fechaDesde, fechaHasta, planta, productosKey, tick])
+
+  // ----------------------------------------------------------
+  // ESTADÍSTICAS
+  // ----------------------------------------------------------
+  const estadisticas = useMemo(() => {
+    if (!datos.length) return null
+
+    const totalRegistros = datos.reduce((s, r) => s + (r.registros || 0), 0) || datos.length
+
+    const porProducto = new Map()
+    datos.forEach((r) => {
+      const k = norm(r.producto)
+      if (!porProducto.has(k)) porProducto.set(k, [])
+      porProducto.get(k).push(r)
+    })
+    const productosAnalizados = porProducto.size
+
+    const variaciones = datos.map((r) => r.variacion).filter((v) => Number.isFinite(v) && v !== 0)
+    const tendenciaGeneral = variaciones.length
+      ? variaciones.reduce((a, b) => a + b, 0) / variaciones.length
+      : 0
+
+    // Volatilidad = coeficiente de variación (desv. estándar / media) por producto
+    const cvs = []
+    porProducto.forEach((rows) => {
+      const vals = rows.map((r) => r.promedio).filter((v) => v > 0)
+      if (vals.length < 2) return
+      const media = vals.reduce((a, b) => a + b, 0) / vals.length
+      if (media <= 0) return
+      const varianza = vals.reduce((s, v) => s + (v - media) ** 2, 0) / vals.length
+      cvs.push((Math.sqrt(varianza) / media) * 100
       )
-      .subscribe()
+    })
+    const volatilidadPromedio = cvs.length ? cvs.reduce((a, b) => a + b, 0) / cvs.length : 0
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [cargarDatos])
+    return { totalRegistros, productosAnalizados, tendenciaGeneral, volatilidadPromedio }
+  }, [datos])
 
-  return { datos, cargando, error, estadisticas, recargar: cargarDatos }
+  return { datos, cargando, error, estadisticas, recargar }
 }
 
-// Utilidades de formato con identidad Petro América
-export const formatCurrency = (value) => 
-  new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(value)
-
-export const formatPercentage = (value) => 
-  `${value > 0 ? '+' : ''}${value}%`
-
-export const getTrendColor = (variation) => {
-  const num = parseFloat(variation)
-  if (num > 2) return PALETA.peligro    // Subida significativa
-  if (num < -2) return PALETA.exito     // Bajada significativa  
-  if (num > 0) return PALETA.alerta     // Subida leve
-  if (num < 0) return PALETA.cyanVibrante // Bajada leve
-  return PALETA.grisMedio               // Sin cambio
-}
+export default useTendenciasPrecios
