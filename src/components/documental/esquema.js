@@ -5,16 +5,15 @@
 // ============================================================================
 import { tipoDesdeNombre } from './constantes'
 
-// Columnas reales de tu tabla `documentos` (21). Sirve de contrato y de
-// lista blanca: haciaBD() jamás deja pasar un campo que no esté aquí.
+// Columnas reales de tu tabla `documentos` (ahora 23 con tipo_contenido y metadata).
 export const COLUMNAS_BD = [
   'id', 'nombre', 'descripcion', 'categoria', 'url', 'subido_por', 'created_at',
   'tipo_documento', 'terminal', 'proveedor', 'producto', 'version',
   'nombre_archivo', 'tamano_bytes', 'etiquetas', 'vigente', 'destacado',
   'descargas', 'eliminado', 'eliminado_en', 'actualizado_en',
+  'tipo_contenido', 'metadata',
 ]
 
-// Campos gestionados por la base: nunca se envían en un insert/update.
 export const CAMPOS_SOLO_LECTURA = ['id', 'created_at', 'actualizado_en']
 
 const nombreDesdeUrl = (url) =>
@@ -22,8 +21,6 @@ const nombreDesdeUrl = (url) =>
 
 /**
  * Fila de Supabase → objeto de UI.
- * @param {object} r  fila cruda de `documentos`
- * @param {Map} usuarios  id_usuario → { email, nombre_completo }
  */
 export const desdeBD = (r, usuarios = new Map()) => {
   if (!r) return null
@@ -34,8 +31,10 @@ export const desdeBD = (r, usuarios = new Map()) => {
     id:             r.id,
     titulo:         r.nombre ?? '',
     descripcion:    r.descripcion ?? '',
-    categoria_id:   r.categoria || null,          // slug
+    categoria_id:   r.categoria || null,
     tipo:           r.tipo_documento || tipoDesdeNombre(archivo),
+    tipo_contenido: r.tipo_contenido || null,
+    metadata:       (r.metadata && typeof r.metadata === 'object' && !Array.isArray(r.metadata)) ? r.metadata : {},
     nombre_archivo: archivo,
     url_archivo:    r.url ?? null,
     tamano_bytes:   Number(r.tamano_bytes ?? 0),
@@ -59,10 +58,7 @@ export const desdeBD = (r, usuarios = new Map()) => {
 
 /**
  * Objeto de UI → payload para Supabase.
- * Lista blanca: solo escribe columnas existentes. Ignora undefined,
- * pero respeta null (necesario para limpiar terminal/proveedor/producto).
- * @param {object} ui
- * @param {{usuarioId?: string}} ctx  uuid del usuario autenticado en `usuarios`
+ * Lista blanca: solo escribe columnas existentes.
  */
 export const haciaBD = (ui = {}, ctx = {}) => {
   const o = {}
@@ -72,6 +68,8 @@ export const haciaBD = (ui = {}, ctx = {}) => {
   set('descripcion',    ui.descripcion)
   set('categoria',      ui.categoria_id)
   set('tipo_documento', ui.tipo)
+  set('tipo_contenido', ui.tipo_contenido)
+  set('metadata',       ui.metadata)
   set('nombre_archivo', ui.nombre_archivo)
   set('url',            ui.url_archivo)
   set('tamano_bytes',   ui.tamano_bytes)
@@ -86,7 +84,6 @@ export const haciaBD = (ui = {}, ctx = {}) => {
   set('eliminado',      ui.eliminado)
   set('eliminado_en',   ui.eliminado_en)
 
-  // FK a usuarios.id_usuario — nunca un email.
   if (ui.subido_por_id !== undefined) o.subido_por = ui.subido_por_id
   else if (ctx.usuarioId) o.subido_por = ctx.usuarioId
 
@@ -96,8 +93,8 @@ export const haciaBD = (ui = {}, ctx = {}) => {
 
 /** Fila de `documento_categorias` → categoría de UI (id = slug, uuid aparte). */
 export const categoriaUI = (c) => ({
-  id:          c.slug,            // lo que se guarda en documentos.categoria
-  uuid:        c.id,              // PK real, para update/delete
+  id:          c.slug,
+  uuid:        c.id,
   nombre:      c.nombre,
   slug:        c.slug,
   color:       c.color,
@@ -107,7 +104,6 @@ export const categoriaUI = (c) => ({
   created_at:  c.created_at,
 })
 
-/** Categoría de UI → payload de `documento_categorias`. */
 export const categoriaBD = (c = {}) => {
   const o = {}
   if (c.nombre      !== undefined) o.nombre      = c.nombre
@@ -121,13 +117,11 @@ export const categoriaBD = (c = {}) => {
   return o
 }
 
-/** Fila de `usuarios` → entrada del mapa de responsables. */
 export const entradaUsuario = (u) => [
   u.id_usuario,
   { email: u.email, nombre_completo: u.nombre_completo },
 ]
 
-/** Detecta documentos cuya categoría no existe en el catálogo. */
 export const categoriasHuerfanas = (documentos, categorias) => {
   const slugs = new Set(categorias.map(c => c.id))
   const vistas = new Map()
