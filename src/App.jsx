@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import './App.css'
 
 // --- Componentes de módulos ---
-import Login from './components/Login' // ← Corregido: sin setUser
+import Login from './components/Login'
 import RegistroLotes from './components/RegistroLotes'
 import RegistroViajes from './components/RegistroViajes'
 import Excepciones from './components/Excepciones'
@@ -23,7 +23,7 @@ import GestionPlantas from './components/GestionPlantas'
 import PanelRespaldos from './components/PanelRespaldos'
 import RepositorioDocumental from './components/RepositorioDocumental'
 import GestionCatalogos from './components/GestionCatalogos'
-import GestionPrecios from "./components/precios/GestionPrecios" // ← Ruta correcta
+import GestionPrecios from "./components/precios/GestionPrecios"
 
 // --- Componentes refactorizados ---
 import LobbyModulos from './components/LobbyModulos'
@@ -41,7 +41,6 @@ const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000
 const TIEMPO_DE_AVISO = TIEMPO_INACTIVIDAD_TOTAL - 2 * 60 * 1000
 const STORAGE_KEY_PANTALLA = 'sigmo_pantalla'
 
-// Colores Petro América para UI inline
 const COLORES_PA = {
   azul: '#0033A0',
   grisFondo: '#f5f7fa',
@@ -51,6 +50,8 @@ const COLORES_PA = {
 // COMPONENTE PRINCIPAL
 // ============================================================
 function App() {
+  console.log('🚀 App.jsx iniciado')
+  
   const [sesion, setSesion] = useState(null)
   const [pantalla, setPantalla] = useState(
     () => sessionStorage.getItem(STORAGE_KEY_PANTALLA) || ''
@@ -79,6 +80,8 @@ function App() {
   // Autenticación (Listener automático)
   // ----------------------------------------------------------
   useEffect(() => {
+    console.log('🔐 Configurando listener de autenticación...')
+    
     if (
       window.location.hash.includes('type=recovery') ||
       window.location.search.includes('type=recovery')
@@ -87,24 +90,32 @@ function App() {
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log(' Sesión inicial:', session ? 'Activa' : 'Inactiva')
       setSesion(session)
     })
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log('🔄 Cambio de estado de autenticación:', _event)
       setSesion(session)
       if (_event === 'PASSWORD_RECOVERY') {
         setEsRecuperacion(true)
       }
     })
 
-    return () => authListener.subscription.unsubscribe()
+    return () => {
+      console.log('🧹 Limpiando listener de autenticación')
+      authListener.subscription.unsubscribe()
+    }
   }, [])
 
   // ----------------------------------------------------------
   // Roles y permisos (con caché)
   // ----------------------------------------------------------
   useEffect(() => {
+    console.log('👤 Verificando rol y permisos...')
+    
     if (!sesion) {
+      console.log('️ Sin sesión, limpiando rol')
       setRol(null)
       setPermisos([])
       setCargandoRol(false)
@@ -117,6 +128,7 @@ function App() {
     const cachedPermisos = sessionStorage.getItem('sigmo_permisos')
 
     if (cachedRol) {
+      console.log('✅ Usando rol en caché:', cachedRol)
       setRol(cachedRol)
       setPermisos(JSON.parse(cachedPermisos || '[]'))
       setCargandoRol(false)
@@ -124,29 +136,40 @@ function App() {
     }
 
     async function obtenerRolUsuario() {
+      console.log('📡 Obteniendo rol desde base de datos...')
       setCargandoRol(true)
-      const { data, error } = await supabase
-        .from('usuarios')
-        .select(`roles ( codigo ), permisos`)
-        .eq('id_usuario', sesion.user.id)
-        .single()
+      
+      try {
+        const { data, error } = await supabase
+          .from('usuarios')
+          .select(`roles ( codigo ), permisos`)
+          .eq('id_usuario', sesion.user.id)
+          .single()
 
-      if (error) {
-        console.error('Error al obtener rol:', error)
+        if (error) {
+          console.error('❌ Error al obtener rol:', error)
+          setRol('auditor')
+          setPermisos([])
+        } else if (data) {
+          const nuevoRol = data.roles?.codigo?.toLowerCase() || 'auditor'
+          const nuevosPermisos = data.permisos || []
+          console.log('✅ Rol obtenido:', nuevoRol)
+          setRol(nuevoRol)
+          setPermisos(nuevosPermisos)
+          sessionStorage.setItem('sigmo_rol', nuevoRol)
+          sessionStorage.setItem('sigmo_permisos', JSON.stringify(nuevosPermisos))
+        } else {
+          console.warn('⚠️ No se encontraron datos de usuario')
+          setRol('auditor')
+          setPermisos([])
+        }
+      } catch (err) {
+        console.error('❌ Error inesperado:', err)
         setRol('auditor')
         setPermisos([])
-      } else if (data) {
-        const nuevoRol = data.roles?.codigo?.toLowerCase() || 'auditor'
-        const nuevosPermisos = data.permisos || []
-        setRol(nuevoRol)
-        setPermisos(nuevosPermisos)
-        sessionStorage.setItem('sigmo_rol', nuevoRol)
-        sessionStorage.setItem('sigmo_permisos', JSON.stringify(nuevosPermisos))
-      } else {
-        setRol('auditor')
-        setPermisos([])
+      } finally {
+        setCargandoRol(false)
       }
-      setCargandoRol(false)
     }
 
     obtenerRolUsuario()
@@ -157,7 +180,11 @@ function App() {
   // ----------------------------------------------------------
   useEffect(() => {
     if (cargandoRol || !sesion || !rol) return
+    
+    console.log('🔍 Validando acceso a pantalla:', pantalla)
+    
     if (pantalla && !puedeAccederPantalla(pantalla, rol, permisos)) {
+      console.warn('️ Acceso denegado a pantalla:', pantalla)
       setPantalla('')
       sessionStorage.removeItem(STORAGE_KEY_PANTALLA)
     }
@@ -167,6 +194,7 @@ function App() {
   // Cerrar sesión
   // ----------------------------------------------------------
   const cerrarSesion = useCallback(async () => {
+    console.log('🚪 Cerrando sesión...')
     await supabase.auth.signOut()
     setPantalla('')
     setRol(null)
@@ -218,14 +246,15 @@ function App() {
   // --- VISTAS PÚBLICAS ---
   // ----------------------------------------------------------
   if (!sesion) {
+    console.log(' Renderizando vista pública')
     if (esRecuperacion) return <ResetPassword />
     if (pantalla === 'forgot') return <ForgotPassword setPantalla={setPantalla} />
-    // CORRECCIÓN: Login ya no recibe setUser
     return <Login setPantalla={setPantalla} />
   }
 
   // --- PANTALLA DE CARGA ---
   if (cargandoRol) {
+    console.log('⏳ Mostrando pantalla de carga')
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: COLORES_PA.grisFondo }}>
         <h2 style={{ color: COLORES_PA.azul }}>Cargando perfil...</h2>
@@ -239,6 +268,9 @@ function App() {
   const pantallaAccesible =
     pantalla && puedeAccederPantalla(pantalla, rol, permisos) ? pantalla : ''
   const mostrarNavbar = PANTALLAS_CON_NAVBAR.includes(pantallaAccesible)
+
+  console.log('✅ Renderizando aplicación principal')
+  console.log(' Estado:', { pantallaAccesible, mostrarNavbar, rol })
 
   // ----------------------------------------------------------
   // --- VISTAS CON SESIÓN ---
@@ -279,7 +311,7 @@ function App() {
       {pantallaAccesible === 'catalogos' && <GestionCatalogos setPantalla={setPantalla} />}
       {pantallaAccesible === 'usuarios' && <GestionUsuarios setPantalla={setPantalla} />}
       
-      {/* CORRECCIÓN: GestionPrecios ya no recibe setPantalla */}
+      {/* GestionPrecios sin setPantalla */}
       {pantallaAccesible === 'precios_menu' && (
         <GestionPrecios rol={rol} />
       )}
