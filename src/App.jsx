@@ -23,7 +23,7 @@ import GestionPlantas from './components/GestionPlantas'
 import PanelRespaldos from './components/PanelRespaldos'
 import RepositorioDocumental from './components/RepositorioDocumental'
 import GestionCatalogos from './components/GestionCatalogos'
-import GestionPrecios from './components/GestionPrecios'
+import GestionPrecios from "./components/precios/GestionPrecios"
 
 // --- Componentes refactorizados (usan ./ui) ---
 import LobbyModulos from './components/LobbyModulos'
@@ -272,9 +272,9 @@ function App() {
       )}
       {pantallaAccesible === 'catalogos' && <GestionCatalogos setPantalla={setPantalla} />}
       {pantallaAccesible === 'usuarios' && <GestionUsuarios setPantalla={setPantalla} />}
-      {pantallaAccesible === 'precios_menu' && (
-        <GestionPrecios setPantalla={setPantalla} rol={rol} />
-      )}
+{pantallaAccesible === 'precios_menu' && (
+  <GestionPrecios rol={rol} />
+)}
 
       {/* VISTAS CON NAVBAR INTERNA */}
       {mostrarNavbar && (
