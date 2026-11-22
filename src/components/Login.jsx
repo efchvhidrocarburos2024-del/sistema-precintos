@@ -13,8 +13,14 @@ export default function Login({ setPantalla, setUser }) {
     e.preventDefault()
     
     // Validaciones
-    if (!emailRegex.test(email)) return toast.error('Ingresa un email válido')
-    if (password.length < 6) return toast.error('La contraseña debe tener al menos 6 caracteres')
+    if (!emailRegex.test(email)) {
+      toast.error('Ingresa un email válido')
+      return
+    }
+    if (password.length < 6) {
+      toast.error('La contraseña debe tener al menos 6 caracteres')
+      return
+    }
 
     setCargando(true)
     try {
@@ -25,21 +31,38 @@ export default function Login({ setPantalla, setUser }) {
 
       if (error) {
         const mensajes = {
-          'Invalid login credentials': '❌ Credenciales incorrectas',
-          'Email not confirmed': '📧 Debes confirmar tu email primero',
-          'Too many requests': '⏳ Demasiados intentos. Intenta en 5 minutos',
-          'Invalid refresh token': 'Sesión expirada. Inicia sesión nuevamente'
+          'Invalid login credentials': 'Credenciales incorrectas',
+          'Email not confirmed': 'Debes confirmar tu email primero',
+          'Too many requests': 'Demasiados intentos. Intenta en 5 minutos'
         }
-        throw new Error(mensajes[error.message] || error.message)
+        const msg = mensajes[error.message] || error.message || 'Error al iniciar sesión'
+        toast.error(String(msg))
+        return
       }
 
       if (data?.user) {
-        setUser(data.user)
+        // Verificar que setUser sea una función antes de llamarla
+        if (typeof setUser === 'function') {
+          setUser(data.user)
+        } else {
+          console.warn('setUser no está definido como función')
+        }
+        
         toast.success(`¡Bienvenido ${data.user.email}!`)
-        setPantalla('lobby')
+        
+        // Verificar que setPantalla sea una función
+        if (typeof setPantalla === 'function') {
+          setPantalla('lobby')
+        } else {
+          console.warn('setPantalla no está definido como función')
+          // Fallback: recargar página
+          window.location.reload()
+        }
       }
     } catch (error) {
-      toast.error(error.message)
+      const msg = error?.message || 'Error desconocido'
+      toast.error(String(msg))
+      console.error('Error en login:', error)
     } finally {
       setCargando(false)
     }
@@ -100,7 +123,7 @@ export default function Login({ setPantalla, setUser }) {
 
         <div style={{ textAlign: 'center', marginTop: '20px' }}>
           <button
-            onClick={() => setPantalla('forgot')}
+            onClick={() => typeof setPantalla === 'function' && setPantalla('forgot')}
             style={{ background: 'none', border: '1px solid var(--primary-blue)', color: 'var(--primary-blue)', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}
           >
             ¿Olvidaste tu contraseña?
