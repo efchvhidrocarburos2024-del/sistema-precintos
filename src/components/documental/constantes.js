@@ -146,3 +146,89 @@ export const mezclarHex = (hex, alfa) => {
   if (Number.isNaN(n)) return `rgba(90,113,132,${alfa})`
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alfa})`
 }
+// ============================================================================
+//  Tipos de documento por categoría (Opción B)
+//  campos con clave planta/proveedor/producto se enlazan a esas columnas;
+//  cualquier otra clave se guarda en documentos.metadata (jsonb).
+// ============================================================================
+export const TIPOS_DOCUMENTO = {
+  tecnicos: [
+    {
+      id: 'certificado_calidad', nombre: 'Certificado de calidad', icono: '🏅',
+      descripcion: 'Certificado que acredita las especificaciones del producto despachado.',
+      campos: [
+        { clave: 'producto', etiqueta: 'Producto', tipo: 'select-producto' },
+        { clave: 'numero_lote', etiqueta: 'N° de lote', tipo: 'texto' },
+        { clave: 'fecha_emision', etiqueta: 'Fecha de emisión', tipo: 'fecha' },
+        { clave: 'emisor', etiqueta: 'Laboratorio / emisor', tipo: 'texto' },
+      ],
+    },
+    {
+      id: 'ficha_msds', nombre: 'Ficha de datos de seguridad (MSDS)', icono: '🧪',
+      descripcion: 'Hoja de seguridad: riesgos, manipuleo y primeros auxilios del producto.',
+      campos: [
+        { clave: 'producto', etiqueta: 'Producto', tipo: 'select-producto' },
+        { clave: 'fecha_revision', etiqueta: 'Fecha de revisión', tipo: 'fecha' },
+      ],
+    },
+    {
+      id: 'ficha_especificacion_tecnica', nombre: 'Ficha de especificación técnica', icono: '📐',
+      descripcion: 'Parámetros técnicos y límites de aceptación del producto o equipo.',
+      campos: [
+        { clave: 'producto', etiqueta: 'Producto', tipo: 'select-producto' },
+        { clave: 'norma_referencia', etiqueta: 'Norma de referencia', tipo: 'texto' },
+      ],
+    },
+  ],
+  operativos: [
+    {
+      id: 'induccion_conductores', nombre: 'Inducción de conductores', icono: '🎓',
+      descripcion: 'Material obligatorio para la inducción de conductores antes del ingreso a planta.',
+      campos: [
+        { clave: 'planta', etiqueta: 'Planta / terminal', tipo: 'select-planta' },
+        { clave: 'vigencia_desde', etiqueta: 'Vigente desde', tipo: 'fecha' },
+      ],
+    },
+    {
+      id: 'registro_unidades', nombre: 'Registro de unidades', icono: '🚛',
+      descripcion: 'Formato oficial para el registro de unidades de transporte habilitadas.',
+      campos: [
+        { clave: 'planta', etiqueta: 'Planta / terminal', tipo: 'select-planta' },
+      ],
+    },
+    {
+      id: 'registro_unidades_conductores_proveedor',
+      nombre: 'Registro de unidades y conductores por proveedor', icono: '🧾',
+      descripcion: 'Relación de unidades y conductores autorizados por proveedor o transportista.',
+      campos: [
+        { clave: 'proveedor', etiqueta: 'Proveedor / transportista', tipo: 'select-proveedor' },
+        { clave: 'planta', etiqueta: 'Planta / terminal', tipo: 'select-planta' },
+      ],
+    },
+    {
+      id: 'criterios_carga_terminal', nombre: 'Criterios de carga por terminal', icono: '⚖️',
+      descripcion: 'Reglas y restricciones de carga aplicables a cada terminal de despacho.',
+      campos: [
+        { clave: 'planta', etiqueta: 'Planta / terminal', tipo: 'select-planta' },
+      ],
+    },
+  ],
+}
+
+export const tiposDeCategoria = (slug) => TIPOS_DOCUMENTO[slug] || []
+export const buscarTipo = (slugCat, idTipo) =>
+  (TIPOS_DOCUMENTO[slugCat] || []).find(t => t.id === idTipo) || null
+
+// ============================================================================
+//  Permisos del módulo. Para un rol nuevo: crear su codigo en la tabla
+//  `roles` y agregar aquí una fila. Sin fila = solo lectura.
+// ============================================================================
+export const PERMISOS_DOCUMENTAL = {
+  admin_sistema:      { cargar: true,  gestionar: true,  eliminar: true  },
+  jefe_pricing:       { cargar: true,  gestionar: true,  eliminar: false },
+  analista_comercial: { cargar: true,  gestionar: false, eliminar: false },
+  gestor_documental:  { cargar: true,  gestionar: false, eliminar: false },
+  visor_documental:   { cargar: false, gestionar: false, eliminar: false },
+}
+export const permisosDocumental = (rol) =>
+  PERMISOS_DOCUMENTAL[rol] || { cargar: false, gestionar: false, eliminar: false }

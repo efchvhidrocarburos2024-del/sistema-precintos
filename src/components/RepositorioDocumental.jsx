@@ -9,12 +9,12 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
 import { supabase } from '../supabase'
-import { PALETA, CAPACIDAD_BYTES, mezclarHex, formatearBytes, iniciales } from './documental/constantes'
 import { Estilos, Fondo, Boton, Confirmar, Insignia } from './documental/base'
 import {
   useDocumentos, BibliotecaDocumental, CargaDocumental, DetalleDocumento,
   GestorCategorias, PanelEstadisticas, PapeleraDocumental, AuditoriaDocumental,
 } from './documental'
+import { PALETA, CAPACIDAD_BYTES, mezclarHex, formatearBytes, iniciales, permisosDocumental } from './documental/constantes'
 
 const NAV = [
   { id: 'biblioteca', icono: '🗂️', label: 'Biblioteca' },
@@ -62,9 +62,10 @@ export default function RepositorioDocumental({ setPantalla, rol, user }) {
   const [confirmacion, setConfirmacion] = useState(null)
   const [catFiltro, setCatFiltro] = useState(null)
 
-  const puedeCargar = ['admin_sistema', 'jefe_pricing', 'analista_comercial'].includes(rolEfectivo)
-  const puedeGestionar = ['admin_sistema', 'jefe_pricing'].includes(rolEfectivo)
-  const puedeEliminar = rolEfectivo === 'admin_sistema'
+const perm = permisosDocumental(rolEfectivo)
+const puedeCargar = perm.cargar
+const puedeGestionar = perm.gestionar
+const puedeEliminar = perm.eliminar
 
   const activos = useMemo(() => repo.documentos.filter(d => !d.eliminado), [repo.documentos])
   const papelera = useMemo(() => repo.documentos.filter(d => d.eliminado), [repo.documentos])

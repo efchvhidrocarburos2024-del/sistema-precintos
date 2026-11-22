@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
-import { PALETA, mezclarHex, normalizar, infoTipo, formatearBytes, haceCuanto, formatearFecha } from './constantes'
+import { PALETA, mezclarHex, normalizar, infoTipo, formatearBytes, haceCuanto, formatearFecha, tiposDeCategoria, buscarTipo } from './constantes'
 import { Boton, Insignia, IconoTipo, Casilla, Vacio, Esqueleto, Interruptor, Segmentado } from './base'
 import { exportarInventarioCSV, exportarExcel, descargarDocumento } from './descargas'
 
@@ -17,6 +17,7 @@ export default function BibliotecaDocumental({ repo, onAbrir, onIrCarga, puedeCa
   const [q, setQ] = useState('')
   const [cat, setCat] = useState(categoriaInicial || 'todas')
   const [tipo, setTipo] = useState('todos')
+  const [tipoCont, setTipoCont] = useState('todos')
   const [estado, setEstado] = useState('todos')
   const [planta, setPlanta] = useState('todas')
   const [proveedor, setProveedor] = useState('todos')
@@ -35,6 +36,9 @@ export default function BibliotecaDocumental({ repo, onAbrir, onIrCarga, puedeCa
   const conteo = useMemo(() => { const m = {}; activos.forEach(d => { m[d.categoria_id] = (m[d.categoria_id] || 0) + 1 }); return m }, [activos])
   const plantasDisp = useMemo(() => [...new Set(activos.map(d => d.planta).filter(Boolean))].sort(), [activos])
   const provDisp = useMemo(() => [...new Set(activos.map(d => d.proveedor).filter(Boolean))].sort(), [activos])
+  const tiposDisp = useMemo(() => tiposDeCategoria(cat), [cat])
+
+  const nombreDeTipo = useCallback((d) => buscarTipo(d.categoria_id, d.tipo_contenido)?.nombre || '', [])
 
   const filtrados = useMemo(() => {
     const term = normalizar(q)
@@ -42,6 +46,7 @@ export default function BibliotecaDocumental({ repo, onAbrir, onIrCarga, puedeCa
     return activos.filter(d => {
       if (cat !== 'todas' && d.categoria_id !== cat) return false
       if (tipo !== 'todos' && d.tipo !== tipo) return false
+      if (tipoCont !== 'todos' && (d.tipo_contenido || '') !== tipoCont) return false
       if (estado === 'vigentes' && !d.vigente) return false
       if (estado === 'obsoletos' && d.vigente) return false
       if (planta !== 'todas' && (d.planta || '') !== planta) return false
@@ -49,7 +54,7 @@ export default function BibliotecaDocumental({ repo, onAbrir, onIrCarga, puedeCa
       if (soloDestacados && !d.destacado) return false
       if (!term) return true
       return normalizar([d.titulo, d.descripcion, d.nombre_archivo, (d.etiquetas || []).join(' '),
-        mapaCat[d.categoria_id]?.nombre, d.proveedor, d.producto].join(' ')).includes(term)
+        mapaCat[d.categoria_id]?.nombre, d.proveedor, d.producto, nombreDeTipo(d)].join(' ')).includes(term)
     }).sort((a, b) => {
       switch (orden) {
         case 'antiguos': return new Date(a.created_at) - new Date(b.created_at)
@@ -60,28 +65,29 @@ export default function BibliotecaDocumental({ repo, onAbrir, onIrCarga, puedeCa
         default: return new Date(b.created_at) - new Date(a.created_at)
       }
     })
-  }, [activos, q, cat, tipo, estado, planta, proveedor, soloDestacados, orden, mapaCat])
+  }, [activos, q, cat, tipo, tipoCont, estado, planta, proveedor, soloDestacados, orden, mapaCat, nombreDeTipo])
 
-  useEffect(() => { setVisibles(24) }, [q, cat, tipo, estado, planta, proveedor, orden, soloDestacados])
+  useEffect(() => { setVisibles(24) }, [q, cat, tipo, tipoCont, estado, planta, proveedor, orden, soloDestacados])
+  useEffect(() => { setTipoCont('todos') }, [cat])
   useEffect(() => { setSel(s => s.filter(id => filtrados.some(d => d.id === id))) }, [filtrados])
 
   const limpiar = useCallback(() => {
-    setQ(''); setCat('todas'); setTipo('todos'); setEstado('todos')
+    setQ(''); setCat('todas'); setTipo('todos'); setTipoCont('todos'); setEstado('todos')
     setPlanta('todas'); setProveedor('todos'); setSoloDestacados(false); setOrden('recientes')
   }, [])
-  const hayFiltros = q || cat !== 'todas' || tipo !== 'todos' || estado !== 'todos' ||
+  const hayFiltros = q || cat !== 'todas' || tipo !== 'todos' || tipoCont !== 'todos' || estado !== 'todos' ||
     planta !== 'todas' || proveedor !== 'todos' || soloDestacados || orden !== 'recientes'
 
   const guardarVista = () => {
     const n = nombreVista.trim()
     if (!n) return toast.error('Asigna un nombre a la vista')
-    const lista = [...vistas, { id: Date.now(), nombre: n, f: { q, cat, tipo, estado, planta, proveedor, orden, soloDestacados } }].slice(-8)
+    const lista = [...vistas, { id: Date.now(), nombre: n, f: { q, cat, tipo, tipoCont, estado, planta, proveedor, orden, soloDestacados } }].slice(-8)
     setVistas(lista); try { localStorage.setItem(CLAVE_VISTAS, JSON.stringify(lista)) } catch {}
     setNombreVista(''); setGuardando(false); toast.success(`Vista "${n}" guardada`)
   }
   const aplicarVista = (v) => {
-    setQ(v.f.q || ''); setCat(v.f.cat || 'todas'); setTipo(v.f.tipo || 'todos'); setEstado(v.f.estado || 'todos')
-    setPlanta(v.f.planta || 'todas'); setProveedor(v.f.proveedor || 'todos')
+    setQ(v.f.q || ''); setCat(v.f.cat || 'todas'); setTipo(v.f.tipo || 'todos'); setTipoCont(v.f.tipoCont || 'todos')
+    setEstado(v.f.estado || 'todos'); setPlanta(v.f.planta || 'todas'); setProveedor(v.f.proveedor || 'todos')
     setOrden(v.f.orden || 'recientes'); setSoloDestacados(!!v.f.soloDestacados)
     toast.success(`Vista "${v.nombre}" aplicada`)
   }
@@ -130,8 +136,17 @@ export default function BibliotecaDocumental({ repo, onAbrir, onIrCarga, puedeCa
               {categorias.map(c => <option key={c.id} value={c.id}>{c.icono} {c.nombre} ({conteo[c.id] || 0})</option>)}
             </select>
           </div>
+          {tiposDisp.length > 0 && (
+            <div className="rd-campo" style={{ flex: '1 1 200px' }}>
+              <label className="rd-lab">Tipo de documento</label>
+              <select className="rd-sel" value={tipoCont} onChange={e => setTipoCont(e.target.value)}>
+                <option value="todos">Todos</option>
+                {tiposDisp.map(t => <option key={t.id} value={t.id}>{t.icono} {t.nombre}</option>)}
+              </select>
+            </div>
+          )}
           <div className="rd-campo" style={{ flex: '1 1 112px' }}>
-            <label className="rd-lab">Tipo</label>
+            <label className="rd-lab">Formato</label>
             <select className="rd-sel" value={tipo} onChange={e => setTipo(e.target.value)}>
               <option value="todos">Todos</option>
               {['pdf', 'xlsx', 'docx', 'pptx', 'svg', 'zip', 'otro'].map(t => <option key={t} value={t}>{infoTipo(t).etiqueta}</option>)}
@@ -259,6 +274,7 @@ export default function BibliotecaDocumental({ repo, onAbrir, onIrCarga, puedeCa
           <div className="rd-grid" style={{ gridTemplateColumns: `repeat(auto-fill,minmax(${densidad}px,1fr))` }}>
             {filtrados.slice(0, visibles).map((d, i) => {
               const c = mapaCat[d.categoria_id], color = c?.color || PALETA.suave, s = sel.includes(d.id)
+              const td = buscarTipo(d.categoria_id, d.tipo_contenido)
               return (
                 <div key={d.id} className={`rd-card ${s ? 'sel' : ''}`} style={{ '--cc': color, animationDelay: `${Math.min(i, 14) * .028}s` }}
                   onClick={() => onAbrir(d.id)} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') onAbrir(d.id) }}>
@@ -278,9 +294,9 @@ export default function BibliotecaDocumental({ repo, onAbrir, onIrCarga, puedeCa
                   </p>
                   <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 10 }}>
                     <Insignia color={color}>{c?.icono} {c?.nombre || 'Sin categoría'}</Insignia>
+                    {td && <Insignia color={PALETA.cyan}>{td.icono} {td.nombre}</Insignia>}
                     <Insignia color={d.vigente ? PALETA.exito : PALETA.suave}>v{d.version} · {d.vigente ? 'VIGENTE' : 'OBSOLETO'}</Insignia>
                     {d.planta && <Insignia color={PALETA.teal}>📍 {d.planta}</Insignia>}
-                    {d.proveedor && <Insignia color={PALETA.magenta}>{d.proveedor}</Insignia>}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingTop: 9, borderTop: `1px dashed ${PALETA.borde}` }}>
                     <span style={{ fontSize: 11, color: PALETA.suave, fontWeight: 700 }}>⬇ {d.descargas || 0}</span>
@@ -309,9 +325,10 @@ export default function BibliotecaDocumental({ repo, onAbrir, onIrCarga, puedeCa
           <div style={{ maxHeight: 640, overflowY: 'auto' }}>
             {filtrados.slice(0, visibles).map(d => {
               const c = mapaCat[d.categoria_id], s = sel.includes(d.id)
+              const td = buscarTipo(d.categoria_id, d.tipo_contenido)
               return (
                 <div key={d.id} className={`rd-fila ${s ? 'sel' : ''}`}
-                  style={{ '--cc': c?.color || PALETA.suave, gridTemplateColumns: '20px 34px 1fr 132px 96px 88px 92px' }}
+                  style={{ '--cc': c?.color || PALETA.suave, gridTemplateColumns: '20px 34px 1fr 132px 150px 96px 88px 92px' }}
                   onClick={() => onAbrir(d.id)} role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') onAbrir(d.id) }}>
                   <Casilla marcada={s} onChange={() => alternar(d.id)} titulo="Seleccionar" />
                   <IconoTipo tipo={d.tipo} tam={32} />
@@ -322,6 +339,9 @@ export default function BibliotecaDocumental({ repo, onAbrir, onIrCarga, puedeCa
                     <div style={{ fontSize: 11, color: PALETA.suave, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.nombre_archivo}</div>
                   </div>
                   <Insignia color={c?.color || PALETA.suave}>{c?.icono} {c?.nombre || '—'}</Insignia>
+                  <span style={{ fontSize: 11, color: td ? PALETA.cyan : PALETA.suave, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {td ? `${td.icono} ${td.nombre}` : '—'}
+                  </span>
                   <Insignia color={d.vigente ? PALETA.exito : PALETA.suave}>v{d.version}</Insignia>
                   <span style={{ fontSize: 11.5, color: PALETA.suave, fontWeight: 600 }}>{formatearBytes(d.tamano_bytes)}</span>
                   <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>

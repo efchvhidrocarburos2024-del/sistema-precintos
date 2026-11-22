@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import toast from 'react-hot-toast'
-import { PALETA, mezclarHex, infoTipo, formatearBytes, formatearFecha, formatearFechaHora, haceCuanto } from './constantes'
+import { PALETA, mezclarHex, infoTipo, formatearBytes, formatearFecha, formatearFechaHora, haceCuanto, buscarTipo } from './constantes'
 import { PLANO_PID_SVG } from './datos'
 import { Boton, Insignia, MetaLinea } from './base'
 import { descargarDocumento } from './descargas'
@@ -11,6 +11,8 @@ const sugerir = (v) => {
   if (!Number.isFinite(n)) return `${v}.1`
   p[p.length - 1] = String(n + 1); return p.join('.')
 }
+
+const humanizar = (clave) => String(clave).replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())
 
 export default function DetalleDocumento({ doc, repo, onCerrar, onConfirmar, puedeGestionar }) {
   const { categorias, versiones, catalogos, actualizarDocumento, agregarVersion, alternarVigente, alternarDestacado, archivar, registrarDescarga } = repo
@@ -39,16 +41,32 @@ export default function DetalleDocumento({ doc, repo, onCerrar, onConfirmar, pue
   const cat = categorias.find(c => c.id === doc.categoria_id)
   const color = cat?.color || PALETA.suave
   const t = infoTipo(doc.tipo)
+  const tipoDoc = buscarTipo(doc.categoria_id, doc.tipo_contenido)
+  const tiposCat = cat ? (buscarTipo(cat.id, cat.id) , []) : []
+  const opcionesTipo = useMemo(() => {
+    const slug = b?.categoria_id || doc.categoria_id
+    return (categorias.find(c => c.id === slug) ? require_tipos(slug) : [])
+  }, [])
+
+  function require_tipos(slug) {
+    // resolución perezosa sin import circular
+    return TIPOS_DE(slug)
+  }
+
+  const metadata = doc.metadata && typeof doc.metadata === 'object' ? doc.metadata : {}
+  const entradasMeta = Object.entries(metadata)
 
   const iniciar = () => {
     setB({ titulo: doc.titulo, descripcion: doc.descripcion || '', categoria_id: doc.categoria_id || '',
-      planta: doc.planta || '', proveedor: doc.proveedor || '', producto: doc.producto || '', etiquetas: [...(doc.etiquetas || [])] })
+      tipo_contenido: doc.tipo_contenido || '', planta: doc.planta || '', proveedor: doc.proveedor || '',
+      producto: doc.producto || '', etiquetas: [...(doc.etiquetas || [])] })
     setEditando(true)
   }
   const guardar = () => {
     if (!b.titulo.trim()) return toast.error('El título no puede quedar vacío')
     actualizarDocumento(doc.id, {
       titulo: b.titulo.trim(), descripcion: b.descripcion.trim(), categoria_id: b.categoria_id || null,
+      tipo_contenido: b.tipo_contenido || null,
       planta: b.planta || null, proveedor: b.proveedor || null, producto: b.producto || null, etiquetas: b.etiquetas,
     })
     setEditando(false)
@@ -77,6 +95,7 @@ export default function DetalleDocumento({ doc, repo, onCerrar, onConfirmar, pue
               </div>
               <h3 style={{ margin: 0, fontSize: 16.5, fontWeight: 900, lineHeight: 1.3 }}>{doc.titulo}</h3>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                {tipoDoc && <Insignia color={PALETA.cyan} solido>{tipoDoc.icono} {tipoDoc.nombre}</Insignia>}
                 <Insignia color={doc.vigente ? PALETA.lima : '#94A3B8'} solido>v{doc.version} · {doc.vigente ? 'VIGENTE' : 'OBSOLETO'}</Insignia>
                 {doc.destacado && <Insignia color={PALETA.ambar} solido>⭐ Destacado</Insignia>}
                 {doc.planta && <Insignia color="#fff" style={{ background: 'rgba(255,255,255,.18)', color: '#fff', borderColor: 'rgba(255,255,255,.3)' }}>📍 {doc.planta}</Insignia>}
@@ -101,9 +120,14 @@ export default function DetalleDocumento({ doc, repo, onCerrar, onConfirmar, pue
                 <textarea className="rd-in" rows={4} value={b.descripcion} onChange={e => setB({ ...b, descripcion: e.target.value })} style={{ resize: 'vertical' }} /></div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 11 }}>
                 <div className="rd-campo"><label className="rd-lab">Categoría</label>
-                  <select className="rd-sel" value={b.categoria_id} onChange={e => setB({ ...b, categoria_id: e.target.value })}>
+                  <select className="rd-sel" value={b.categoria_id} onChange={e => setB({ ...b, categoria_id: e.target.value, tipo_contenido: '' })}>
                     <option value="">Sin categoría</option>
                     {categorias.map(c => <option key={c.id} value={c.id}>{c.icono} {c.nombre}</option>)}
+                  </select></div>
+                <div className="rd-campo"><label className="rd-lab">Tipo de documento</label>
+                  <select className="rd-sel" value={b.tipo_contenido} onChange={e => setB({ ...b, tipo_contenido: e.target.value })}>
+                    <option value="">Sin tipo específico</option>
+                    {tiposDeCategoria(b.categoria_id).map(td => <option key={td.id} value={td.id}>{td.icono} {td.nombre}</option>)}
                   </select></div>
                 <div className="rd-campo"><label className="rd-lab">Planta</label>
                   <select className="rd-sel" value={b.planta} onChange={e => setB({ ...b, planta: e.target.value })}>
@@ -139,6 +163,11 @@ export default function DetalleDocumento({ doc, repo, onCerrar, onConfirmar, pue
                   ))}
                 </div>
               </div>
+              {entradasMeta.length > 0 && (
+                <p style={{ margin: 0, fontSize: 11.5, color: PALETA.suave, lineHeight: 1.55 }}>
+                  Los datos específicos del tipo (lote, emisor, fechas) se conservan tal como se publicaron y no son editables desde aquí.
+                </p>
+              )}
               <div style={{ display: 'flex', gap: 9, justifyContent: 'flex-end' }}>
                 <Boton variante="gh" onClick={() => setEditando(false)}>Cancelar</Boton>
                 <Boton variante="ok" icono="💾" onClick={guardar}>Guardar cambios</Boton>
@@ -154,7 +183,8 @@ export default function DetalleDocumento({ doc, repo, onCerrar, onConfirmar, pue
               </div>
               <div style={{ marginBottom: 15 }}>
                 <MetaLinea etiqueta="Archivo" valor={doc.nombre_archivo} />
-                <MetaLinea etiqueta="Tipo" valor={`${t.icono} ${t.etiqueta}`} />
+                <MetaLinea etiqueta="Formato" valor={`${t.icono} ${t.etiqueta}`} />
+                {tipoDoc && <MetaLinea etiqueta="Tipo de documento" valor={`${tipoDoc.icono} ${tipoDoc.nombre}`} />}
                 <MetaLinea etiqueta="Tamaño" valor={formatearBytes(doc.tamano_bytes)} />
                 <MetaLinea etiqueta="Versión vigente" valor={`v${doc.version}`} />
                 <MetaLinea etiqueta="Planta / Terminal" valor={doc.planta || 'Todas'} />
@@ -166,10 +196,21 @@ export default function DetalleDocumento({ doc, repo, onCerrar, onConfirmar, pue
                 <MetaLinea etiqueta="Descargas" valor={`${doc.descargas || 0} registradas`} />
                 <MetaLinea etiqueta="Origen" valor={doc.url_archivo ? 'Supabase Storage' : 'Ficha controlada'} />
               </div>
+
+              {entradasMeta.length > 0 && (
+                <div style={{ marginBottom: 15, padding: 12, borderRadius: 12, background: mezclarHex(PALETA.cyan, .06), border: `1px solid ${mezclarHex(PALETA.cyan, .25)}` }}>
+                  <div className="rd-lab" style={{ marginBottom: 8 }}>Datos específicos del tipo</div>
+                  {entradasMeta.map(([k, v]) => {
+                    const campo = tipoDoc?.campos?.find(c => c.clave === k)
+                    return <MetaLinea key={k} etiqueta={campo?.etiqueta || humanizar(k)} valor={v || '—'} />
+                  })}
+                </div>
+              )}
+
               {(doc.etiquetas || []).length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <div className="rd-lab" style={{ marginBottom: 7 }}>Etiquetas</div>
-                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>{doc.etiquetas.map(t => <span key={t} className="rd-tag">#{t}</span>)}</div>
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>{doc.etiquetas.map(t2 => <span key={t2} className="rd-tag">#{t2}</span>)}</div>
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -209,7 +250,7 @@ export default function DetalleDocumento({ doc, repo, onCerrar, onConfirmar, pue
                     </div>
                     <div style={{ padding: 16 }}>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-                        {[['Categoría', cat?.nombre || '—'], ['Versión', `v${doc.version}`], ['Estado', doc.vigente ? 'VIGENTE' : 'OBSOLETO'], ['Ámbito', doc.planta || 'Todas las plantas']]
+                        {[['Categoría', cat?.nombre || '—'], ['Tipo', tipoDoc?.nombre || '—'], ['Versión', `v${doc.version}`], ['Estado', doc.vigente ? 'VIGENTE' : 'OBSOLETO']]
                           .map(([k, v]) => (
                             <div key={k} style={{ padding: '8px 10px', borderRadius: 8, background: PALETA.frio }}>
                               <div style={{ fontSize: 9.5, letterSpacing: .8, textTransform: 'uppercase', color: PALETA.suave, fontWeight: 800 }}>{k}</div>
