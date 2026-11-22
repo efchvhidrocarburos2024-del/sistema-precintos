@@ -44,6 +44,21 @@ export const COLORES_SERIE = [
 ]
 
 // ============================================================================
+//  Catálogo base de categorías (RESTAURADO)
+//  Usado por datos.js para generar el acervo local si Supabase falla.
+// ============================================================================
+export const CATEGORIAS_BASE = [
+  { nombre: 'Técnicos',      slug: 'tecnicos',      color: '#06B6D4', icono: '️', descripcion: 'Fichas técnicas, planos, P&ID y certificados de calibración.', orden: 1 },
+  { nombre: 'Operativos',    slug: 'operativos',    color: '#0B5FA5', icono: '🛢️', descripcion: 'Procedimientos de planta, SCOP, precintado y conciliación.',   orden: 2 },
+  { nombre: 'Guías',         slug: 'guias',         color: '#84CC16', icono: '', descripcion: 'Manuales de usuario e instructivos paso a paso.',              orden: 3 },
+  { nombre: 'Normativa',     slug: 'normativa',     color: '#F59E0B', icono: '⚖️', descripcion: 'Decretos supremos, reglamentos y resoluciones vigentes.',      orden: 4 },
+  { nombre: 'Seguridad',     slug: 'seguridad',     color: '#EF4444', icono: '🦺', descripcion: 'IPERC, planes de contingencia y protocolos HSE.',              orden: 5 },
+  { nombre: 'Comercial',     slug: 'comercial',     color: '#DB2777', icono: '💰', descripcion: 'Listas de precios, topes y contratos de suministro.',          orden: 6 },
+  { nombre: 'Mantenimiento', slug: 'mantenimiento', color: '#7C3AED', icono: '🔧', descripcion: 'Programas, rutinas y órdenes de trabajo.',                     orden: 7 },
+  { nombre: 'Reportes',      slug: 'reportes',      color: '#0E7490', icono: '📊', descripcion: 'Informes periódicos, mermas y auditorías internas.',           orden: 8 },
+]
+
+// ============================================================================
 //  Tipos de documento por categoría (Opción B)
 //  campos con clave planta/proveedor/producto se enlazan a esas columnas;
 //  cualquier otra clave se guarda en documentos.metadata (jsonb).
@@ -61,7 +76,7 @@ export const TIPOS_DOCUMENTO = {
       ],
     },
     {
-      id: 'ficha_msds', nombre: 'Ficha de datos de seguridad (MSDS)', icono: '🧪',
+      id: 'ficha_msds', nombre: 'Ficha de datos de seguridad (MSDS)', icono: '',
       descripcion: 'Hoja de seguridad: riesgos, manipuleo y primeros auxilios del producto.',
       campos: [
         { clave: 'producto', etiqueta: 'Producto', tipo: 'select-producto' },
@@ -140,7 +155,7 @@ export const TIPOS = {
   pptx: { etiqueta: 'Slides',  color: '#FFC107', icono: '📙', ext: ['pptx', 'ppt'] },
   svg:  { etiqueta: 'Plano',   color: '#00AEEF', icono: '', ext: ['svg', 'dwg', 'dxf'] },
   zip:  { etiqueta: 'Paquete', color: '#6F42C1', icono: '🗜️', ext: ['zip', 'rar', '7z'] },
-  otro: { etiqueta: 'Archivo', color: '#666666', icono: '📄', ext: [] },
+  otro: { etiqueta: 'Archivo', color: '#666666', icono: '', ext: [] },
 }
 
 export const PLANTAS_RESPALDO = [
@@ -150,7 +165,7 @@ export const PLANTAS_RESPALDO = [
 ]
 
 export const ICONOS_DISPONIBLES = [
-  '📄','⚙️','🛢️','📘','⚖️','🦺','💰','🔧','','🧪','🚛','️','🔥','','📐','🧭','🛰️','🏭','💧','',
+  '📄','⚙️','🛢️','📘','⚖️','','💰','','📊','','','🧾','⚖️','','🛰️','📐','','🛰️','🏭','','️',
 ]
 
 export const LIMITE_BYTES = 25 * 1024 * 1024
