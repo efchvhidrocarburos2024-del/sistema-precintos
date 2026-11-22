@@ -28,7 +28,7 @@ const btnTabStyle = (activo) => ({
 // Estilos del Cotizador
 const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }
 const selectStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold', boxSizing: 'border-box' }
-const readOnlyFieldStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#f3f4f6', color: '#374151', fontWeight: 'bold', boxSizing: 'border-box', cursor: 'not-allowed' }
+const readOnlyFieldStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#f3f4f6', color: '#374151', fontWeight: 'bold', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '42px' }
 
 const COLORS = ['#0B5FA5', '#10b981', '#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#f43f5e', '#84cc16', '#f97316', '#6366f1']
 
@@ -106,7 +106,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [cotPlanta, setCotPlanta] = useState('')
   const [cotProducto, setCotProducto] = useState('')
   const [cotAlmacen, setCotAlmacen] = useState('')
-  const [cotColTope, setCotColTope] = useState('TOPE S/IGV')
+  const [cotColTope, setCotColTope] = useState('TOPE S/IGV')  // Se setea automáticamente
   const [cotFactor, setCotFactor] = useState('')
   const [cotCantidad, setCotCantidad] = useState('')
   const [cotAplicarPercepcion, setCotAplicarPercepcion] = useState(true)
@@ -153,7 +153,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     const yyyy = hoy.getFullYear()
     const mm = String(hoy.getMonth() + 1).padStart(2, '0')
     const dd = String(hoy.getDate()).padStart(2, '0')
-    const random = String(Math.floor(Math.random() * 900) + 100) // 100-999
+    const random = String(Math.floor(Math.random() * 900) + 100)
     return `COT-${yyyy}${mm}${dd}-${random}`
   }
 
@@ -679,7 +679,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
       const resP = await fetch(precioVigente.url_archivo)
       const wbP = XLSX.read(await resP.arrayBuffer(), { type: 'array' })
-      // Hoja fija: Precios Planta Con IGV
       const sheetP = wbP.SheetNames.find(n => n.toLowerCase() === HOJA_PRECIO_COTIZACION.toLowerCase())
       if (!sheetP) throw new Error(`No se encontró la hoja "${HOJA_PRECIO_COTIZACION}" en el archivo de precios.`)
       const wsP = wbP.Sheets[sheetP]
@@ -704,12 +703,14 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const colTopes = cols.filter(c => normalizarTexto(c).includes('TOPE'))
       if (!colPlanta || !colAlmacen || !colArticulo) throw new Error('El archivo de Topes no tiene columnas PLANTA / ALMACEN / ARTICULO.')
 
-      setCotColTope(prev => (colTopes.includes(prev) ? prev : (colTopes[0] || prev)))
+      // Columna Tope automática: primera columna que contenga "TOPE"
+      const colTopeAuto = colTopes[0] || 'TOPE S/IGV'
+      setCotColTope(colTopeAuto)
       setCotDatos({
         precioNombre: precioVigente.nombre_archivo,
         topeNombre: topeVigente.nombre_archivo,
         hojaUsada: sheetP, headers, idxPlanta, filas, plantas, productos,
-        topeRows, colPlanta, colAlmacen, colArticulo, colTopes
+        topeRows, colPlanta, colAlmacen, colArticulo, colTopes, colTopeAuto
       })
     } catch (e) {
       setCotErrorDatos(e.message)
@@ -791,29 +792,43 @@ export default function GestionPrecios({ setPantalla, rol }) {
     doc.text(`Planta: ${cotPlanta}`, 130, 40)
     doc.text(`Almacén: ${cotAlmacen}`, 130, 46)
 
-    // Tabla de desglose
+    // Determinar columnas según percepción
+    const aplicaPercepcion = r.aplicarPercepcion
+    const precioFinal = aplicaPercepcion ? r.finalConPercepcion : r.finalSinPercepcion
+    const totalCalculado = r.cantidad > 0 ? precioFinal * r.cantidad : 0
+
+    const head = aplicaPercepcion 
+      ? [['PRODUCTO', 'P. BASE C/IGV', 'TOPE − FACTOR', 'FINAL C/IGV + PERC.', 'CANT. (GAL)', 'TOTAL (S/)']]
+      : [['PRODUCTO', 'P. BASE C/IGV', 'TOPE − FACTOR', 'FINAL C/IGV', 'CANT. (GAL)', 'TOTAL (S/)']]
+
     const body = [[
       cotProducto,
       r.precioBase.toFixed(4),
       `${r.tope.toFixed(4)} − ${r.factor.toFixed(4)} = ${r.topeAjustado.toFixed(4)}`,
-      r.finalSinPercepcion.toFixed(4),
-      r.aplicarPercepcion ? r.finalConPercepcion.toFixed(4) : '—',
-      r.cantidad || '—',
-      r.cantidad > 0 ? (r.aplicarPercepcion ? r.total : r.finalSinPercepcion * r.cantidad).toFixed(2) : '—'
+      precioFinal.toFixed(4),
+      r.cantidad > 0 ? r.cantidad.toLocaleString('es-PE', { minimumFractionDigits: 2 }) : '—',
+      r.cantidad > 0 ? totalCalculado.toFixed(2) : '—'
     ]]
 
     autoTable(doc, {
       startY: 60,
-      head: [['PRODUCTO', 'P. BASE C/IGV', 'TOPE − FACTOR', 'FINAL C/IGV', 'FINAL + PERC.', 'CANT. (GAL)', 'TOTAL (S/)']],
+      head,
       body,
       theme: 'grid',
-      headStyles: { fillColor: [11, 95, 165], fontSize: 7 },
-      bodyStyles: { fontSize: 9, cellPadding: 3 },
-      columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'center' }, 6: { halign: 'right' } }
+      headStyles: { fillColor: [11, 95, 165], fontSize: 8, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 9, cellPadding: 4 },
+      columnStyles: { 
+        0: { halign: 'left' },
+        1: { halign: 'right' }, 
+        2: { halign: 'right' }, 
+        3: { halign: 'right', fontStyle: 'bold' },
+        4: { halign: 'center' },
+        5: { halign: 'right', fontStyle: 'bold' }
+      }
     })
 
     // Pie: solo validez
-    let y = doc.lastAutoTable.finalY + 12
+    let y = doc.lastAutoTable.finalY + 15
     doc.setFontSize(9); doc.setTextColor(80, 80, 80); doc.setFont('helvetica', 'italic')
     doc.text('Cotización válida por 3 días calendario.', 14, y)
 
@@ -1301,11 +1316,11 @@ export default function GestionPrecios({ setPantalla, rol }) {
           <Card style={{ padding: '30px', marginBottom: '20px' }}>
             <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', color: 'var(--text-dark)', textAlign: 'center' }}>🧾 Cotizar Combustibles</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
-              {/* Hoja de Precio FIJA - no editable */}
+              {/* Hoja de Precio FIJA - mismo estilo que selects */}
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Hoja de Precio</label>
                 <div style={readOnlyFieldStyle}>
-                  {HOJA_PRECIO_COTIZACION} 🔒
+                  {HOJA_PRECIO_COTIZACION}
                 </div>
               </div>
               <div>
@@ -1329,18 +1344,19 @@ export default function GestionPrecios({ setPantalla, rol }) {
                   {d?.topeRows ? [...new Set(d.topeRows.map(r => String(r[d?.colAlmacen] || '').trim()).filter(Boolean))].sort().map(a => <option key={a} value={a}>{a}</option>) : null}
                 </select>
               </div>
+              {/* Columna Tope FIJA - mismo estilo que Hoja de Precio */}
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Columna Tope</label>
-                <select value={cotColTope} onChange={(e) => setCotColTope(e.target.value)} style={selectStyle} disabled={!d}>
-                  {d?.colTopes?.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <div style={readOnlyFieldStyle}>
+                  {cotColTope}
+                </div>
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>FACTOR (numérico)</label>
                 <input type="number" min="0" step="0.0001" value={cotFactor} onChange={(e) => setCotFactor(e.target.value)} placeholder="0.00" style={inputStyle} />
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Cantidad (Galones) — opcional</label>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px', whiteSpace: 'nowrap' }}>Cantidad (Galones) — opcional</label>
                 <input type="number" min="0" step="0.01" value={cotCantidad} onChange={(e) => setCotCantidad(e.target.value)} placeholder="0.00" style={inputStyle} />
               </div>
               <div>
