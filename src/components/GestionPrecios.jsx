@@ -109,6 +109,15 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [cotAplicarPercepcion, setCotAplicarPercepcion] = useState(true)
   const [cotResultado, setCotResultado] = useState(null)
   const [cotKey, setCotKey] = useState(0)
+  const [cotGuardando, setCotGuardando] = useState(false)
+
+  // ESTADOS DE HISTORIAL
+  const [cotHistorial, setCotHistorial] = useState([])
+  const [cotHistorialCargando, setCotHistorialCargando] = useState(false)
+  const [cotFiltroFechaDesde, setCotFiltroFechaDesde] = useState('')
+  const [cotFiltroFechaHasta, setCotFiltroFechaHasta] = useState('')
+  const [cotFiltroBusqueda, setCotFiltroBusqueda] = useState('')
+  const [cotHistorialFiltrado, setCotHistorialFiltrado] = useState([])
 
   const [modalEliminarAbierto, setModalEliminarAbierto] = useState(false)
   const [archivoAEliminar, setArchivoAEliminar] = useState(null)
@@ -159,6 +168,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     if (vista === 'comparar') { fetchArchivos(); fetchArchivosTopes(); }
     if (vista === 'auditoria') fetchAuditoria()
     if (vista === 'tendencias' || vista === 'cotizar') fetchArchivos()
+    if (vista === 'historial') cargarHistorial()
   }, [vista, subVista])
 
   useEffect(() => {
@@ -173,6 +183,24 @@ export default function GestionPrecios({ setPantalla, rol }) {
       if (ordenadosT.length >= 2) setIdBaseTope(ordenadosT[1].id);
     }
   }, [vista, archivos, archivosTopes]);
+
+  // ===== FILTRADO DE HISTORIAL =====
+  useEffect(() => {
+    let filtrado = [...cotHistorial]
+    if (cotFiltroFechaDesde) filtrado = filtrado.filter(c => c.fecha_cotizacion >= cotFiltroFechaDesde)
+    if (cotFiltroFechaHasta) filtrado = filtrado.filter(c => c.fecha_cotizacion <= cotFiltroFechaHasta)
+    if (cotFiltroBusqueda.trim()) {
+      const q = cotFiltroBusqueda.toLowerCase()
+      filtrado = filtrado.filter(c => 
+        c.numero_cotizacion.toLowerCase().includes(q) ||
+        (c.cliente || '').toLowerCase().includes(q) ||
+        c.planta.toLowerCase().includes(q) ||
+        c.producto.toLowerCase().includes(q) ||
+        c.almacen.toLowerCase().includes(q)
+      )
+    }
+    setCotHistorialFiltrado(filtrado.sort((a, b) => new Date(b.creado_en) - new Date(a.creado_en)))
+  }, [cotHistorial, cotFiltroFechaDesde, cotFiltroFechaHasta, cotFiltroBusqueda])
 
   async function fetchArchivos() {
     const { data } = await supabase.from('precios_archivos').select('*')
@@ -198,6 +226,70 @@ export default function GestionPrecios({ setPantalla, rol }) {
     const { data: { user } } = await supabase.auth.getUser()
     const tabla = tipo === 'precios' ? 'precios_auditoria' : 'topes_auditoria'
     await supabase.from(tabla).insert({ id_archivo, nombre_archivo, accion, usuario: user.email })
+  }
+
+  // ===== HISTORIAL =====
+  async function cargarHistorial() {
+    setCotHistorialCargando(true)
+    const { data, error } = await supabase.from('cotizaciones').select('*').order('creado_en', { ascending: false })
+    if (error) {
+      toast.error('Error al cargar historial: ' + error.message)
+      setCotHistorial([])
+    } else {
+      setCotHistorial(data || [])
+    }
+    setCotHistorialCargando(false)
+  }
+
+  async function guardarCotizacion() {
+    if (!cotResultado) return toast.error('Primero calcula la cotización')
+    setCotGuardando(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const nro = generarNumeroCotizacion()
+      const hoy = new Date().toISOString().split('T')[0]
+      
+      const { data, error } = await supabase.from('cotizaciones').insert({
+        numero_cotizacion: nro,
+        fecha_cotizacion: hoy,
+        cliente: cotCliente || null,
+        planta: cotPlanta,
+        almacen: cotAlmacen,
+        producto: cotProducto,
+        precio_base: cotResultado.precioBase,
+        tope: cotResultado.tope,
+        factor: cotResultado.factor,
+        tope_ajustado: cotResultado.topeAjustado,
+        precio_final_sin_percepcion: cotResultado.finalSinPercepcion,
+        precio_final_con_percepcion: cotAplicarPercepcion ? cotResultado.finalConPercepcion : null,
+        aplica_percepcion: cotAplicarPercepcion,
+        cantidad: cotResultado.cantidad || 0,
+        total: cotResultado.total || 0,
+        archivo_precios: cotDatos?.precioNombre || null,
+        archivo_topes: cotDatos?.topeNombre || null,
+        creado_por: user?.email || null
+      }).select()
+      
+      if (error) throw error
+      
+      toast.success(`Cotización ${nro} guardada en historial`)
+      setCotHistorial(prev => [data[0], ...prev])
+    } catch (error) {
+      toast.error('Error al guardar: ' + error.message)
+    } finally {
+      setCotGuardando(false)
+    }
+  }
+
+  async function eliminarCotizacion(id, numero) {
+    if (!confirm(`¿Eliminar la cotización ${numero}?`)) return
+    const { error } = await supabase.from('cotizaciones').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar: ' + error.message)
+    } else {
+      toast.success('Cotización eliminada')
+      setCotHistorial(prev => prev.filter(c => c.id !== id))
+    }
   }
 
   const verComoPDF = async (file) => {
@@ -758,7 +850,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   }, [vista, cotKey])
 
-  // FIX: cotCantidad agregado a las dependencias para recalcular el total en vivo
   useEffect(() => {
     if (vista !== 'cotizar' || !cotDatos) return
     if (!cotPlanta || !cotProducto || !cotAlmacen || !cotColTope) {
@@ -768,7 +859,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     ejecutarCotizacion()
   }, [cotPlanta, cotProducto, cotAlmacen, cotColTope, cotFactor, cotCantidad, cotAplicarPercepcion, vista, cotDatos])
 
-  // ===== PDF DE COTIZACIÓN - SOLO 4 COLUMNAS =====
   const generarPDFCotizacion = () => {
     if (!cotResultado) return toast.error('Selecciona los criterios para cotizar')
     const r = cotResultado
@@ -776,14 +866,12 @@ export default function GestionPrecios({ setPantalla, rol }) {
     const nro = generarNumeroCotizacion()
     const aplicaPercepcion = r.aplicarPercepcion
 
-    // Encabezado corporativo
     doc.setFillColor(11, 95, 165); doc.rect(0, 0, 210, 30, 'F')
     doc.setTextColor(255, 255, 255); doc.setFontSize(18); doc.setFont('helvetica', 'bold')
     doc.text('COTIZACIÓN DE COMBUSTIBLES', 14, 13)
     doc.setFontSize(11); doc.setFont('helvetica', 'normal')
     doc.text('HIDROMUNDO S.A.C.', 14, 21)
 
-    // Datos del documento
     doc.setTextColor(60, 60, 60); doc.setFontSize(10)
     doc.text(`N°: ${nro}`, 14, 40)
     doc.text(`Fecha: ${new Date().toLocaleDateString('es-PE')}`, 14, 46)
@@ -791,7 +879,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     doc.text(`Planta: ${cotPlanta}`, 130, 40)
     doc.text(`Almacén: ${cotAlmacen}`, 130, 46)
 
-    // Columna dinámica según percepción
     const tituloPrecio = aplicaPercepcion ? 'FINAL C/IGV + PERC. (S/)' : 'FINAL C/IGV (S/)'
 
     const head = [['PRODUCTO', tituloPrecio, 'CANT. (GAL)', 'TOTAL (S/)']]
@@ -817,7 +904,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
       }
     })
 
-    // Bloque TOTAL A PAGAR destacado (solo si hay cantidad)
     let y = doc.lastAutoTable.finalY + 14
     if (r.cantidad > 0) {
       doc.setFillColor(11, 95, 165); doc.rect(110, y, 86, 14, 'F')
@@ -828,12 +914,11 @@ export default function GestionPrecios({ setPantalla, rol }) {
       y += 22
     }
 
-    // Pie
     doc.setFontSize(9); doc.setTextColor(80, 80, 80); doc.setFont('helvetica', 'italic')
     doc.text('Cotización válida por 3 días calendario.', 14, y)
 
     doc.save(`${nro}.pdf`)
-    toast.success(`Cotización ${nro} generada`)
+    toast.success(`PDF ${nro} generado`)
   }
 
   const renderHeader = () => (
@@ -873,6 +958,11 @@ export default function GestionPrecios({ setPantalla, rol }) {
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>🧾</div>
               <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Cotizar</h3>
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Genera cotizaciones con precios y topes vigentes.</p>
+            </div>
+            <div onClick={() => setVista('historial')} style={cardStyle}>
+              <div style={{ fontSize: '50px', marginBottom: '15px' }}>📚</div>
+              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Historial de Cotizaciones</h3>
+              <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Consulta y reenvía cotizaciones guardadas.</p>
             </div>
             <div onClick={() => setVista('auditoria')} style={cardStyle}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>📋</div>
@@ -1296,7 +1386,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
         {renderHeader()}
         <main style={{ padding: '40px 20px', maxWidth: '1200px', margin: '0 auto' }}>
 
-          {/* Fuentes vigentes - FORMATO LIMPIO */}
           <Card style={{ padding: '15px 20px', marginBottom: '15px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', textAlign: 'left' }}>
             {cotCargandoDatos ? (
               <p style={{ margin: 0, color: '#1e40af', fontWeight: 'bold' }}>⏳ Cargando archivos vigentes...</p>
@@ -1312,15 +1401,12 @@ export default function GestionPrecios({ setPantalla, rol }) {
             ) : null}
           </Card>
 
-          {/* Criterios */}
           <Card style={{ padding: '30px', marginBottom: '20px' }}>
             <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', color: 'var(--text-dark)', textAlign: 'center' }}>🧾 Cotizar Combustibles</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Hoja de Precio</label>
-                <div style={readOnlyFieldStyle}>
-                  {HOJA_PRECIO_COTIZACION}
-                </div>
+                <div style={readOnlyFieldStyle}>{HOJA_PRECIO_COTIZACION}</div>
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Planta</label>
@@ -1345,9 +1431,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Columna Tope</label>
-                <div style={readOnlyFieldStyle}>
-                  {cotColTope}
-                </div>
+                <div style={readOnlyFieldStyle}>{cotColTope}</div>
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>FACTOR (numérico)</label>
@@ -1363,7 +1447,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
               </div>
             </div>
 
-            {/* Checkbox percepción */}
             <div style={{ marginTop: '20px', padding: '12px 16px', backgroundColor: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
               <input type="checkbox" id="aplicarPercepcion" checked={cotAplicarPercepcion} onChange={(e) => setCotAplicarPercepcion(e.target.checked)} style={{ width: '20px', height: '20px', cursor: 'pointer' }} />
               <label htmlFor="aplicarPercepcion" style={{ cursor: 'pointer', fontWeight: 'bold', color: '#92400e', fontSize: '14px' }}>
@@ -1372,7 +1455,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
             </div>
           </Card>
 
-          {/* Desglose */}
           {cotResultado && (
             <Card style={{ padding: '30px' }}>
               <h3 style={{ marginTop: 0, color: 'var(--primary-blue)', textAlign: 'center' }}>📊 Desglose de la Cotización</h3>
@@ -1406,9 +1488,114 @@ export default function GestionPrecios({ setPantalla, rol }) {
                   </div>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-                <Boton variante="primary" onClick={generarPDFCotizacion}>📄 Generar PDF de Cotización</Boton>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <Boton variante="success" onClick={guardarCotizacion} disabled={cotGuardando}>
+                  {cotGuardando ? '⏳ Guardando...' : '💾 Guardar en Historial'}
+                </Boton>
+                <Boton variante="primary" onClick={generarPDFCotizacion}>📄 Generar PDF</Boton>
                 <Boton variante="outline" onClick={() => { setCotPlanta(''); setCotProducto(''); setCotAlmacen(''); setCotFactor(''); setCotCantidad(''); setCotResultado(null); }}>🔄 Nueva Cotización</Boton>
+              </div>
+            </Card>
+          )}
+        </main>
+      </div>
+    )
+  }
+
+  // ===== HISTORIAL =====
+  if (vista === 'historial') {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
+        {renderHeader()}
+        <main style={{ padding: '40px 20px', maxWidth: '1400px', margin: '0 auto' }}>
+          <Card style={{ padding: '20px', marginBottom: '20px' }}>
+            <h2 style={{ margin: '0 0 15px 0', fontSize: '22px', color: 'var(--text-dark)' }}>📚 Historial de Cotizaciones</h2>
+            
+            {/* Filtros */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '15px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', fontSize: '12px' }}>🔍 Buscar (N°, cliente, planta, producto)</label>
+                <input type="text" value={cotFiltroBusqueda} onChange={(e) => setCotFiltroBusqueda(e.target.value)} placeholder="Ej: COT-2026, CALLAO, DIESEL..." style={inputStyle} />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', fontSize: '12px' }}>📅 Desde</label>
+                <input type="date" value={cotFiltroFechaDesde} onChange={(e) => setCotFiltroFechaDesde(e.target.value)} style={inputStyle} />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', fontSize: '12px' }}>📅 Hasta</label>
+                <input type="date" value={cotFiltroFechaHasta} onChange={(e) => setCotFiltroFechaHasta(e.target.value)} style={inputStyle} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                <Boton variante="outline" onClick={() => { setCotFiltroBusqueda(''); setCotFiltroFechaDesde(''); setCotFiltroFechaHasta(''); }}>🔄 Limpiar filtros</Boton>
+              </div>
+            </div>
+
+            {/* Resumen */}
+            <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', padding: '12px', backgroundColor: '#f0f9ff', borderRadius: '8px', fontSize: '13px' }}>
+              <span><strong>Total:</strong> {cotHistorialFiltrado.length} cotización(es)</span>
+              <span><strong>Monto total filtrado:</strong> S/ {cotHistorialFiltrado.reduce((s, c) => s + (c.total || 0), 0).toFixed(2)}</span>
+            </div>
+          </Card>
+
+          {cotHistorialCargando ? (
+            <Card style={{ padding: '40px', textAlign: 'center' }}>
+              <div style={{ fontSize: '40px', marginBottom: '10px' }}>⏳</div>
+              <p>Cargando historial...</p>
+            </Card>
+          ) : cotHistorialFiltrado.length === 0 ? (
+            <Card style={{ padding: '40px', textAlign: 'center' }}>
+              <div style={{ fontSize: '50px', marginBottom: '10px' }}>📭</div>
+              <h3 style={{ margin: '0 0 10px 0', color: 'var(--text-dark)' }}>
+                {cotHistorial.length === 0 ? 'No hay cotizaciones guardadas' : 'Sin resultados para los filtros aplicados'}
+              </h3>
+              <p style={{ color: 'var(--text-light)' }}>
+                {cotHistorial.length === 0 
+                  ? 'Las cotizaciones que guardes aparecerán aquí.' 
+                  : 'Intenta ajustar los filtros de búsqueda.'}
+              </p>
+            </Card>
+          ) : (
+            <Card style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white' }}>
+                    <tr>
+                      <th style={{ padding: '12px 8px', textAlign: 'left' }}>N°</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'left' }}>FECHA</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'left' }}>CLIENTE</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'left' }}>PLANTA</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'left' }}>ALMACÉN</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'left' }}>PRODUCTO</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'right' }}>P. FINAL</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'center' }}>CANT.</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'right' }}>TOTAL</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'center' }}>ACCIONES</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cotHistorialFiltrado.map((c, i) => (
+                      <tr key={c.id} style={{ backgroundColor: i % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #eee' }}>
+                        <td style={{ padding: '10px 8px', fontWeight: 'bold', color: 'var(--primary-blue)' }}>{c.numero_cotizacion}</td>
+                        <td style={{ padding: '10px 8px' }}>{new Date(c.fecha_cotizacion).toLocaleDateString('es-PE')}</td>
+                        <td style={{ padding: '10px 8px' }}>{c.cliente || '—'}</td>
+                        <td style={{ padding: '10px 8px' }}>{c.planta}</td>
+                        <td style={{ padding: '10px 8px' }}>{c.almacen}</td>
+                        <td style={{ padding: '10px 8px' }}>{c.producto}</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 'bold' }}>
+                          S/ {(c.aplica_percepcion ? c.precio_final_con_percepcion : c.precio_final_sin_percepcion)?.toFixed(4)}
+                          {c.aplica_percepcion && <span style={{ fontSize: '9px', color: '#059669', marginLeft: '4px' }}>(+perc)</span>}
+                        </td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center' }}>{c.cantidad > 0 ? Number(c.cantidad).toLocaleString('es-PE') : '—'}</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 'bold', color: c.total > 0 ? '#059669' : '#6b7280' }}>
+                          {c.total > 0 ? `S/ ${Number(c.total).toFixed(2)}` : '—'}
+                        </td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                          <Boton variante="danger" tamano="sm" onClick={() => eliminarCotizacion(c.id, c.numero_cotizacion)} title="Eliminar">🗑️</Boton>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </Card>
           )}
