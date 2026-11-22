@@ -41,13 +41,13 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [archivosTopes, setArchivosTopes] = useState([])
   const [auditoria, setAuditoria] = useState([])
 
-  // Filtros del módulo Tendencias (versión nueva basada en BD)
+  // Filtros del módulo Tendencias (versión nueva basada en BD / historial)
   const hoy = new Date().toISOString().split('T')[0]
   const inicioAnio = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0]
   const [catalogos, setCatalogos] = useState({ plantas: [], productos: [] })
   const [cargandoCatalogos, setCargandoCatalogos] = useState(false)
   const [filtrosTendencias, setFiltrosTendencias] = useState({
-    fechaDesde: inicioAnio, fechaHasta: hoy, productosSeleccionados: [], plantaSeleccionada: ''
+    fechaDesde: inicioAnio, fechaHasta: hoy, productoSeleccionado: '', plantaSeleccionada: ''
   })
 
   // Permisos (códigos de rol históricos del módulo; agrega los que necesites)
@@ -122,7 +122,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     const tabla = esTope ? 'topes_archivos' : 'precios_archivos'
     const carpeta = esTope ? 'topes' : 'listas_precios'
     try {
-      // Validación de duplicados por nombre
       const { data: existentes } = await supabase.from(tabla).select('id').eq('nombre_archivo', file.name).limit(1)
       if (existentes && existentes.length > 0) {
         throw new Error(`Ya existe un archivo llamado "${file.name}". Elimínalo o renómbralo antes de subirlo.`)
@@ -135,7 +134,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const { data: { publicUrl } } = supabase.storage.from('documentos_sigmo').getPublicUrl(ruta)
       const { data: { user } } = await supabase.auth.getUser()
 
-      // El nuevo archivo pasa a ser el vigente
       await supabase.from(tabla).update({ es_vigente: false }).eq('es_vigente', true)
       const { data, error: errIns } = await supabase.from(tabla)
         .insert({ nombre_archivo: file.name, url_archivo: publicUrl, subido_por: user?.email || null, es_vigente: true })
@@ -148,7 +146,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
       if (esTope) fetchArchivosTopes(); else fetchArchivos()
     } catch (error) {
       toast.error('Error al subir: ' + error.message)
-      throw error // el Cargador conserva la vista previa para reintentar
+      throw error
     }
   }
 
@@ -233,7 +231,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
   }
 
   // ----------------------------------------------------------
-  // DELEGACIÓN A SUB-COMPONENTES (con los props que esperan)
+  // DELEGACIÓN A SUB-COMPONENTES
   // ----------------------------------------------------------
   if (vista === 'visualizar') {
     return (
@@ -262,7 +260,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
   }
 
   // ----------------------------------------------------------
-  // TENDENCIAS (módulo nuevo con hook de BD + filtros propios)
+  // TENDENCIAS (filtros propios + módulo de gráfico)
   // ----------------------------------------------------------
   if (vista === 'tendencias') {
     return (
@@ -287,8 +285,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
                 </select>
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', fontSize: '12px' }}>🛢️ Productos (Ctrl+Click para varios)</label>
-                <select multiple value={filtrosTendencias.productosSeleccionados} onChange={e => actualizarFiltros({ productosSeleccionados: Array.from(e.target.selectedOptions, o => o.value) })} style={{ ...inputStyle, minHeight: '60px' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 'bold', fontSize: '12px' }}>🛢️ Productos</label>
+                <select value={filtrosTendencias.productoSeleccionado} onChange={e => actualizarFiltros({ productoSeleccionado: e.target.value })} style={inputStyle}>
+                  <option value="">Todos los productos</option>
                   {catalogos.productos.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
@@ -304,9 +303,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
               filtros={{
                 fechaDesde: filtrosTendencias.fechaDesde,
                 fechaHasta: filtrosTendencias.fechaHasta,
-                productos: filtrosTendencias.productosSeleccionados.length > 0
-                  ? filtrosTendencias.productosSeleccionados
-                  : catalogos.productos,
+                productos: filtrosTendencias.productoSeleccionado ? [filtrosTendencias.productoSeleccionado] : [],
                 planta: filtrosTendencias.plantaSeleccionada || null,
               }}
             />
