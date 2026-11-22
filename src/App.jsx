@@ -4,8 +4,8 @@ import { Toaster } from 'react-hot-toast'
 import toast from 'react-hot-toast'
 import './App.css'
 
-// --- Componentes de módulos (sin cambios) ---
-import Login from './components/Login'
+// --- Componentes de módulos ---
+import Login from './components/Login' // ← Corregido: sin setUser
 import RegistroLotes from './components/RegistroLotes'
 import RegistroViajes from './components/RegistroViajes'
 import Excepciones from './components/Excepciones'
@@ -23,9 +23,9 @@ import GestionPlantas from './components/GestionPlantas'
 import PanelRespaldos from './components/PanelRespaldos'
 import RepositorioDocumental from './components/RepositorioDocumental'
 import GestionCatalogos from './components/GestionCatalogos'
-import GestionPrecios from "./components/precios/GestionPrecios"
+import GestionPrecios from "./components/precios/GestionPrecios" // ← Ruta correcta
 
-// --- Componentes refactorizados (usan ./ui) ---
+// --- Componentes refactorizados ---
 import LobbyModulos from './components/LobbyModulos'
 import MenuPrecintos from './components/MenuPrecintos'
 import NavbarPrecintos from './components/NavbarPrecintos'
@@ -40,6 +40,12 @@ import { throttle } from './utils/throttle'
 const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000
 const TIEMPO_DE_AVISO = TIEMPO_INACTIVIDAD_TOTAL - 2 * 60 * 1000
 const STORAGE_KEY_PANTALLA = 'sigmo_pantalla'
+
+// Colores Petro América para UI inline
+const COLORES_PA = {
+  azul: '#0033A0',
+  grisFondo: '#f5f7fa',
+}
 
 // ============================================================
 // COMPONENTE PRINCIPAL
@@ -70,7 +76,7 @@ function App() {
   }, [pantalla])
 
   // ----------------------------------------------------------
-  // Autenticación
+  // Autenticación (Listener automático)
   // ----------------------------------------------------------
   useEffect(() => {
     if (
@@ -193,7 +199,6 @@ function App() {
   useEffect(() => {
     if (!sesion) return
 
-    // Throttle → el handler corre máximo 1×/seg
     const manejarActividad = throttle(() => {
       if (!mostrarAviso) reiniciarTemporizador()
     }, 1000)
@@ -215,14 +220,15 @@ function App() {
   if (!sesion) {
     if (esRecuperacion) return <ResetPassword />
     if (pantalla === 'forgot') return <ForgotPassword setPantalla={setPantalla} />
+    // CORRECCIÓN: Login ya no recibe setUser
     return <Login setPantalla={setPantalla} />
   }
 
   // --- PANTALLA DE CARGA ---
   if (cargandoRol) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f3f4f6' }}>
-        <h2 style={{ color: '#0B5FA5' }}>Cargando perfil...</h2>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: COLORES_PA.grisFondo }}>
+        <h2 style={{ color: COLORES_PA.azul }}>Cargando perfil...</h2>
       </div>
     )
   }
@@ -272,9 +278,11 @@ function App() {
       )}
       {pantallaAccesible === 'catalogos' && <GestionCatalogos setPantalla={setPantalla} />}
       {pantallaAccesible === 'usuarios' && <GestionUsuarios setPantalla={setPantalla} />}
-{pantallaAccesible === 'precios_menu' && (
-  <GestionPrecios rol={rol} />
-)}
+      
+      {/* CORRECCIÓN: GestionPrecios ya no recibe setPantalla */}
+      {pantallaAccesible === 'precios_menu' && (
+        <GestionPrecios rol={rol} />
+      )}
 
       {/* VISTAS CON NAVBAR INTERNA */}
       {mostrarNavbar && (
