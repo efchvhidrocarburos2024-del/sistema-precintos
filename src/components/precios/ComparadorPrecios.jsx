@@ -58,6 +58,14 @@ const VERDE = '#059669'
 const selectStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #334155', fontSize: '13px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold', boxSizing: 'border-box' }
 const labelStyle = { display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px', color: 'var(--text-dark, #111827)' }
 
+// Campo fijo de solo lectura (las listas NO se seleccionan manualmente)
+const campoFijoStyle = {
+  width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #334155',
+  fontSize: '13px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold',
+  boxSizing: 'border-box', minHeight: '42px', display: 'flex', alignItems: 'center', gap: '8px',
+  lineHeight: 1.3, wordBreak: 'break-word', cursor: 'default',
+}
+
 // ============================================================
 // CELDA DE VARIACIÓN (rojo sube / verde baja / azul nuevo)
 // ============================================================
@@ -105,21 +113,15 @@ export default function ComparadorPrecios({ archivos, archivosTopes, onVolver })
   const colorTipo = tipo === 'precios' ? AZUL : VERDE
 
   // ----------------------------------------------------------
-  // AUTOSELECCIÓN: Actual = más reciente, Previa = la anterior,
-  // según la fecha del NOMBRE del archivo (Precios y Topes)
+  // AUTOSELECCIÓN FIJA: Actual = más reciente, Previa = la anterior,
+  // según la fecha del NOMBRE del archivo (Precios y Topes).
+  // El usuario no puede cambiarlas ni intercambiarlas.
   // ----------------------------------------------------------
   useEffect(() => {
     const ord = ordenarPorFecha(tipo === 'precios' ? archivos : archivosTopes)
     setIdNuevo(ord[0]?.id || '')
     setIdBase(ord[1]?.id || '')
   }, [tipo, archivos, archivosTopes])
-
-  const intercambiar = () => {
-    setIdBase(idNuevo)
-    setIdNuevo(idBase)
-    if (tipo === 'precios') setDatosComparados(null)
-    else setDatosComparadosTope(null)
-  }
 
   // ----------------------------------------------------------
   // PARSEO DE EXCEL
@@ -344,7 +346,7 @@ export default function ComparadorPrecios({ archivos, archivosTopes, onVolver })
 
         <Card style={{ padding: '30px', marginBottom: '20px' }}>
           <p style={{ margin: '0 0 18px 0', fontSize: '12px', color: '#1e40af', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '8px 12px' }}>
-            ⚡ <strong>Selección automática:</strong> «Lista Actual» es la más reciente y «Lista Previa» la anterior, según la fecha en el nombre del archivo (si no tiene fecha, se usa la de subida). Puedes cambiarlas manualmente.
+            ⚡ <strong>Selección automática (fija):</strong> «Lista Actual» es la más reciente y «Lista Previa» la inmediatamente anterior, según la fecha en el nombre del archivo (si no tiene fecha, se usa la de subida). Se actualiza sola al subir nuevas listas.
           </p>
 
           {lista.length < 2 && (
@@ -356,28 +358,19 @@ export default function ComparadorPrecios({ archivos, archivosTopes, onVolver })
           <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: '220px' }}>
               <label style={labelStyle}>Lista Previa</label>
-              <select value={idBase} onChange={(e) => setIdBase(e.target.value)} style={selectStyle}>
-                <option value="">Seleccione...</option>
-                {lista.map(f => <option key={f.id} value={f.id}>{f.nombre_archivo}</option>)}
-              </select>
+              <div style={campoFijoStyle} title={fileBase?.nombre_archivo || ''}>
+                <span style={{ opacity: 0.7, flexShrink: 0 }}>🔒</span>
+                <span>{fileBase ? fileBase.nombre_archivo : '—'}</span>
+              </div>
               <BadgeFecha file={fileBase} />
             </div>
 
-            <button
-              onClick={intercambiar}
-              disabled={!idBase || !idNuevo}
-              title="Intercambiar previa y actual"
-              style={{ width: '42px', height: '42px', borderRadius: '50%', border: '1px solid #d1d5db', backgroundColor: 'white', color: AZUL, fontSize: '18px', fontWeight: 'bold', cursor: (!idBase || !idNuevo) ? 'not-allowed' : 'pointer', opacity: (!idBase || !idNuevo) ? 0.4 : 1, flexShrink: 0 }}
-            >
-              ⇄
-            </button>
-
             <div style={{ flex: 1, minWidth: '220px' }}>
               <label style={labelStyle}>Lista Actual</label>
-              <select value={idNuevo} onChange={(e) => setIdNuevo(e.target.value)} style={selectStyle}>
-                <option value="">Seleccione...</option>
-                {lista.map(f => <option key={f.id} value={f.id}>{f.nombre_archivo}</option>)}
-              </select>
+              <div style={campoFijoStyle} title={fileNuevo?.nombre_archivo || ''}>
+                <span style={{ opacity: 0.7, flexShrink: 0 }}>🔒</span>
+                <span>{fileNuevo ? fileNuevo.nombre_archivo : '—'}</span>
+              </div>
               <BadgeFecha file={fileNuevo} />
             </div>
 
