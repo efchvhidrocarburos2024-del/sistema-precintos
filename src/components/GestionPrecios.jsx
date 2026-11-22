@@ -10,7 +10,7 @@ import { Card, Boton } from './ui'
 // ===== CONSTANTES DE NEGOCIO =====
 const TASA_IGV = 0.18
 const TASA_PERCEPCION = 0.01   // Percepción 1% (activable por checkbox)
-const HOJA_PRECIO_COTIZACION = 'Precios Planta Con IGV'
+const HOJA_PRECIO_COTIZACION = 'Precios Planta Con IGV'  // Fija, no editable
 
 const cardStyle = {
   backgroundColor: 'white', borderRadius: '12px', padding: '30px 20px', textAlign: 'center',
@@ -28,6 +28,7 @@ const btnTabStyle = (activo) => ({
 // Estilos del Cotizador
 const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }
 const selectStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold', boxSizing: 'border-box' }
+const readOnlyFieldStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#f3f4f6', color: '#374151', fontWeight: 'bold', boxSizing: 'border-box', cursor: 'not-allowed' }
 
 const COLORS = ['#0B5FA5', '#10b981', '#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#f43f5e', '#84cc16', '#f97316', '#6366f1']
 
@@ -101,7 +102,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [cotDatos, setCotDatos] = useState(null)
   const [cotCargandoDatos, setCotCargandoDatos] = useState(false)
   const [cotErrorDatos, setCotErrorDatos] = useState('')
-  const [cotHoja, setCotHoja] = useState(HOJA_PRECIO_COTIZACION)
+  const [cotHoja] = useState(HOJA_PRECIO_COTIZACION)  // Fijo, no editable
   const [cotPlanta, setCotPlanta] = useState('')
   const [cotProducto, setCotProducto] = useState('')
   const [cotAlmacen, setCotAlmacen] = useState('')
@@ -145,6 +146,16 @@ export default function GestionPrecios({ setPantalla, rol }) {
     if (n.includes('TOTAL') || n.includes('IGV') || n.includes('ISC') || n.includes('RODAJE') || n.includes('INCREMENTO') || n.includes('INCLUSION') || n.includes('DISMINUCION') || n.includes('SISE') || n.includes('INGRESO')) return false;
     return true;
   };
+
+  // Genera N° de cotización formato COT-YYYYMMDD-XXX
+  const generarNumeroCotizacion = () => {
+    const hoy = new Date()
+    const yyyy = hoy.getFullYear()
+    const mm = String(hoy.getMonth() + 1).padStart(2, '0')
+    const dd = String(hoy.getDate()).padStart(2, '0')
+    const random = String(Math.floor(Math.random() * 900) + 100) // 100-999
+    return `COT-${yyyy}${mm}${dd}-${random}`
+  }
 
   useEffect(() => {
     if (vista === 'visualizar' && subVista === 'precios') fetchArchivos()
@@ -668,7 +679,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
       const resP = await fetch(precioVigente.url_archivo)
       const wbP = XLSX.read(await resP.arrayBuffer(), { type: 'array' })
-      const sheetP = wbP.SheetNames.find(n => n.toLowerCase() === cotHoja.toLowerCase()) || wbP.SheetNames[0]
+      // Hoja fija: Precios Planta Con IGV
+      const sheetP = wbP.SheetNames.find(n => n.toLowerCase() === HOJA_PRECIO_COTIZACION.toLowerCase())
+      if (!sheetP) throw new Error(`No se encontró la hoja "${HOJA_PRECIO_COTIZACION}" en el archivo de precios.`)
       const wsP = wbP.Sheets[sheetP]
       const gridP = XLSX.utils.sheet_to_json(wsP, { header: 1, defval: '' })
       const hIdx = gridP.findIndex(r => r.some(c => normalizarTexto(c).includes('PLANTA')))
@@ -746,7 +759,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     if (vista === 'cotizar') {
       cargarDatosCotizador()
     }
-  }, [vista, cotHoja, cotKey])
+  }, [vista, cotKey])
 
   useEffect(() => {
     if (vista !== 'cotizar' || !cotDatos) return
@@ -759,16 +772,18 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
   const generarPDFCotizacion = () => {
     if (!cotResultado) return toast.error('Selecciona los criterios para cotizar')
-    const r = cotResultado, d = cotDatos
+    const r = cotResultado
     const doc = new jsPDF()
-    const nro = 'COT-' + Date.now().toString().slice(-6)
+    const nro = generarNumeroCotizacion()
 
+    // Encabezado corporativo
     doc.setFillColor(11, 95, 165); doc.rect(0, 0, 210, 30, 'F')
     doc.setTextColor(255, 255, 255); doc.setFontSize(18); doc.setFont('helvetica', 'bold')
     doc.text('COTIZACIÓN DE COMBUSTIBLES', 14, 13)
     doc.setFontSize(11); doc.setFont('helvetica', 'normal')
     doc.text('HIDROMUNDO S.A.C.', 14, 21)
 
+    // Datos del documento
     doc.setTextColor(60, 60, 60); doc.setFontSize(10)
     doc.text(`N°: ${nro}`, 14, 40)
     doc.text(`Fecha: ${new Date().toLocaleDateString('es-PE')}`, 14, 46)
@@ -776,6 +791,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     doc.text(`Planta: ${cotPlanta}`, 130, 40)
     doc.text(`Almacén: ${cotAlmacen}`, 130, 46)
 
+    // Tabla de desglose
     const body = [[
       cotProducto,
       r.precioBase.toFixed(4),
@@ -796,15 +812,13 @@ export default function GestionPrecios({ setPantalla, rol }) {
       columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'center' }, 6: { halign: 'right' } }
     })
 
-    let y = doc.lastAutoTable.finalY + 10
-    doc.setFontSize(9); doc.setTextColor(30, 30, 30)
-    doc.text(`Fórmula: (P.Base C/IGV) − [(TOPE − FACTOR) × ${1 + TASA_IGV}]`, 14, y)
-    if (r.aplicarPercepcion) doc.text(`Percepción aplicada: ×${(1 + TASA_PERCEPCION).toFixed(2)} (${(TASA_PERCEPCION * 100).toFixed(0)}%)`, 14, y + 5)
-    doc.text(`Fuente: ${d.precioNombre} [${d.hojaUsada}] | ${d.topeNombre}`, 14, y + 12)
-    doc.text('Cotización válida por 3 días calendario.', 14, y + 17)
+    // Pie: solo validez
+    let y = doc.lastAutoTable.finalY + 12
+    doc.setFontSize(9); doc.setTextColor(80, 80, 80); doc.setFont('helvetica', 'italic')
+    doc.text('Cotización válida por 3 días calendario.', 14, y)
 
-    doc.save(`Cotizacion_${nro}.pdf`)
-    toast.success('Cotización generada')
+    doc.save(`${nro}.pdf`)
+    toast.success(`Cotización ${nro} generada`)
   }
 
   const renderHeader = () => (
@@ -1267,7 +1281,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
         {renderHeader()}
         <main style={{ padding: '40px 20px', maxWidth: '1200px', margin: '0 auto' }}>
 
-          {/* Fuentes vigentes - PROTEGIDO CON d ? */}
+          {/* Fuentes vigentes */}
           <Card style={{ padding: '15px 20px', marginBottom: '15px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', textAlign: 'left' }}>
             {cotCargandoDatos ? (
               <p style={{ margin: 0, color: '#1e40af', fontWeight: 'bold' }}>⏳ Cargando archivos vigentes...</p>
@@ -1285,15 +1299,14 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
           {/* Criterios */}
           <Card style={{ padding: '30px', marginBottom: '20px' }}>
-            <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', color: 'var(--text-dark)' }}>🧾 Cotizar Combustibles</h2>
+            <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', color: 'var(--text-dark)', textAlign: 'center' }}>🧾 Cotizar Combustibles</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
+              {/* Hoja de Precio FIJA - no editable */}
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Hoja de Precio</label>
-                <select value={cotHoja} onChange={(e) => { setCotHoja(e.target.value); setCotPlanta(''); setCotProducto(''); setCotAlmacen(''); }} style={selectStyle}>
-                  <option value="Precio Base">Precio Base</option>
-                  <option value="Precios Planta Sin IGV">Precios Planta Sin IGV</option>
-                  <option value="Precios Planta Con IGV">Precios Planta Con IGV</option>
-                </select>
+                <div style={readOnlyFieldStyle}>
+                  {HOJA_PRECIO_COTIZACION} 🔒
+                </div>
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Planta</label>
@@ -1348,7 +1361,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
           {/* Desglose */}
           {cotResultado && (
             <Card style={{ padding: '30px' }}>
-              <h3 style={{ marginTop: 0, color: 'var(--primary-blue)' }}>📊 Desglose de la Cotización</h3>
+              <h3 style={{ marginTop: 0, color: 'var(--primary-blue)', textAlign: 'center' }}>📊 Desglose de la Cotización</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
                 <div style={{ backgroundColor: '#f9fafb', borderLeft: '4px solid var(--primary-blue)', padding: '12px 16px', borderRadius: '6px' }}>
                   <p style={{ margin: 0, fontSize: '12px', color: '#6b7280', fontWeight: 'bold' }}>PASO 1 — Precio Base C/IGV ({cotProducto} en {cotPlanta})</p>
@@ -1379,7 +1392,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
                   </div>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
                 <Boton variante="primary" onClick={generarPDFCotizacion}>📄 Generar PDF de Cotización</Boton>
                 <Boton variante="outline" onClick={() => { setCotPlanta(''); setCotProducto(''); setCotAlmacen(''); setCotFactor(''); setCotCantidad(''); setCotResultado(null); }}>🔄 Nueva Cotización</Boton>
               </div>
