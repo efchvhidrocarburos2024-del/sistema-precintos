@@ -1,59 +1,148 @@
 // ============================================================================
-//  SIGMO · Repositorio Documental · Paleta, tipos y utilidades puras
+//  SIGMO · Repositorio Documental · Paleta Petro América + utilidades puras
+//  Identidad visual adaptada al branding corporativo oficial.
 // ============================================================================
 
 export const PALETA = {
-  tinta:      '#062A3D',
-  profundo:   '#0A3A52',
-  primario:   '#0B5FA5',
-  cyan:       '#06B6D4',
-  teal:       '#0E7490',
-  ambar:      '#F59E0B',
-  lima:       '#84CC16',
-  magenta:    '#DB2777',
-  violeta:    '#7C3AED',
-  rojo:       '#EF4444',
-  exito:      '#10B981',
-  alerta:     '#F59E0B',
-  peligro:    '#EF4444',
-  info:       '#3B82F6',
-  calido:     '#FAF7F2',
-  frio:       '#EEF3F8',
-  superficie: '#FFFFFF',
-  borde:      '#D8E3EC',
-  texto:      '#0F2233',
-  suave:      '#5A7184',
+  // ─── Identidad Petro América ─────────────────────────────────────────────
+  azulProfundo: '#0033A0',   // Primario — headers, botones, títulos
+  cyanVibrante: '#00AEEF',   // Secundario — acentos, hovers, indicadores
+  blanco:      '#FFFFFF',    // Fondos limpios
+  grisClaro:   '#F5F5F5',    // Fondos secundarios
+  grisMedio:   '#CCCCCC',    // Bordes
+  grisOscuro:  '#666666',    // Texto secundario
+  
+  // ─── Semánticos (conservados para estados) ──────────────────────────────
+  exito:       '#28A745',    // Verde bootstrap — vigente, ok
+  alerta:      '#FFC107',    // Amarillo bootstrap — advertencias
+  peligro:     '#DC3545',    // Rojo bootstrap — obsoleto, error
+  info:        '#17A2B8',    // Cyan bootstrap — información
+  
+  // ─── Alias de compatibilidad (para no romper código existente) ──────────
+  tinta:      '#0033A0',     // alias → azulProfundo
+  profundo:   '#002880',     // versión más oscura del primario
+  primario:   '#0033A0',     // alias → azulProfundo
+  cyan:       '#00AEEF',     // alias → cyanVibrante
+  teal:       '#0088CC',     // versión saturada del cyan
+  ambar:      '#FFC107',     // alias → alerta
+  lima:       '#28A745',     // alias → exito
+  magenta:    '#E83E8C',     // acento decorativo
+  violeta:    '#6F42C1',     // acento decorativo
+  rojo:       '#DC3545',     // alias → peligro
+  
+  calido:     '#FAFAFA',     // fondo cálido
+  frio:       '#F8FAFC',     // fondo frío
+  superficie: '#FFFFFF',     // alias → blanco
+  borde:      '#CCCCCC',     // alias → grisMedio
+  texto:      '#0033A0',     // alias → azulProfundo (títulos)
+  suave:      '#666666',     // alias → grisOscuro
 }
 
 export const COLORES_SERIE = [
-  PALETA.primario, PALETA.cyan, PALETA.ambar, PALETA.lima,
-  PALETA.magenta, PALETA.violeta, PALETA.teal, PALETA.rojo,
+  PALETA.azulProfundo, PALETA.cyanVibrante, PALETA.teal,
+  PALETA.lima, PALETA.magenta, PALETA.violeta, PALETA.rojo, PALETA.ambar,
 ]
 
-// Espejo del seed de documento_categorias. Solo se usa si la lectura falla.
-export const CATEGORIAS_BASE = [
-  { nombre: 'Técnicos',      slug: 'tecnicos',      color: '#06B6D4', icono: '⚙️', descripcion: 'Fichas técnicas, planos, P&ID y certificados de calibración.', orden: 1 },
-  { nombre: 'Operativos',    slug: 'operativos',    color: '#0B5FA5', icono: '🛢️', descripcion: 'Procedimientos de planta, SCOP, precintado y conciliación.',   orden: 2 },
-  { nombre: 'Guías',         slug: 'guias',         color: '#84CC16', icono: '📘', descripcion: 'Manuales de usuario e instructivos paso a paso.',              orden: 3 },
-  { nombre: 'Normativa',     slug: 'normativa',     color: '#F59E0B', icono: '⚖️', descripcion: 'Decretos supremos, reglamentos y resoluciones vigentes.',      orden: 4 },
-  { nombre: 'Seguridad',     slug: 'seguridad',     color: '#EF4444', icono: '🦺', descripcion: 'IPERC, planes de contingencia y protocolos HSE.',              orden: 5 },
-  { nombre: 'Comercial',     slug: 'comercial',     color: '#DB2777', icono: '💰', descripcion: 'Listas de precios, topes y contratos de suministro.',          orden: 6 },
-  { nombre: 'Mantenimiento', slug: 'mantenimiento', color: '#7C3AED', icono: '🔧', descripcion: 'Programas, rutinas y órdenes de trabajo.',                     orden: 7 },
-  { nombre: 'Reportes',      slug: 'reportes',      color: '#0E7490', icono: '📊', descripcion: 'Informes periódicos, mermas y auditorías internas.',           orden: 8 },
-]
-
-export const TIPOS = {
-  pdf:  { etiqueta: 'PDF',     color: '#EF4444', icono: '📕', ext: ['pdf'] },
-  xlsx: { etiqueta: 'Excel',   color: '#10B981', icono: '📗', ext: ['xlsx', 'xls', 'csv'] },
-  docx: { etiqueta: 'Word',    color: '#3B82F6', icono: '📘', ext: ['docx', 'doc'] },
-  pptx: { etiqueta: 'Slides',  color: '#F59E0B', icono: '📙', ext: ['pptx', 'ppt'] },
-  svg:  { etiqueta: 'Plano',   color: '#06B6D4', icono: '📐', ext: ['svg', 'dwg', 'dxf'] },
-  zip:  { etiqueta: 'Paquete', color: '#7C3AED', icono: '🗜️', ext: ['zip', 'rar', '7z'] },
-  otro: { etiqueta: 'Archivo', color: '#5A7184', icono: '📄', ext: [] },
+// ============================================================================
+//  Tipos de documento por categoría (Opción B)
+//  campos con clave planta/proveedor/producto se enlazan a esas columnas;
+//  cualquier otra clave se guarda en documentos.metadata (jsonb).
+// ============================================================================
+export const TIPOS_DOCUMENTO = {
+  tecnicos: [
+    {
+      id: 'certificado_calidad', nombre: 'Certificado de calidad', icono: '🏅',
+      descripcion: 'Certificado que acredita las especificaciones del producto despachado.',
+      campos: [
+        { clave: 'producto', etiqueta: 'Producto', tipo: 'select-producto' },
+        { clave: 'numero_lote', etiqueta: 'N° de lote', tipo: 'texto' },
+        { clave: 'fecha_emision', etiqueta: 'Fecha de emisión', tipo: 'fecha' },
+        { clave: 'emisor', etiqueta: 'Laboratorio / emisor', tipo: 'texto' },
+      ],
+    },
+    {
+      id: 'ficha_msds', nombre: 'Ficha de datos de seguridad (MSDS)', icono: '🧪',
+      descripcion: 'Hoja de seguridad: riesgos, manipuleo y primeros auxilios del producto.',
+      campos: [
+        { clave: 'producto', etiqueta: 'Producto', tipo: 'select-producto' },
+        { clave: 'fecha_revision', etiqueta: 'Fecha de revisión', tipo: 'fecha' },
+      ],
+    },
+    {
+      id: 'ficha_especificacion_tecnica', nombre: 'Ficha de especificación técnica', icono: '📐',
+      descripcion: 'Parámetros técnicos y límites de aceptación del producto o equipo.',
+      campos: [
+        { clave: 'producto', etiqueta: 'Producto', tipo: 'select-producto' },
+        { clave: 'norma_referencia', etiqueta: 'Norma de referencia', tipo: 'texto' },
+      ],
+    },
+  ],
+  operativos: [
+    {
+      id: 'induccion_conductores', nombre: 'Inducción de conductores', icono: '🎓',
+      descripcion: 'Material obligatorio para la inducción de conductores antes del ingreso a planta.',
+      campos: [
+        { clave: 'planta', etiqueta: 'Planta / terminal', tipo: 'select-planta' },
+        { clave: 'vigencia_desde', etiqueta: 'Vigente desde', tipo: 'fecha' },
+      ],
+    },
+    {
+      id: 'registro_unidades', nombre: 'Registro de unidades', icono: '🚛',
+      descripcion: 'Formato oficial para el registro de unidades de transporte habilitadas.',
+      campos: [
+        { clave: 'planta', etiqueta: 'Planta / terminal', tipo: 'select-planta' },
+      ],
+    },
+    {
+      id: 'registro_unidades_conductores_proveedor',
+      nombre: 'Registro de unidades y conductores por proveedor', icono: '',
+      descripcion: 'Relación de unidades y conductores autorizados por proveedor o transportista.',
+      campos: [
+        { clave: 'proveedor', etiqueta: 'Proveedor / transportista', tipo: 'select-proveedor' },
+        { clave: 'planta', etiqueta: 'Planta / terminal', tipo: 'select-planta' },
+      ],
+    },
+    {
+      id: 'criterios_carga_terminal', nombre: 'Criterios de carga por terminal', icono: '⚖️',
+      descripcion: 'Reglas y restricciones de carga aplicables a cada terminal de despacho.',
+      campos: [
+        { clave: 'planta', etiqueta: 'Planta / terminal', tipo: 'select-planta' },
+      ],
+    },
+  ],
 }
 
-// RESPALDO. La fuente real es la tabla `plantas` (codigo, nombre, activo).
-// El hook la carga en el Paso 6; esta lista solo cubre una lectura fallida.
+export const tiposDeCategoria = (slug) => TIPOS_DOCUMENTO[slug] || []
+export const buscarTipo = (slugCat, idTipo) =>
+  (TIPOS_DOCUMENTO[slugCat] || []).find(t => t.id === idTipo) || null
+
+// ============================================================================
+//  Permisos del módulo. Para un rol nuevo: crear su codigo en la tabla
+//  `roles` y agregar aquí una fila. Sin fila = solo lectura.
+// ============================================================================
+export const PERMISOS_DOCUMENTAL = {
+  admin_sistema:      { cargar: true,  gestionar: true,  eliminar: true  },
+  jefe_pricing:       { cargar: true,  gestionar: true,  eliminar: false },
+  analista_comercial: { cargar: true,  gestionar: false, eliminar: false },
+  gestor_documental:  { cargar: true,  gestionar: false, eliminar: false },
+  visor_documental:   { cargar: false, gestionar: false, eliminar: false },
+}
+export const permisosDocumental = (rol) =>
+  PERMISOS_DOCUMENTAL[rol] || { cargar: false, gestionar: false, eliminar: false }
+
+// ============================================================================
+//  Utilidades puras
+// ============================================================================
+export const TIPOS = {
+  pdf:  { etiqueta: 'PDF',     color: '#DC3545', icono: '📕', ext: ['pdf'] },
+  xlsx: { etiqueta: 'Excel',   color: '#28A745', icono: '📗', ext: ['xlsx', 'xls', 'csv'] },
+  docx: { etiqueta: 'Word',    color: '#007BFF', icono: '📘', ext: ['docx', 'doc'] },
+  pptx: { etiqueta: 'Slides',  color: '#FFC107', icono: '📙', ext: ['pptx', 'ppt'] },
+  svg:  { etiqueta: 'Plano',   color: '#00AEEF', icono: '', ext: ['svg', 'dwg', 'dxf'] },
+  zip:  { etiqueta: 'Paquete', color: '#6F42C1', icono: '🗜️', ext: ['zip', 'rar', '7z'] },
+  otro: { etiqueta: 'Archivo', color: '#666666', icono: '📄', ext: [] },
+}
+
 export const PLANTAS_RESPALDO = [
   'CALLAO', 'CONCHAN', 'PAMPILLA', 'SUPE', 'TALARA', 'PIURA', 'ETEN',
   'SALAVERRY', 'CHIMBOTE', 'PISCO', 'ILO', 'MOLLENDO', 'JULIACA',
@@ -61,7 +150,7 @@ export const PLANTAS_RESPALDO = [
 ]
 
 export const ICONOS_DISPONIBLES = [
-  '📄','⚙️','🛢️','📘','⚖️','🦺','💰','🔧','📊','🧪','🚛','🗺️','🔥','🧯','📐','🧭','🛰️','🏭','💧','⚡',
+  '📄','⚙️','🛢️','📘','⚖️','🦺','💰','🔧','','🧪','🚛','️','🔥','','📐','🧭','🛰️','🏭','💧','',
 ]
 
 export const LIMITE_BYTES = 25 * 1024 * 1024
@@ -70,9 +159,9 @@ export const RETENCION_PAPELERA_DIAS = 30
 
 export const ACCIONES = {
   'SUBIDA':        PALETA.exito,
-  'ACTUALIZACIÓN': PALETA.primario,
+  'ACTUALIZACIÓN': PALETA.azulProfundo,
   'VIGENCIA':      PALETA.ambar,
-  'DESCARGA':      PALETA.cyan,
+  'DESCARGA':      PALETA.cyanVibrante,
   'DESTACADO':     PALETA.violeta,
   'ARCHIVADO':     PALETA.suave,
   'RESTAURADO':    PALETA.teal,
@@ -143,92 +232,6 @@ export const mezclarHex = (hex, alfa) => {
   const h = String(hex).replace('#', '')
   const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h
   const n = parseInt(full, 16)
-  if (Number.isNaN(n)) return `rgba(90,113,132,${alfa})`
+  if (Number.isNaN(n)) return `rgba(102,102,102,${alfa})`
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alfa})`
 }
-// ============================================================================
-//  Tipos de documento por categoría (Opción B)
-//  campos con clave planta/proveedor/producto se enlazan a esas columnas;
-//  cualquier otra clave se guarda en documentos.metadata (jsonb).
-// ============================================================================
-export const TIPOS_DOCUMENTO = {
-  tecnicos: [
-    {
-      id: 'certificado_calidad', nombre: 'Certificado de calidad', icono: '🏅',
-      descripcion: 'Certificado que acredita las especificaciones del producto despachado.',
-      campos: [
-        { clave: 'producto', etiqueta: 'Producto', tipo: 'select-producto' },
-        { clave: 'numero_lote', etiqueta: 'N° de lote', tipo: 'texto' },
-        { clave: 'fecha_emision', etiqueta: 'Fecha de emisión', tipo: 'fecha' },
-        { clave: 'emisor', etiqueta: 'Laboratorio / emisor', tipo: 'texto' },
-      ],
-    },
-    {
-      id: 'ficha_msds', nombre: 'Ficha de datos de seguridad (MSDS)', icono: '🧪',
-      descripcion: 'Hoja de seguridad: riesgos, manipuleo y primeros auxilios del producto.',
-      campos: [
-        { clave: 'producto', etiqueta: 'Producto', tipo: 'select-producto' },
-        { clave: 'fecha_revision', etiqueta: 'Fecha de revisión', tipo: 'fecha' },
-      ],
-    },
-    {
-      id: 'ficha_especificacion_tecnica', nombre: 'Ficha de especificación técnica', icono: '📐',
-      descripcion: 'Parámetros técnicos y límites de aceptación del producto o equipo.',
-      campos: [
-        { clave: 'producto', etiqueta: 'Producto', tipo: 'select-producto' },
-        { clave: 'norma_referencia', etiqueta: 'Norma de referencia', tipo: 'texto' },
-      ],
-    },
-  ],
-  operativos: [
-    {
-      id: 'induccion_conductores', nombre: 'Inducción de conductores', icono: '🎓',
-      descripcion: 'Material obligatorio para la inducción de conductores antes del ingreso a planta.',
-      campos: [
-        { clave: 'planta', etiqueta: 'Planta / terminal', tipo: 'select-planta' },
-        { clave: 'vigencia_desde', etiqueta: 'Vigente desde', tipo: 'fecha' },
-      ],
-    },
-    {
-      id: 'registro_unidades', nombre: 'Registro de unidades', icono: '🚛',
-      descripcion: 'Formato oficial para el registro de unidades de transporte habilitadas.',
-      campos: [
-        { clave: 'planta', etiqueta: 'Planta / terminal', tipo: 'select-planta' },
-      ],
-    },
-    {
-      id: 'registro_unidades_conductores_proveedor',
-      nombre: 'Registro de unidades y conductores por proveedor', icono: '🧾',
-      descripcion: 'Relación de unidades y conductores autorizados por proveedor o transportista.',
-      campos: [
-        { clave: 'proveedor', etiqueta: 'Proveedor / transportista', tipo: 'select-proveedor' },
-        { clave: 'planta', etiqueta: 'Planta / terminal', tipo: 'select-planta' },
-      ],
-    },
-    {
-      id: 'criterios_carga_terminal', nombre: 'Criterios de carga por terminal', icono: '⚖️',
-      descripcion: 'Reglas y restricciones de carga aplicables a cada terminal de despacho.',
-      campos: [
-        { clave: 'planta', etiqueta: 'Planta / terminal', tipo: 'select-planta' },
-      ],
-    },
-  ],
-}
-
-export const tiposDeCategoria = (slug) => TIPOS_DOCUMENTO[slug] || []
-export const buscarTipo = (slugCat, idTipo) =>
-  (TIPOS_DOCUMENTO[slugCat] || []).find(t => t.id === idTipo) || null
-
-// ============================================================================
-//  Permisos del módulo. Para un rol nuevo: crear su codigo en la tabla
-//  `roles` y agregar aquí una fila. Sin fila = solo lectura.
-// ============================================================================
-export const PERMISOS_DOCUMENTAL = {
-  admin_sistema:      { cargar: true,  gestionar: true,  eliminar: true  },
-  jefe_pricing:       { cargar: true,  gestionar: true,  eliminar: false },
-  analista_comercial: { cargar: true,  gestionar: false, eliminar: false },
-  gestor_documental:  { cargar: true,  gestionar: false, eliminar: false },
-  visor_documental:   { cargar: false, gestionar: false, eliminar: false },
-}
-export const permisosDocumental = (rol) =>
-  PERMISOS_DOCUMENTAL[rol] || { cargar: false, gestionar: false, eliminar: false }
