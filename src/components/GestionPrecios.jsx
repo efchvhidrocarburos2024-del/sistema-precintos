@@ -7,6 +7,11 @@ import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
 import { Card, Boton } from './ui'
 
+// ===== CONSTANTES DE NEGOCIO =====
+const TASA_IGV = 0.18
+const TASA_PERCEPCION = 0.01   // Percepción 1% (activable por checkbox)
+const HOJA_PRECIO_COTIZACION = 'Precios Planta Con IGV'
+
 const cardStyle = {
   backgroundColor: 'white', borderRadius: '12px', padding: '30px 20px', textAlign: 'center',
   boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '2px solid transparent', cursor: 'pointer',
@@ -19,6 +24,12 @@ const btnTabStyle = (activo) => ({
   color: activo ? 'white' : '#4b5563',
   transition: 'all 0.2s'
 })
+
+// Estilos del Cotizador
+const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }
+const selectStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold', boxSizing: 'border-box' }
+const tdStyle = { padding: '10px 8px', borderBottom: '1px solid #eee', color: '#374151' }
+const tdRight = { padding: '10px 8px', borderBottom: '1px solid #eee', textAlign: 'right', color: '#374151' }
 
 const COLORS = ['#0B5FA5', '#10b981', '#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#f43f5e', '#84cc16', '#f97316', '#6366f1']
 
@@ -57,7 +68,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [previewDataTope, setPreviewDataTope] = useState([])
   const [previewHeadersTope, setPreviewHeadersTope] = useState([])
 
-  // Estados para previsualización de múltiples hojas
+  // Previsualización multi-hoja
   const [hojasPreview, setHojasPreview] = useState([])
   const [hojaActiva, setHojaActiva] = useState(0)
 
@@ -86,6 +97,22 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [errorTendencia, setErrorTendencia] = useState('')
   const [opcionesPlantas, setOpcionesPlantas] = useState([])
   const [opcionesProductos, setOpcionesProductos] = useState([])
+
+  // ESTADOS DE COTIZADOR
+  const [cotCliente, setCotCliente] = useState('')
+  const [cotDatos, setCotDatos] = useState(null)
+  const [cotCargandoDatos, setCotCargandoDatos] = useState(false)
+  const [cotErrorDatos, setCotErrorDatos] = useState('')
+  const [cotHoja, setCotHoja] = useState(HOJA_PRECIO_COTIZACION)
+  const [cotPlanta, setCotPlanta] = useState('')
+  const [cotProducto, setCotProducto] = useState('')
+  const [cotAlmacen, setCotAlmacen] = useState('')
+  const [cotColTope, setCotColTope] = useState('TOPE S/IGV')
+  const [cotFactor, setCotFactor] = useState('')
+  const [cotCantidad, setCotCantidad] = useState('')
+  const [cotAplicarPercepcion, setCotAplicarPercepcion] = useState(true)
+  const [cotResultado, setCotResultado] = useState(null)
+  const [cotKey, setCotKey] = useState(0)
 
   const [modalEliminarAbierto, setModalEliminarAbierto] = useState(false)
   const [archivoAEliminar, setArchivoAEliminar] = useState(null)
@@ -126,7 +153,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     if (vista === 'visualizar' && subVista === 'topes') fetchArchivosTopes()
     if (vista === 'comparar') { fetchArchivos(); fetchArchivosTopes(); }
     if (vista === 'auditoria') fetchAuditoria()
-    if (vista === 'tendencias') fetchArchivos()
+    if (vista === 'tendencias' || vista === 'cotizar') fetchArchivos()
   }, [vista, subVista])
 
   useEffect(() => {
@@ -243,46 +270,43 @@ export default function GestionPrecios({ setPantalla, rol }) {
   };
 
   const handleFileChange = (e) => {
-  const file = e.target.files[0]; if (!file) return
-  setArchivoExcel(file)
-  const reader = new FileReader()
-  reader.onload = (evt) => {
-    const wb = XLSX.read(evt.target.result, { type: 'binary' })
-    const hojas = wb.SheetNames.map(sheetName => {
-      const ws = wb.Sheets[sheetName]
-      const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+    const file = e.target.files[0]; if (!file) return
+    setArchivoExcel(file)
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      const wb = XLSX.read(evt.target.result, { type: 'binary' })
+      const hojas = wb.SheetNames.map(sheetName => {
+        const ws = wb.Sheets[sheetName]
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
 
-      // Detectar fila de encabezados
-      const headerIndex = data.findIndex(row => row.some(cell => normalizarTexto(cell).includes('PLANTA')))
-      if (headerIndex === -1) return null
+        const headerIndex = data.findIndex(row => row.some(cell => normalizarTexto(cell).includes('PLANTA')))
+        if (headerIndex === -1) return null
 
-      const headers = data[headerIndex]
-      const idxPlanta = headers.findIndex(c => normalizarTexto(c).includes('PLANTA'))
-      const idxCodigo = headers.findIndex(c => normalizarTexto(c).includes('CODIGO'))
+        const headers = data[headerIndex]
+        const idxPlanta = headers.findIndex(c => normalizarTexto(c).includes('PLANTA'))
+        const idxCodigo = headers.findIndex(c => normalizarTexto(c).includes('CODIGO'))
 
-      // Recortar columnas: desde CODIGO (o PLANTA) hasta la última con título
-      const colInicio = Math.max(0, idxCodigo !== -1 ? idxCodigo : idxPlanta)
-      let colFin = -1
-      headers.forEach((c, i) => { if (String(c).trim() !== '') colFin = i })
-      if (colFin < colInicio) return null
+        const colInicio = Math.max(0, idxCodigo !== -1 ? idxCodigo : idxPlanta)
+        let colFin = -1
+        headers.forEach((c, i) => { if (String(c).trim() !== '') colFin = i })
+        if (colFin < colInicio) return null
 
-      // Solo filas con plantas válidas (elimina fila de códigos y textos fuera de tabla)
-      const rows = data.slice(headerIndex + 1)
-        .filter(row => esPlantaValida(row[idxPlanta]))
-        .map(row => row.slice(colInicio, colFin + 1))
+        const rows = data.slice(headerIndex + 1)
+          .filter(row => esPlantaValida(row[idxPlanta]))
+          .map(row => row.slice(colInicio, colFin + 1))
 
-      return {
-        nombre: sheetName,
-        headers: headers.slice(colInicio, colFin + 1),
-        rows: rows
-      }
-    }).filter(h => h && h.rows.length > 0)
+        return {
+          nombre: sheetName,
+          headers: headers.slice(colInicio, colFin + 1),
+          rows: rows
+        }
+      }).filter(h => h && h.rows.length > 0)
 
-    setHojasPreview(hojas)
-    setHojaActiva(0)
+      setHojasPreview(hojas)
+      setHojaActiva(0)
+    }
+    reader.readAsBinaryString(file)
   }
-  reader.readAsBinaryString(file)
-}
 
   const handleFileChangeTope = (e) => {
     const file = e.target.files[0]; if (!file) return
@@ -494,7 +518,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   };
 
-  // --- LÓGICA DE TENDENCIAS ---
+  // ===== TENDENCIAS =====
   const cargarTendencias = async () => {
     if (!plantaSeleccionada || !productoSeleccionado) return toast.error('Selecciona una planta y un producto');
     setCargandoTendencia(true);
@@ -536,7 +560,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
             data.headers.forEach((h, i) => {
               const hNorm = normalizarTexto(h);
               if (hNorm.includes('PLANTAS') || hNorm.includes('CODIGO') || hNorm.includes('USO INTERNO') || !hNorm) return;
-              
               const nombreProducto = String(h).trim();
               const valor = parseFloat(String(fila[i]).replace(',', '.'));
               if (!isNaN(valor) && valor > 0 && isFinite(valor)) {
@@ -577,7 +600,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
       }
 
       const datosArray = Object.values(tendenciaAgrupada).sort((a, b) => a.fecha.localeCompare(b.fecha));
-      
       if (datosArray.length < 2) throw new Error("No hay suficientes datos históricos válidos.");
 
       setDatosTendencia(datosArray);
@@ -587,54 +609,39 @@ export default function GestionPrecios({ setPantalla, rol }) {
       if (lineasArray.length > 0) {
         let actual = 0, min = Infinity, max = -Infinity, variacion = 0;
         let labelReferencia = '';
-
         if (plantaSeleccionada === 'TODOS' && productoSeleccionado === 'TODOS') {
           labelReferencia = 'Promedio Global (Plantas)';
           const promediosPorFecha = datosArray.map(d => {
             const vals = Object.entries(d).filter(([k, v]) => k !== 'fecha' && v !== undefined).map(([_, v]) => v);
             return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : undefined;
           }).filter(v => v !== undefined);
-
           if (promediosPorFecha.length > 0) {
             actual = promediosPorFecha[promediosPorFecha.length - 1];
             variacion = promediosPorFecha.length > 1 ? actual - promediosPorFecha[promediosPorFecha.length - 2] : 0;
             const allVals = datosArray.flatMap(d => Object.entries(d).filter(([k, v]) => k !== 'fecha' && v !== undefined).map(([_, v]) => v));
-            min = Math.min(...allVals);
-            max = Math.max(...allVals);
+            min = Math.min(...allVals); max = Math.max(...allVals);
           }
         } else {
           const primeraLinea = lineasArray[0];
           labelReferencia = primeraLinea;
           const precios = datosArray.map(d => d[primeraLinea]).filter(v => v !== undefined);
-          
           if (precios.length > 0) {
             actual = precios[precios.length - 1];
             variacion = precios.length > 1 ? actual - precios[precios.length - 2] : 0;
-            min = Math.min(...precios);
-            max = Math.max(...precios);
+            min = Math.min(...precios); max = Math.max(...precios);
           }
         }
-        
         setMetricas({ actual, min, max, variacion, lineaReferencia: labelReferencia });
-      } else {
-         setMetricas(null);
-      }
-
-    } catch (error) {
-      setErrorTendencia(error.message);
-    } finally {
-      setCargandoTendencia(false);
-    }
+      } else { setMetricas(null); }
+    } catch (error) { setErrorTendencia(error.message); } finally { setCargandoTendencia(false); }
   };
 
   useEffect(() => {
-    if (vista === 'tendencias' && archivos.length > 0 && opcionesPlantas.length === 0) {
+    if ((vista === 'tendencias' || vista === 'cotizar') && archivos.length > 0 && opcionesPlantas.length === 0) {
       parseExcelFile(archivos[0].url_archivo, 'Precio Base').then(data => {
         const idxP = data.headers.findIndex(h => normalizarTexto(h).includes('PLANTAS'));
         const plnts = data.rows.map(r => String(r[idxP]).trim()).filter(p => esPlantaValida(p));
-        
         setOpcionesPlantas(['TODOS', ...new Set(plnts)].sort((a,b) => a === 'TODOS' ? -1 : b === 'TODOS' ? 1 : a.localeCompare(b)));
-        
         const prods = data.headers.map(h => String(h).trim()).filter(h => h && !normalizarTexto(h).includes('PLANTAS') && !normalizarTexto(h).includes('CODIGO') && !normalizarTexto(h).includes('USO INTERNO'));
         setOpcionesProductos(['TODOS', ...new Set(prods)].filter(p => p.length >= 3).sort((a,b) => a === 'TODOS' ? -1 : b === 'TODOS' ? 1 : a.localeCompare(b)));
       });
@@ -650,6 +657,152 @@ export default function GestionPrecios({ setPantalla, rol }) {
     toast.success('Datos exportados a Excel');
   };
 
+  // ===== COTIZADOR =====
+  const cargarDatosCotizador = async () => {
+    setCotCargandoDatos(true)
+    setCotErrorDatos('')
+    setCotResultado(null)
+    try {
+      const { data: precioVigente } = await supabase.from('precios_archivos').select('*').eq('es_vigente', true).maybeSingle()
+      const { data: topeVigente } = await supabase.from('topes_archivos').select('*').eq('es_vigente', true).maybeSingle()
+      if (!precioVigente) throw new Error('No hay lista de Precios VIGENTE. Sube y marca una lista como vigente.')
+      if (!topeVigente) throw new Error('No hay archivo de Topes VIGENTE. Sube y marca un archivo de topes como vigente.')
+
+      const resP = await fetch(precioVigente.url_archivo)
+      const wbP = XLSX.read(await resP.arrayBuffer(), { type: 'array' })
+      const sheetP = wbP.SheetNames.find(n => n.toLowerCase() === cotHoja.toLowerCase()) || wbP.SheetNames[0]
+      const wsP = wbP.Sheets[sheetP]
+      const gridP = XLSX.utils.sheet_to_json(wsP, { header: 1, defval: '' })
+      const hIdx = gridP.findIndex(r => r.some(c => normalizarTexto(c).includes('PLANTA')))
+      if (hIdx === -1) throw new Error(`No se encontró la tabla de precios en la hoja "${sheetP}".`)
+      const headers = gridP[hIdx].map(h => String(h).trim())
+      const idxPlanta = headers.findIndex(h => normalizarTexto(h).includes('PLANTA'))
+      const filas = gridP.slice(hIdx + 1).filter(r => esPlantaValida(r[idxPlanta]))
+
+      const plantas = [...new Set(filas.map(r => String(r[idxPlanta]).trim()))].sort()
+      const productos = headers.filter(h => h && !normalizarTexto(h).includes('PLANTA') && !normalizarTexto(h).includes('CODIGO') && !normalizarTexto(h).includes('USO INTERNO'))
+
+      const resT = await fetch(topeVigente.url_archivo)
+      const wbT = XLSX.read(await resT.arrayBuffer(), { type: 'array' })
+      const sheetT = wbT.SheetNames.find(n => n.toLowerCase().includes('tope')) || wbT.SheetNames[0]
+      const topeRows = XLSX.utils.sheet_to_json(wbT.Sheets[sheetT], { defval: '' })
+      const cols = topeRows.length ? Object.keys(topeRows[0]) : []
+      const colPlanta = cols.find(c => normalizarTexto(c) === 'PLANTA') || cols.find(c => normalizarTexto(c).includes('PLANTA'))
+      const colAlmacen = cols.find(c => normalizarTexto(c).includes('ALMACEN'))
+      const colArticulo = cols.find(c => normalizarTexto(c).includes('ARTICULO'))
+      const colTopes = cols.filter(c => normalizarTexto(c).includes('TOPE'))
+      if (!colPlanta || !colAlmacen || !colArticulo) throw new Error('El archivo de Topes no tiene columnas PLANTA / ALMACEN / ARTICULO.')
+
+      setCotColTope(prev => (colTopes.includes(prev) ? prev : (colTopes[0] || prev)))
+      setCotDatos({
+        precioNombre: precioVigente.nombre_archivo,
+        topeNombre: topeVigente.nombre_archivo,
+        hojaUsada: sheetP, headers, idxPlanta, filas, plantas, productos,
+        topeRows, colPlanta, colAlmacen, colArticulo, colTopes
+      })
+    } catch (e) {
+      setCotErrorDatos(e.message)
+      setCotDatos(null)
+    } finally {
+      setCotCargandoDatos(false)
+    }
+  }
+
+  const ejecutarCotizacion = () => {
+    setCotResultado(null)
+    if (!cotDatos || !cotPlanta || !cotProducto || !cotAlmacen || !cotColTope) return
+
+    const d = cotDatos
+    const factor = parseFloat(String(cotFactor).replace(',', '.')) || 0
+
+    const fila = d.filas.find(r => normalizarTexto(r[d.idxPlanta]) === normalizarTexto(cotPlanta))
+    const idxProd = d.headers.findIndex(h => normalizarTexto(h) === normalizarTexto(cotProducto))
+    if (!fila || idxProd === -1) { toast.error(`No se encontró precio para ${cotProducto} en planta ${cotPlanta}`); return }
+    const precioBase = parseFloat(String(fila[idxProd]).replace(',', '.'))
+    if (isNaN(precioBase)) { toast.error('Precio base no válido'); return }
+
+    const t = d.topeRows.find(r =>
+      normalizarTexto(r[d.colPlanta]) === normalizarTexto(cotPlanta) &&
+      normalizarTexto(r[d.colArticulo]) === normalizarTexto(cotProducto) &&
+      normalizarTexto(r[d.colAlmacen]) === normalizarTexto(cotAlmacen)
+    )
+    if (!t) { toast.error(`No existe tope para ${cotProducto} / ${cotPlanta} / ${cotAlmacen}`); return }
+    const tope = parseFloat(String(t[cotColTope]).replace(',', '.'))
+    if (isNaN(tope)) { toast.error('El valor de tope no es numérico'); return }
+
+    const topeAjustado = tope - factor
+    const finalSinPercepcion = precioBase - topeAjustado * (1 + TASA_IGV)
+    const finalConPercepcion = finalSinPercepcion * (1 + TASA_PERCEPCION)
+    const cantidad = parseFloat(String(cotCantidad).replace(',', '.')) || 0
+    const total = finalConPercepcion * cantidad
+
+    setCotResultado({
+      precioBase, tope, factor, topeAjustado, colTope: cotColTope,
+      finalSinPercepcion, finalConPercepcion, cantidad, total,
+      aplicarPercepcion: cotAplicarPercepcion
+    })
+  }
+
+  useEffect(() => {
+    if (vista === 'cotizar') {
+      cargarDatosCotizador()
+    }
+  }, [vista, cotHoja, cotKey])
+
+  useEffect(() => {
+    if (vista === 'cotizar' && cotDatos) ejecutarCotizacion()
+  }, [cotPlanta, cotProducto, cotAlmacen, cotColTope, cotFactor, cotAplicarPercepcion])
+
+  const generarPDFCotizacion = () => {
+    if (!cotResultado) return toast.error('Selecciona los criterios para cotizar')
+    const r = cotResultado, d = cotDatos
+    const doc = new jsPDF()
+    const nro = 'COT-' + Date.now().toString().slice(-6)
+
+    doc.setFillColor(11, 95, 165); doc.rect(0, 0, 210, 30, 'F')
+    doc.setTextColor(255, 255, 255); doc.setFontSize(18); doc.setFont('helvetica', 'bold')
+    doc.text('COTIZACIÓN DE COMBUSTIBLES', 14, 13)
+    doc.setFontSize(11); doc.setFont('helvetica', 'normal')
+    doc.text('HIDROMUNDO S.A.C.', 14, 21)
+
+    doc.setTextColor(60, 60, 60); doc.setFontSize(10)
+    doc.text(`N°: ${nro}`, 14, 40)
+    doc.text(`Fecha: ${new Date().toLocaleDateString('es-PE')}`, 14, 46)
+    doc.text(`Cliente: ${cotCliente || 'Cliente general'}`, 14, 52)
+    doc.text(`Planta: ${cotPlanta}`, 130, 40)
+    doc.text(`Almacén: ${cotAlmacen}`, 130, 46)
+
+    const body = [[
+      cotProducto,
+      r.precioBase.toFixed(4),
+      `${r.tope.toFixed(4)} − ${r.factor.toFixed(4)} = ${r.topeAjustado.toFixed(4)}`,
+      r.finalSinPercepcion.toFixed(4),
+      r.aplicarPercepcion ? r.finalConPercepcion.toFixed(4) : '—',
+      r.cantidad || '—',
+      r.cantidad > 0 ? (r.aplicarPercepcion ? r.total : r.finalSinPercepcion * r.cantidad).toFixed(2) : '—'
+    ]]
+
+    autoTable(doc, {
+      startY: 60,
+      head: [['PRODUCTO', 'P. BASE C/IGV', 'TOPE − FACTOR', 'FINAL C/IGV', 'FINAL + PERC.', 'CANT. (GAL)', 'TOTAL (S/)']],
+      body,
+      theme: 'grid',
+      headStyles: { fillColor: [11, 95, 165], fontSize: 7 },
+      bodyStyles: { fontSize: 9, cellPadding: 3 },
+      columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'center' }, 6: { halign: 'right' } }
+    })
+
+    let y = doc.lastAutoTable.finalY + 10
+    doc.setFontSize(9); doc.setTextColor(30, 30, 30)
+    doc.text(`Fórmula: (P.Base C/IGV) − [(TOPE − FACTOR) × ${1 + TASA_IGV}]`, 14, y)
+    if (r.aplicarPercepcion) doc.text(`Percepción aplicada: ×${(1 + TASA_PERCEPCION).toFixed(2)} (${(TASA_PERCEPCION * 100).toFixed(0)}%)`, 14, y + 5)
+    doc.text(`Fuente: ${d.precioNombre} [${d.hojaUsada}] | ${d.topeNombre}`, 14, y + 12)
+    doc.text('Cotización válida por 3 días calendario.', 14, y + 17)
+
+    doc.save(`Cotizacion_${nro}.pdf`)
+    toast.success('Cotización generada')
+  }
+
   const renderHeader = () => (
     <header style={{ padding: '20px 40px', display: 'flex', alignItems: 'center', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
       <button onClick={() => vista === 'menu' ? setPantalla('') : setVista('menu')} style={btnHeaderStyle}>← {vista === 'menu' ? 'SIGMO' : 'Volver al Menú'}</button>
@@ -659,6 +812,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     </header>
   )
 
+  // ===== MENÚ =====
   if (vista === 'menu') {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
@@ -682,6 +836,11 @@ export default function GestionPrecios({ setPantalla, rol }) {
               <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Gráfico de Tendencias</h3>
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Evolución histórica.</p>
             </div>
+            <div onClick={() => setVista('cotizar')} style={cardStyle}>
+              <div style={{ fontSize: '50px', marginBottom: '15px' }}>🧾</div>
+              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Cotizar</h3>
+              <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Genera cotizaciones con precios y topes vigentes.</p>
+            </div>
             <div onClick={() => setVista('auditoria')} style={cardStyle}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>📋</div>
               <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Auditoría General</h3>
@@ -693,6 +852,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
+  // ===== VISUALIZAR =====
   if (vista === 'visualizar') {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
@@ -752,7 +912,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
           </Card>
         </main>
 
-        {/* MODAL DE ELIMINAR */}
         {modalEliminarAbierto && (
           <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
             <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '450px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
@@ -770,12 +929,13 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
+  // ===== CARGAR =====
   if (vista === 'cargar') {
     if (!puedeCargar) return <div style={{ padding: '50px', textAlign: 'center' }}><h2>No tienes permisos.</h2></div>
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
         {renderHeader()}
-        <main style={{ padding: '40px 20px', maxWidth: '1500px', margin: '0 auto' }}>
+        <main style={{ padding: '40px 20px', maxWidth: '1400px', margin: '0 auto' }}>
           <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
             <button style={btnTabStyle(subVista === 'precios')} onClick={() => { setSubVista('precios'); setHojasPreview([]); setHojaActiva(0); setArchivoExcel(null); }}>📄 Cargar Precios</button>
             <button style={btnTabStyle(subVista === 'topes')} onClick={() => { setSubVista('topes'); setPreviewDataTope([]); setPreviewHeadersTope([]); setArchivoExcelTope(null); }}>📊 Cargar Topes</button>
@@ -785,97 +945,54 @@ export default function GestionPrecios({ setPantalla, rol }) {
               <>
                 <h2>Subir Lista de Precios</h2>
                 <input type="file" accept=".xlsx" onChange={handleFileChange} style={{ marginTop: '15px' }} />
-                
                 {hojasPreview.length > 0 && (
                   <div style={{ marginTop: '30px' }}>
-                    <h3 style={{ color: 'var(--primary-blue)', marginBottom: '15px', fontSize: '18px' }}>
-                      📋 Vista Previa: {archivoExcel.name}
-                    </h3>
-                    
-                    {/* Pestañas de hojas */}
+                    <h3 style={{ color: 'var(--primary-blue)', marginBottom: '15px', fontSize: '18px' }}>📋 Vista Previa: {archivoExcel.name}</h3>
                     {hojasPreview.length > 1 && (
                       <div style={{ display: 'flex', gap: '5px', marginBottom: '15px', flexWrap: 'wrap' }}>
                         {hojasPreview.map((hoja, i) => (
-                          <button
-                            key={i}
-                            onClick={() => setHojaActiva(i)}
-                            style={{
-                              padding: '8px 16px',
-                              border: 'none',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              fontWeight: 'bold',
-                              fontSize: '13px',
-                              backgroundColor: hojaActiva === i ? 'var(--primary-blue)' : '#f3f4f6',
-                              color: hojaActiva === i ? 'white' : '#4b5563',
-                              transition: 'all 0.2s'
-                            }}
-                          >
+                          <button key={i} onClick={() => setHojaActiva(i)} style={{ padding: '8px 16px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', backgroundColor: hojaActiva === i ? 'var(--primary-blue)' : '#f3f4f6', color: hojaActiva === i ? 'white' : '#4b5563' }}>
                             {hoja.nombre}
                           </button>
                         ))}
                       </div>
                     )}
-                    
-                    {/* Tabla de la hoja activa */}
-{hojasPreview[hojaActiva].rows.length > 0 ? (
-  <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '20px' }}>
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', tableLayout: 'fixed' }}>
-      <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white' }}>
-        <tr>
-          {hojasPreview[hojaActiva].headers.map((h, i) => {
-            const hn = normalizarTexto(h)
-            const esCodigo = hn.includes('CODIGO')
-            const esPlanta = hn.includes('PLANTA')
-            return (
-              <th key={i} style={{
-                padding: '6px 3px',
-                textAlign: esCodigo || esPlanta ? 'left' : 'center',
-                whiteSpace: 'normal',
-                wordBreak: 'break-word',
-                fontSize: '9px',
-                lineHeight: '1.2',
-                borderBottom: '2px solid #1e293b',
-                width: esCodigo ? '4.5%' : esPlanta ? '9%' : undefined
-              }}>
-                {String(h).trim()}
-              </th>
-            )
-          })}
-        </tr>
-      </thead>
-      <tbody>
-        {hojasPreview[hojaActiva].rows.map((row, rI) => (
-          <tr key={rI} style={{ backgroundColor: rI % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-            {row.map((cell, cI) => (
-              <td key={cI} style={{
-                padding: '5px 3px',
-                color: '#374151',
-                textAlign: cI <= 1 ? 'left' : 'center',
-                whiteSpace: 'normal',
-                wordBreak: 'break-word'
-              }}>
-                {typeof cell === 'number' ? (Number.isInteger(cell) ? cell : cell.toFixed(4)) : String(cell).trim()}
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-) : (
-  <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', backgroundColor: '#f9fafb', borderRadius: '8px', marginBottom: '20px' }}>
-    No hay datos de plantas válidos en esta hoja.
-  </div>
-)}
-                    
+                    {hojasPreview[hojaActiva].rows.length > 0 ? (
+                      <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '20px' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', tableLayout: 'fixed' }}>
+                          <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white' }}>
+                            <tr>
+                              {hojasPreview[hojaActiva].headers.map((h, i) => {
+                                const hn = normalizarTexto(h)
+                                const esCodigo = hn.includes('CODIGO')
+                                const esPlanta = hn.includes('PLANTA')
+                                return (
+                                  <th key={i} style={{ padding: '6px 3px', textAlign: esCodigo || esPlanta ? 'left' : 'center', whiteSpace: 'normal', wordBreak: 'break-word', fontSize: '9px', lineHeight: '1.2', borderBottom: '2px solid #1e293b', width: esCodigo ? '4.5%' : esPlanta ? '9%' : undefined }}>
+                                    {String(h).trim()}
+                                  </th>
+                                )
+                              })}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {hojasPreview[hojaActiva].rows.map((row, rI) => (
+                              <tr key={rI} style={{ backgroundColor: rI % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                                {row.map((cell, cI) => (
+                                  <td key={cI} style={{ padding: '5px 3px', color: '#374151', textAlign: cI <= 1 ? 'left' : 'center', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                    {typeof cell === 'number' ? (Number.isInteger(cell) ? cell : cell.toFixed(4)) : String(cell).trim()}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', backgroundColor: '#f9fafb', borderRadius: '8px', marginBottom: '20px' }}>No hay datos de plantas válidos en esta hoja.</div>
+                    )}
                     <div style={{ display: 'flex', gap: '10px' }}>
-                      <Boton variante="success" onClick={handleSubirArchivo} disabled={subiendo}>
-                        {subiendo ? '⏳ Subiendo...' : '✅ Confirmar y Subir'}
-                      </Boton>
-                      <Boton variante="outline" onClick={() => { setArchivoExcel(null); setHojasPreview([]); setHojaActiva(0); }}>
-                        ❌ Cancelar
-                      </Boton>
+                      <Boton variante="success" onClick={handleSubirArchivo} disabled={subiendo}>{subiendo ? '⏳ Subiendo...' : '✅ Confirmar y Subir'}</Boton>
+                      <Boton variante="outline" onClick={() => { setArchivoExcel(null); setHojasPreview([]); setHojaActiva(0); }}>❌ Cancelar</Boton>
                     </div>
                   </div>
                 )}
@@ -884,48 +1001,27 @@ export default function GestionPrecios({ setPantalla, rol }) {
               <>
                 <h2>Subir Archivo de Topes</h2>
                 <input type="file" accept=".xlsx" onChange={handleFileChangeTope} style={{ marginTop: '15px' }} />
-                
                 {previewDataTope.length > 0 && (
                   <div style={{ marginTop: '30px' }}>
-                    <h3 style={{ color: '#059669', marginBottom: '15px', fontSize: '18px' }}>
-                      📋 Vista Previa: {archivoExcelTope.name}
-                    </h3>
+                    <h3 style={{ color: '#059669', marginBottom: '15px', fontSize: '18px' }}>📋 Vista Previa: {archivoExcelTope.name}</h3>
                     <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '20px' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                         <thead style={{ backgroundColor: '#059669', color: 'white' }}>
-                          <tr>
-                            {previewHeadersTope.map((h, i) => (
-                              <th key={i} style={{ padding: '10px 8px', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '2px solid #059669' }}>
-                                {String(h).trim()}
-                              </th>
-                            ))}
-                          </tr>
+                          <tr>{previewHeadersTope.map((h, i) => <th key={i} style={{ padding: '10px 8px', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '2px solid #059669' }}>{String(h).trim()}</th>)}</tr>
                         </thead>
                         <tbody>
                           {previewDataTope.slice(0, 20).map((row, rI) => (
                             <tr key={rI} style={{ backgroundColor: rI % 2 === 0 ? 'white' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                              {row.map((cell, cI) => (
-                                <td key={cI} style={{ padding: '8px', color: '#374151' }}>
-                                  {typeof cell === 'number' ? (Number.isInteger(cell) ? cell : cell.toFixed(4)) : String(cell).trim()}
-                                </td>
-                              ))}
+                              {row.map((cell, cI) => <td key={cI} style={{ padding: '8px', color: '#374151' }}>{typeof cell === 'number' ? (Number.isInteger(cell) ? cell : cell.toFixed(4)) : String(cell).trim()}</td>)}
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
-                    {previewDataTope.length > 20 && (
-                      <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '15px' }}>
-                        Mostrando las primeras 20 filas de {previewDataTope.length} totales.
-                      </p>
-                    )}
+                    {previewDataTope.length > 20 && <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '15px' }}>Mostrando las primeras 20 filas de {previewDataTope.length} totales.</p>}
                     <div style={{ display: 'flex', gap: '10px' }}>
-                      <Boton variante="success" onClick={handleSubirTope} disabled={subiendoTope}>
-                        {subiendoTope ? '⏳ Subiendo...' : '✅ Confirmar y Subir'}
-                      </Boton>
-                      <Boton variante="outline" onClick={() => { setArchivoExcelTope(null); setPreviewDataTope([]); setPreviewHeadersTope([]); }}>
-                        ❌ Cancelar
-                      </Boton>
+                      <Boton variante="success" onClick={handleSubirTope} disabled={subiendoTope}>{subiendoTope ? '⏳ Subiendo...' : '✅ Confirmar y Subir'}</Boton>
+                      <Boton variante="outline" onClick={() => { setArchivoExcelTope(null); setPreviewDataTope([]); setPreviewHeadersTope([]); }}>❌ Cancelar</Boton>
                     </div>
                   </div>
                 )}
@@ -937,6 +1033,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
+  // ===== COMPARAR =====
   if (vista === 'comparar') {
     const filePrevio = archivos.find(a => a.id === idBase);
     const fileActual = archivos.find(a => a.id === idNuevo);
@@ -951,21 +1048,16 @@ export default function GestionPrecios({ setPantalla, rol }) {
             <button style={btnTabStyle(tipoComparacion === 'precios')} onClick={() => setTipoComparacion('precios')}>📄 Precios</button>
             <button style={btnTabStyle(tipoComparacion === 'topes')} onClick={() => setTipoComparacion('topes')}>📊 Topes</button>
           </div>
-
           <Card style={{ padding: '30px', marginBottom: '20px' }}>
             {tipoComparacion === 'precios' ? (
               <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: '200px' }}>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Lista Previa (Automática)</label>
-                  <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '8px', border: '1px solid #d1d5db', color: '#374151', fontWeight: 'bold' }}>
-                    {filePrevio ? filePrevio.nombre_archivo : 'Cargando...'}
-                  </div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Lista Previa</label>
+                  <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '8px', border: '1px solid #d1d5db', fontWeight: 'bold' }}>{filePrevio ? filePrevio.nombre_archivo : 'Cargando...'}</div>
                 </div>
                 <div style={{ flex: 1, minWidth: '200px' }}>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Lista Actual (Automática)</label>
-                  <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '8px', border: '1px solid #d1d5db', color: '#374151', fontWeight: 'bold' }}>
-                    {fileActual ? fileActual.nombre_archivo : 'Cargando...'}
-                  </div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Lista Actual</label>
+                  <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '8px', border: '1px solid #d1d5db', fontWeight: 'bold' }}>{fileActual ? fileActual.nombre_archivo : 'Cargando...'}</div>
                 </div>
                 <div style={{ width: '200px' }}>
                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Hoja</label>
@@ -976,29 +1068,21 @@ export default function GestionPrecios({ setPantalla, rol }) {
                   </select>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                  <Boton variante="primary" onClick={generarComparacion} style={{ height: '42px' }} disabled={cargandoComparacion}>
-                    {cargandoComparacion ? 'Comparando...' : '⚖️ Comparar Ahora'}
-                  </Boton>
+                  <Boton variante="primary" onClick={generarComparacion} style={{ height: '42px' }} disabled={cargandoComparacion}>{cargandoComparacion ? 'Comparando...' : '⚖️ Comparar Ahora'}</Boton>
                 </div>
               </div>
             ) : (
               <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: '200px' }}>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Topes Previos (Automático)</label>
-                  <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '8px', border: '1px solid #d1d5db', color: '#374151', fontWeight: 'bold' }}>
-                    {filePrevioTope ? filePrevioTope.nombre_archivo : 'Cargando...'}
-                  </div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Topes Previos</label>
+                  <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '8px', border: '1px solid #d1d5db', fontWeight: 'bold' }}>{filePrevioTope ? filePrevioTope.nombre_archivo : 'Cargando...'}</div>
                 </div>
                 <div style={{ flex: 1, minWidth: '200px' }}>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Topes Actuales (Automático)</label>
-                  <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '8px', border: '1px solid #d1d5db', color: '#374151', fontWeight: 'bold' }}>
-                    {fileActualTope ? fileActualTope.nombre_archivo : 'Cargando...'}
-                  </div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>Topes Actuales</label>
+                  <div style={{ padding: '10px', backgroundColor: '#f3f4f6', borderRadius: '8px', border: '1px solid #d1d5db', fontWeight: 'bold' }}>{fileActualTope ? fileActualTope.nombre_archivo : 'Cargando...'}</div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                  <Boton variante="success" onClick={generarComparacionTopes} style={{ height: '42px' }} disabled={cargandoComparacionTope}>
-                    {cargandoComparacionTope ? 'Comparando...' : '⚖️ Comparar Ahora'}
-                  </Boton>
+                  <Boton variante="success" onClick={generarComparacionTopes} style={{ height: '42px' }} disabled={cargandoComparacionTope}>{cargandoComparacionTope ? 'Comparando...' : '⚖️ Comparar Ahora'}</Boton>
                 </div>
               </div>
             )}
@@ -1020,14 +1104,12 @@ export default function GestionPrecios({ setPantalla, rol }) {
                     {datosComparados.rows.map((fila, rI) => (
                       <tr key={rI} style={{ borderBottom: '1px solid #eee', backgroundColor: rI % 2 === 0 ? 'white' : '#f9fafb' }}>
                         <td style={{ padding: '8px 4px', color: 'var(--text-light)' }}>{fila.codigo}</td>
-                        <td style={{ padding: '8px 4px', fontWeight: 'bold', color: 'var(--text-dark)' }}>{fila.planta}</td>
+                        <td style={{ padding: '8px 4px', fontWeight: 'bold' }}>{fila.planta}</td>
                         {datosComparados.columnas.map((col, cI) => {
                           const item = fila.variaciones[col];
                           if (item === 'NUEVO') return <td key={cI} style={{ color: '#3b82f6', fontWeight: 'bold' }}>NUEVO</td>;
                           if (!item) return <td key={cI} style={{ color: '#9ca3af' }}>-</td>;
-                          if (Math.abs(item.diff) > 0.00001) {
-                            return <td key={cI} style={{ color: item.diff > 0 ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>{item.diff > 0 ? '+' : ''}{item.diff.toFixed(4)}</td>;
-                          }
+                          if (Math.abs(item.diff) > 0.00001) return <td key={cI} style={{ color: item.diff > 0 ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>{item.diff > 0 ? '+' : ''}{item.diff.toFixed(4)}</td>;
                           return <td key={cI} style={{ color: '#6b7280' }}>0.0000</td>;
                         })}
                       </tr>
@@ -1044,12 +1126,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
               <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'center' }}>
                   <thead style={{ backgroundColor: '#059669', color: 'white' }}>
-                    <tr>
-                      <th style={{ padding: '10px' }}>PLANTA</th>
-                      <th style={{ padding: '10px' }}>ALMACÉN</th>
-                      <th style={{ padding: '10px' }}>ARTÍCULO</th>
-                      <th style={{ padding: '10px' }}>VARIACIÓN (S/)</th>
-                    </tr>
+                    <tr><th style={{ padding: '10px' }}>PLANTA</th><th style={{ padding: '10px' }}>ALMACÉN</th><th style={{ padding: '10px' }}>ARTÍCULO</th><th style={{ padding: '10px' }}>VARIACIÓN (S/)</th></tr>
                   </thead>
                   <tbody>
                     {datosComparadosTope.map((fila, rI) => (
@@ -1058,15 +1135,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
                         <td style={{ padding: '8px' }}>{fila.almacen}</td>
                         <td style={{ padding: '8px' }}>{fila.articulo}</td>
                         <td style={{ padding: '8px' }}>
-                          {fila.variacion === 'NUEVO' ? (
-                            <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>NUEVO</span>
-                          ) : fila.variacion && Math.abs(fila.variacion.diff) > 0.00001 ? (
-                            <span style={{ color: fila.variacion.diff > 0 ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>
-                              {fila.variacion.diff > 0 ? '+' : ''}{fila.variacion.diff.toFixed(2)}
-                            </span>
-                          ) : (
-                            <span style={{ color: '#9ca3af' }}>0.00</span>
-                          )}
+                          {fila.variacion === 'NUEVO' ? <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>NUEVO</span>
+                          : fila.variacion && Math.abs(fila.variacion.diff) > 0.00001 ? <span style={{ color: fila.variacion.diff > 0 ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>{fila.variacion.diff > 0 ? '+' : ''}{fila.variacion.diff.toFixed(2)}</span>
+                          : <span style={{ color: '#9ca3af' }}>0.00</span>}
                         </td>
                       </tr>
                     ))}
@@ -1080,6 +1151,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
+  // ===== TENDENCIAS =====
   if (vista === 'tendencias') {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
@@ -1088,35 +1160,29 @@ export default function GestionPrecios({ setPantalla, rol }) {
           <Card style={{ padding: '30px', marginBottom: '20px' }}>
             <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', color: 'var(--text-dark)' }}>Análisis de Tendencias</h2>
             <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              
               <div style={{ flex: 1, minWidth: '150px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Hoja de Precio</label>
-                <select value={hojaTendencia} onChange={(e) => setHojaTendencia(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold' }}>
+                <select value={hojaTendencia} onChange={(e) => setHojaTendencia(e.target.value)} style={selectStyle}>
                   <option value="Precio Base">Precio Base</option>
                   <option value="Precios Planta Sin IGV">Precios Planta Sin IGV</option>
                   <option value="Precios Planta Con IGV">Precios Planta Con IGV</option>
                 </select>
               </div>
-
               <div style={{ flex: 1, minWidth: '150px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Planta</label>
-                <select value={plantaSeleccionada} onChange={(e) => setPlantaSeleccionada(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold' }}>
+                <select value={plantaSeleccionada} onChange={(e) => setPlantaSeleccionada(e.target.value)} style={selectStyle}>
                   <option value="">Seleccione...</option>
                   {opcionesPlantas.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
-
               <div style={{ flex: 1, minWidth: '150px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Producto</label>
-                <select value={productoSeleccionado} onChange={(e) => setProductoSeleccionado(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold' }}>
+                <select value={productoSeleccionado} onChange={(e) => setProductoSeleccionado(e.target.value)} style={selectStyle}>
                   <option value="">Seleccione...</option>
                   {opcionesProductos.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
-              
-              <Boton variante="primary" onClick={cargarTendencias} disabled={cargandoTendencia || !plantaSeleccionada || !productoSeleccionado} style={{ height: '42px' }}>
-                {cargandoTendencia ? 'Generando...' : '📈 Generar Gráfico'}
-              </Boton>
+              <Boton variante="primary" onClick={cargarTendencias} disabled={cargandoTendencia || !plantaSeleccionada || !productoSeleccionado} style={{ height: '42px' }}>{cargandoTendencia ? 'Generando...' : '📈 Generar Gráfico'}</Boton>
             </div>
           </Card>
 
@@ -1134,9 +1200,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
               </Card>
               <Card style={{ padding: '20px', textAlign: 'center', borderTop: `4px solid ${metricas.variacion > 0 ? '#ef4444' : metricas.variacion < 0 ? '#10b981' : '#6b7280'}` }}>
                 <p style={{ margin: '0 0 5px 0', fontSize: '12px', color: 'var(--text-light)', fontWeight: 'bold', textTransform: 'uppercase' }}>Variación Reciente</p>
-                <h3 style={{ margin: 0, fontSize: '24px', color: metricas.variacion > 0 ? '#ef4444' : metricas.variacion < 0 ? '#10b981' : '#6b7280' }}>
-                  {metricas.variacion > 0 ? '+' : ''}{metricas.variacion.toFixed(4)}
-                </h3>
+                <h3 style={{ margin: 0, fontSize: '24px', color: metricas.variacion > 0 ? '#ef4444' : metricas.variacion < 0 ? '#10b981' : '#6b7280' }}>{metricas.variacion > 0 ? '+' : ''}{metricas.variacion.toFixed(4)}</h3>
               </Card>
               <Card style={{ padding: '20px', textAlign: 'center', borderTop: '4px solid #10b981' }}>
                 <p style={{ margin: '0 0 5px 0', fontSize: '12px', color: 'var(--text-light)', fontWeight: 'bold', textTransform: 'uppercase' }}>Precio Mínimo</p>
@@ -1153,7 +1217,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
             {cargandoTendencia ? (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
                 <div style={{ fontSize: '40px', marginBottom: '10px' }}>⏳</div>
-                <p style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>Analizando historial de archivos...</p>
+                <p style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>Analizando historial...</p>
               </div>
             ) : datosTendencia.length > 0 ? (
               <>
@@ -1161,9 +1225,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
                   Tendencia Histórica: {hojaTendencia} ({plantaSeleccionada !== 'TODOS' ? plantaSeleccionada : 'Todas las Plantas'} - {productoSeleccionado !== 'TODOS' ? productoSeleccionado : 'Todos los Productos'})
                 </h3>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
-                  <button onClick={exportarTendenciaExcel} style={{ padding: '6px 12px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    ⬇️ Exportar Datos (Excel)
-                  </button>
+                  <button onClick={exportarTendenciaExcel} style={{ padding: '6px 12px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>⬇️ Exportar Excel</button>
                 </div>
                 <div style={{ width: '100%', height: '100%', minHeight: '350px' }}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -1174,17 +1236,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
                       <Tooltip content={<CustomTooltip />} />
                       <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '15px' }} />
                       {lineasDinamicas.map((linea, index) => (
-                        <Line 
-                          key={linea}
-                          type="monotone" 
-                          dataKey={linea} 
-                          name={linea} 
-                          stroke={COLORS[index % COLORS.length]} 
-                          strokeWidth={3} 
-                          dot={{ r: 3, strokeWidth: 2, stroke: '#fff' }} 
-                          activeDot={{ r: 6 }} 
-                          connectNulls
-                        />
+                        <Line key={linea} type="monotone" dataKey={linea} name={linea} stroke={COLORS[index % COLORS.length]} strokeWidth={3} dot={{ r: 3, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} connectNulls />
                       ))}
                     </LineChart>
                   </ResponsiveContainer>
@@ -1203,6 +1255,138 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
+  // ===== COTIZAR =====
+  if (vista === 'cotizar') {
+    const d = cotDatos
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
+        {renderHeader()}
+        <main style={{ padding: '40px 20px', maxWidth: '1200px', margin: '0 auto' }}>
+
+          {/* Fuentes vigentes */}
+          <Card style={{ padding: '15px 20px', marginBottom: '15px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', textAlign: 'left' }}>
+            {cotCargandoDatos ? (
+              <p style={{ margin: 0, color: '#1e40af', fontWeight: 'bold' }}>⏳ Cargando archivos vigentes...</p>
+            ) : cotErrorDatos ? (
+              <div>
+                <p style={{ margin: '0 0 10px 0', color: '#991b1b', fontWeight: 'bold' }}>⚠️ {cotErrorDatos}</p>
+                <Boton variante="outline" tamano="sm" onClick={() => setCotKey(k => k + 1)}>🔄 Reintentar</Boton>
+              </div>
+            ) : (
+              <p style={{ margin: 0, fontSize: '13px', color: '#1e40af' }}>
+                📌 <strong>Fuentes:</strong> {d.precioNombre} <em>(hoja {d.hojaUsada})</em> &nbsp;|&nbsp; {d.topeNombre}
+              </p>
+            )}
+          </Card>
+
+          {/* Criterios */}
+          <Card style={{ padding: '30px', marginBottom: '20px' }}>
+            <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', color: 'var(--text-dark)' }}>🧾 Cotizar Combustibles</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Hoja de Precio</label>
+                <select value={cotHoja} onChange={(e) => { setCotHoja(e.target.value); setCotPlanta(''); setCotProducto(''); setCotAlmacen(''); }} style={selectStyle}>
+                  <option value="Precio Base">Precio Base</option>
+                  <option value="Precios Planta Sin IGV">Precios Planta Sin IGV</option>
+                  <option value="Precios Planta Con IGV">Precios Planta Con IGV</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Planta</label>
+                <select value={cotPlanta} onChange={(e) => setCotPlanta(e.target.value)} style={selectStyle} disabled={!d}>
+                  <option value="">Seleccione...</option>
+                  {d?.plantas.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Producto</label>
+                <select value={cotProducto} onChange={(e) => setCotProducto(e.target.value)} style={selectStyle} disabled={!d}>
+                  <option value="">Seleccione...</option>
+                  {d?.productos.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Almacén</label>
+                <select value={cotAlmacen} onChange={(e) => setCotAlmacen(e.target.value)} style={selectStyle} disabled={!d}>
+                  <option value="">Seleccione...</option>
+                  {d?.topeRows ? [...new Set(d.topeRows.map(r => String(r[d.colAlmacen] || '').trim()).filter(Boolean))].sort().map(a => <option key={a} value={a}>{a}</option>) : null}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Columna Tope</label>
+                <select value={cotColTope} onChange={(e) => setCotColTope(e.target.value)} style={selectStyle} disabled={!d}>
+                  {d?.colTopes.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>FACTOR (numérico)</label>
+                <input type="number" min="0" step="0.0001" value={cotFactor} onChange={(e) => setCotFactor(e.target.value)} placeholder="0.00" style={inputStyle} />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Cantidad (Galones) — opcional</label>
+                <input type="number" min="0" step="0.01" value={cotCantidad} onChange={(e) => setCotCantidad(e.target.value)} placeholder="0.00" style={inputStyle} />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Cliente — opcional</label>
+                <input type="text" value={cotCliente} onChange={(e) => setCotCliente(e.target.value)} placeholder="Nombre del cliente" style={inputStyle} />
+              </div>
+            </div>
+
+            {/* Checkbox percepción */}
+            <div style={{ marginTop: '20px', padding: '12px 16px', backgroundColor: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <input type="checkbox" id="aplicarPercepcion" checked={cotAplicarPercepcion} onChange={(e) => setCotAplicarPercepcion(e.target.checked)} style={{ width: '20px', height: '20px', cursor: 'pointer' }} />
+              <label htmlFor="aplicarPercepcion" style={{ cursor: 'pointer', fontWeight: 'bold', color: '#92400e', fontSize: '14px' }}>
+                Aplicar Percepción ({(TASA_PERCEPCION * 100).toFixed(0)}%) — multiplicar precio final × {(1 + TASA_PERCEPCION).toFixed(2)}
+              </label>
+            </div>
+          </Card>
+
+          {/* Desglose */}
+          {cotResultado && (
+            <Card style={{ padding: '30px' }}>
+              <h3 style={{ marginTop: 0, color: 'var(--primary-blue)' }}>📊 Desglose de la Cotización</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+                <div style={{ backgroundColor: '#f9fafb', borderLeft: '4px solid var(--primary-blue)', padding: '12px 16px', borderRadius: '6px' }}>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#6b7280', fontWeight: 'bold' }}>PASO 1 — Precio Base C/IGV ({cotProducto} en {cotPlanta})</p>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '20px', fontWeight: 'bold', color: 'var(--primary-blue)' }}>S/ {cotResultado.precioBase.toFixed(4)}</p>
+                </div>
+                <div style={{ backgroundColor: '#f9fafb', borderLeft: '4px solid #f59e0b', padding: '12px 16px', borderRadius: '6px' }}>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#6b7280', fontWeight: 'bold' }}>PASO 2 — {cotResultado.colTope} ({cotAlmacen}) − FACTOR ({cotResultado.factor.toFixed(4)})</p>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '20px', fontWeight: 'bold', color: '#b45309' }}>S/ {cotResultado.tope.toFixed(4)} − {cotResultado.factor.toFixed(4)} = {cotResultado.topeAjustado.toFixed(4)}</p>
+                </div>
+                <div style={{ backgroundColor: '#f9fafb', borderLeft: '4px solid #10b981', padding: '12px 16px', borderRadius: '6px' }}>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#6b7280', fontWeight: 'bold' }}>PASO 3 — Precio Final C/IGV = {cotResultado.precioBase.toFixed(4)} − ({cotResultado.topeAjustado.toFixed(4)} × {1 + TASA_IGV})</p>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '20px', fontWeight: 'bold', color: '#047857' }}>S/ {cotResultado.finalSinPercepcion.toFixed(4)}</p>
+                </div>
+                {cotAplicarPercepcion && (
+                  <div style={{ backgroundColor: '#eff6ff', border: '2px solid var(--primary-blue)', padding: '12px 16px', borderRadius: '6px' }}>
+                    <p style={{ margin: 0, fontSize: '12px', color: '#1e40af', fontWeight: 'bold' }}>PRECIO FINAL C/IGV + PERCEPCIÓN ({(TASA_PERCEPCION * 100).toFixed(0)}%) = {cotResultado.finalSinPercepcion.toFixed(4)} × {(1 + TASA_PERCEPCION).toFixed(2)}</p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '26px', fontWeight: '900', color: 'var(--primary-blue)' }}>S/ {cotResultado.finalConPercepcion.toFixed(4)}</p>
+                  </div>
+                )}
+                {cotResultado.cantidad > 0 && (
+                  <div style={{ backgroundColor: '#0f172a', padding: '12px 16px', borderRadius: '6px', textAlign: 'center' }}>
+                    <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8', fontWeight: 'bold' }}>
+                      TOTAL: {cotResultado.cantidad.toLocaleString('es-PE')} gal × S/ {(cotAplicarPercepcion ? cotResultado.finalConPercepcion : cotResultado.finalSinPercepcion).toFixed(4)}
+                    </p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '26px', fontWeight: '900', color: '#10b981' }}>
+                      S/ {(cotAplicarPercepcion ? cotResultado.total : cotResultado.finalSinPercepcion * cotResultado.cantidad).toFixed(2)}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <Boton variante="primary" onClick={generarPDFCotizacion}>📄 Generar PDF de Cotización</Boton>
+                <Boton variante="outline" onClick={() => { setCotPlanta(''); setCotProducto(''); setCotAlmacen(''); setCotFactor(''); setCotCantidad(''); setCotResultado(null); }}>🔄 Nueva Cotización</Boton>
+              </div>
+            </Card>
+          )}
+        </main>
+      </div>
+    )
+  }
+
+  // ===== AUDITORÍA =====
   if (vista === 'auditoria') {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
@@ -1212,7 +1396,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
             <h2>Auditoría General</h2>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white' }}>
-                <tr><th>FECHA</th><th>MÓDULO</th><th>ACCIÓN</th><th>ARCHIVO</th></tr>
+                <tr><th style={{ padding: '12px' }}>FECHA</th><th style={{ padding: '12px' }}>MÓDULO</th><th style={{ padding: '12px' }}>ACCIÓN</th><th style={{ padding: '12px' }}>ARCHIVO</th></tr>
               </thead>
               <tbody>
                 {auditoria.map(log => (
