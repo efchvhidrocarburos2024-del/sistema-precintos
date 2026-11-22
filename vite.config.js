@@ -8,6 +8,11 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      workbox: {
+        // Límite de precache ampliado: el default de Workbox es 2 MiB
+        // y abortaba el build si algún chunk lo superaba
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4 MiB
+      },
       manifest: {
         name: 'Sistema de Precintos',
         short_name: 'Precintos',

@@ -1,34 +1,46 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, lazy, Suspense, Component } from 'react'
 import { supabase } from './supabase'
 import { Toaster } from 'react-hot-toast'
 import toast from 'react-hot-toast'
 import './App.css'
 
-// --- Componentes de módulos ---
+// ============================================================
+// SHELL — carga inmediata (primera pintura y navegación)
+// ============================================================
 import Login from './components/Login'
-import RegistroLotes from './components/RegistroLotes'
-import RegistroViajes from './components/RegistroViajes'
-import Excepciones from './components/Excepciones'
-import Dashboard from './components/Dashboard'
-import Reportes from './components/Reportes'
-import GestionUsuarios from './components/GestionUsuarios'
-import CambiarPassword from './components/CambiarPassword'
-import ForgotPassword from './components/ForgotPassword'
-import ResetPassword from './components/ResetPassword'
-import Conciliacion from './components/Conciliacion'
-import ProyeccionDemanda from './components/ProyeccionDemanda'
-import ListadoPrecintos from './components/ListadoPrecintos'
-import Bitacora from './components/Bitacora'
-import GestionPlantas from './components/GestionPlantas'
-import PanelRespaldos from './components/PanelRespaldos'
-import RepositorioDocumental from './components/RepositorioDocumental'
-import GestionCatalogos from './components/GestionCatalogos'
-import GestionPrecios from "./components/precios/GestionPrecios"
-
-// --- Componentes refactorizados ---
 import LobbyModulos from './components/LobbyModulos'
 import MenuPrecintos from './components/MenuPrecintos'
 import NavbarPrecintos from './components/NavbarPrecintos'
+
+// ============================================================
+// MÓDULOS — carga perezosa (cada uno genera su propio chunk)
+// ============================================================
+// Autenticación secundaria
+const ForgotPassword = lazy(() => import('./components/ForgotPassword'))
+const ResetPassword = lazy(() => import('./components/ResetPassword'))
+
+// Módulos operativos de precintos
+const RegistroLotes = lazy(() => import('./components/RegistroLotes'))
+const RegistroViajes = lazy(() => import('./components/RegistroViajes'))
+const Excepciones = lazy(() => import('./components/Excepciones'))
+const ListadoPrecintos = lazy(() => import('./components/ListadoPrecintos'))
+const Dashboard = lazy(() => import('./components/Dashboard'))
+const Reportes = lazy(() => import('./components/Reportes'))
+const Bitacora = lazy(() => import('./components/Bitacora'))
+const Conciliacion = lazy(() => import('./components/Conciliacion'))
+const ProyeccionDemanda = lazy(() => import('./components/ProyeccionDemanda'))
+const CambiarPassword = lazy(() => import('./components/CambiarPassword'))
+const GestionPlantas = lazy(() => import('./components/GestionPlantas'))
+const PanelRespaldos = lazy(() => import('./components/PanelRespaldos'))
+
+// Módulos administrativos
+const GestionUsuarios = lazy(() => import('./components/GestionUsuarios'))
+const GestionCatalogos = lazy(() => import('./components/GestionCatalogos'))
+const RepositorioDocumental = lazy(() => import('./components/RepositorioDocumental'))
+
+// OJO: vive en la subcarpeta precios/ y tiene export default propio.
+// NO importar desde './components/precios' (el barrel index.js NO lo exporta).
+const GestionPrecios = lazy(() => import('./components/precios/GestionPrecios'))
 
 // --- Utilidades centralizadas ---
 import { puedeAccederPantalla, PANTALLAS_CON_NAVBAR } from './utils/permisos'
@@ -41,17 +53,70 @@ const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000
 const TIEMPO_DE_AVISO = TIEMPO_INACTIVIDAD_TOTAL - 2 * 60 * 1000
 const STORAGE_KEY_PANTALLA = 'sigmo_pantalla'
 
-const COLORES_PA = {
-  azul: '#0033A0',
-  grisFondo: '#f5f7fa',
+// ============================================================
+// FALLBACK DE CARGA (Suspense)
+// ============================================================
+function CargandoModulo({ texto = 'Cargando módulo…' }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: 14 }}>
+      <style>{'@keyframes sigmo-girar { to { transform: rotate(360deg); } }'}</style>
+      <div style={{ width: 38, height: 38, borderRadius: '50%', border: '4px solid #e5e7eb', borderTopColor: '#0B5FA5', animation: 'sigmo-girar 0.8s linear infinite' }} />
+      <p style={{ color: '#0B5FA5', fontWeight: 'bold', margin: 0 }}>{texto}</p>
+    </div>
+  )
+}
+
+// ============================================================
+// ERROR BOUNDARY — un módulo roto ya no tumba toda la app
+// ============================================================
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { error: null }
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error }
+  }
+
+  componentDidCatch(error, info) {
+    console.error('SIGMO · Error en módulo:', error, info)
+  }
+
+  render() {
+    const { error } = this.state
+    if (!error) return this.props.children
+
+    // Error típico tras un deploy nuevo: el chunk viejo ya no existe en el servidor
+    const esErrorDeCarga = /dynamically imported module|Loading chunk|Importing a module script failed/i.test(
+      String(error?.message || error)
+    )
+
+    return (
+      <div style={{ maxWidth: 480, margin: '60px auto', padding: 24, background: 'white', borderRadius: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.08)', textAlign: 'center' }}>
+        <h2 style={{ color: '#B91C1C', marginTop: 0 }}>⚠️ Ocurrió un error en este módulo</h2>
+        <p style={{ color: '#374151', fontSize: 14 }}>
+          {esErrorDeCarga
+            ? 'No se pudo descargar el módulo (posible actualización de la app o conexión inestable). Recarga para obtener la última versión.'
+            : String(error?.message || error)}
+        </p>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 20 }}>
+          <button onClick={() => window.location.reload()} style={{ padding: '10px 16px', background: '#0B5FA5', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}>
+            Recargar aplicación
+          </button>
+          <button onClick={() => this.setState({ error: null })} style={{ padding: '10px 16px', background: '#6B7280', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}>
+            Reintentar
+          </button>
+        </div>
+      </div>
+    )
+  }
 }
 
 // ============================================================
 // COMPONENTE PRINCIPAL
 // ============================================================
 function App() {
-  console.log('🚀 App.jsx iniciado')
-  
   const [sesion, setSesion] = useState(null)
   const [pantalla, setPantalla] = useState(
     () => sessionStorage.getItem(STORAGE_KEY_PANTALLA) || ''
@@ -77,11 +142,9 @@ function App() {
   }, [pantalla])
 
   // ----------------------------------------------------------
-  // Autenticación (Listener automático)
+  // Autenticación
   // ----------------------------------------------------------
   useEffect(() => {
-    console.log('🔐 Configurando listener de autenticación...')
-    
     if (
       window.location.hash.includes('type=recovery') ||
       window.location.search.includes('type=recovery')
@@ -90,32 +153,24 @@ function App() {
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log(' Sesión inicial:', session ? 'Activa' : 'Inactiva')
       setSesion(session)
     })
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log('🔄 Cambio de estado de autenticación:', _event)
       setSesion(session)
       if (_event === 'PASSWORD_RECOVERY') {
         setEsRecuperacion(true)
       }
     })
 
-    return () => {
-      console.log('🧹 Limpiando listener de autenticación')
-      authListener.subscription.unsubscribe()
-    }
+    return () => authListener.subscription.unsubscribe()
   }, [])
 
   // ----------------------------------------------------------
   // Roles y permisos (con caché)
   // ----------------------------------------------------------
   useEffect(() => {
-    console.log('👤 Verificando rol y permisos...')
-    
     if (!sesion) {
-      console.log('️ Sin sesión, limpiando rol')
       setRol(null)
       setPermisos([])
       setCargandoRol(false)
@@ -128,7 +183,6 @@ function App() {
     const cachedPermisos = sessionStorage.getItem('sigmo_permisos')
 
     if (cachedRol) {
-      console.log('✅ Usando rol en caché:', cachedRol)
       setRol(cachedRol)
       setPermisos(JSON.parse(cachedPermisos || '[]'))
       setCargandoRol(false)
@@ -136,40 +190,29 @@ function App() {
     }
 
     async function obtenerRolUsuario() {
-      console.log('📡 Obteniendo rol desde base de datos...')
       setCargandoRol(true)
-      
-      try {
-        const { data, error } = await supabase
-          .from('usuarios')
-          .select(`roles ( codigo ), permisos`)
-          .eq('id_usuario', sesion.user.id)
-          .single()
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select(`roles ( codigo ), permisos`)
+        .eq('id_usuario', sesion.user.id)
+        .single()
 
-        if (error) {
-          console.error('❌ Error al obtener rol:', error)
-          setRol('auditor')
-          setPermisos([])
-        } else if (data) {
-          const nuevoRol = data.roles?.codigo?.toLowerCase() || 'auditor'
-          const nuevosPermisos = data.permisos || []
-          console.log('✅ Rol obtenido:', nuevoRol)
-          setRol(nuevoRol)
-          setPermisos(nuevosPermisos)
-          sessionStorage.setItem('sigmo_rol', nuevoRol)
-          sessionStorage.setItem('sigmo_permisos', JSON.stringify(nuevosPermisos))
-        } else {
-          console.warn('⚠️ No se encontraron datos de usuario')
-          setRol('auditor')
-          setPermisos([])
-        }
-      } catch (err) {
-        console.error('❌ Error inesperado:', err)
+      if (error) {
+        console.error('Error al obtener rol:', error)
         setRol('auditor')
         setPermisos([])
-      } finally {
-        setCargandoRol(false)
+      } else if (data) {
+        const nuevoRol = data.roles?.codigo?.toLowerCase() || 'auditor'
+        const nuevosPermisos = data.permisos || []
+        setRol(nuevoRol)
+        setPermisos(nuevosPermisos)
+        sessionStorage.setItem('sigmo_rol', nuevoRol)
+        sessionStorage.setItem('sigmo_permisos', JSON.stringify(nuevosPermisos))
+      } else {
+        setRol('auditor')
+        setPermisos([])
       }
+      setCargandoRol(false)
     }
 
     obtenerRolUsuario()
@@ -180,11 +223,7 @@ function App() {
   // ----------------------------------------------------------
   useEffect(() => {
     if (cargandoRol || !sesion || !rol) return
-    
-    console.log('🔍 Validando acceso a pantalla:', pantalla)
-    
     if (pantalla && !puedeAccederPantalla(pantalla, rol, permisos)) {
-      console.warn('️ Acceso denegado a pantalla:', pantalla)
       setPantalla('')
       sessionStorage.removeItem(STORAGE_KEY_PANTALLA)
     }
@@ -194,7 +233,6 @@ function App() {
   // Cerrar sesión
   // ----------------------------------------------------------
   const cerrarSesion = useCallback(async () => {
-    console.log('🚪 Cerrando sesión...')
     await supabase.auth.signOut()
     setPantalla('')
     setRol(null)
@@ -227,6 +265,7 @@ function App() {
   useEffect(() => {
     if (!sesion) return
 
+    // Throttle → el handler corre máximo 1×/seg
     const manejarActividad = throttle(() => {
       if (!mostrarAviso) reiniciarTemporizador()
     }, 1000)
@@ -246,18 +285,22 @@ function App() {
   // --- VISTAS PÚBLICAS ---
   // ----------------------------------------------------------
   if (!sesion) {
-    console.log(' Renderizando vista pública')
-    if (esRecuperacion) return <ResetPassword />
-    if (pantalla === 'forgot') return <ForgotPassword setPantalla={setPantalla} />
-    return <Login setPantalla={setPantalla} />
+    return (
+      <ErrorBoundary key={esRecuperacion ? 'reset' : pantalla || 'login'}>
+        <Suspense fallback={<CargandoModulo texto="Cargando…" />}>
+          {esRecuperacion && <ResetPassword />}
+          {!esRecuperacion && pantalla === 'forgot' && <ForgotPassword setPantalla={setPantalla} />}
+          {!esRecuperacion && pantalla !== 'forgot' && <Login setPantalla={setPantalla} />}
+        </Suspense>
+      </ErrorBoundary>
+    )
   }
 
   // --- PANTALLA DE CARGA ---
   if (cargandoRol) {
-    console.log('⏳ Mostrando pantalla de carga')
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: COLORES_PA.grisFondo }}>
-        <h2 style={{ color: COLORES_PA.azul }}>Cargando perfil...</h2>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f3f4f6' }}>
+        <h2 style={{ color: '#0B5FA5' }}>Cargando perfil...</h2>
       </div>
     )
   }
@@ -268,9 +311,6 @@ function App() {
   const pantallaAccesible =
     pantalla && puedeAccederPantalla(pantalla, rol, permisos) ? pantalla : ''
   const mostrarNavbar = PANTALLAS_CON_NAVBAR.includes(pantallaAccesible)
-
-  console.log('✅ Renderizando aplicación principal')
-  console.log(' Estado:', { pantallaAccesible, mostrarNavbar, rol })
 
   // ----------------------------------------------------------
   // --- VISTAS CON SESIÓN ---
@@ -299,40 +339,46 @@ function App() {
       )}
 
       {/* VISTAS SIN NAVBAR */}
-      {pantallaAccesible === '' && (
-        <LobbyModulos sesion={sesion} cerrarSesion={cerrarSesion} setPantalla={setPantalla} rol={rol} />
-      )}
-      {pantallaAccesible === 'precintos_menu' && (
-        <MenuPrecintos setPantalla={setPantalla} rol={rol} permisos={permisos} />
-      )}
-      {pantallaAccesible === 'repositorio' && (
-        <RepositorioDocumental setPantalla={setPantalla} rol={rol} />
-      )}
-      {pantallaAccesible === 'catalogos' && <GestionCatalogos setPantalla={setPantalla} />}
-      {pantallaAccesible === 'usuarios' && <GestionUsuarios setPantalla={setPantalla} />}
-      
-      {/* GestionPrecios sin setPantalla */}
-      {pantallaAccesible === 'precios_menu' && (
-        <GestionPrecios rol={rol} />
-      )}
+      <ErrorBoundary key={pantallaAccesible || 'lobby'}>
+        <Suspense fallback={<CargandoModulo />}>
+          {pantallaAccesible === '' && (
+            <LobbyModulos sesion={sesion} cerrarSesion={cerrarSesion} setPantalla={setPantalla} rol={rol} />
+          )}
+          {pantallaAccesible === 'precintos_menu' && (
+            <MenuPrecintos setPantalla={setPantalla} rol={rol} permisos={permisos} />
+          )}
+          {pantallaAccesible === 'repositorio' && (
+            <RepositorioDocumental setPantalla={setPantalla} rol={rol} />
+          )}
+          {pantallaAccesible === 'catalogos' && <GestionCatalogos setPantalla={setPantalla} />}
+          {pantallaAccesible === 'usuarios' && <GestionUsuarios setPantalla={setPantalla} />}
+          {pantallaAccesible === 'precios_menu' && (
+            <GestionPrecios setPantalla={setPantalla} rol={rol} />
+          )}
+        </Suspense>
+      </ErrorBoundary>
 
       {/* VISTAS CON NAVBAR INTERNA */}
       {mostrarNavbar && (
         <div style={{ minHeight: '100vh' }}>
           <NavbarPrecintos sesion={sesion} cerrarSesion={cerrarSesion} setPantalla={setPantalla} />
           <div style={{ paddingTop: '20px', paddingBottom: '40px' }}>
-            {pantallaAccesible === 'lotes' && <RegistroLotes />}
-            {pantallaAccesible === 'admin' && <RegistroViajes />}
-            {pantallaAccesible === 'excepciones' && <Excepciones />}
-            {pantallaAccesible === 'precintos' && <ListadoPrecintos />}
-            {pantallaAccesible === 'dashboard' && <Dashboard />}
-            {pantallaAccesible === 'reportes' && <Reportes />}
-            {pantallaAccesible === 'bitacora' && <Bitacora />}
-            {pantallaAccesible === 'conciliacion' && <Conciliacion />}
-            {pantallaAccesible === 'proyeccion' && <ProyeccionDemanda />}
-            {pantallaAccesible === 'cambiar-password' && <CambiarPassword />}
-            {pantallaAccesible === 'plantas' && <GestionPlantas />}
-            {pantallaAccesible === 'respaldos' && <PanelRespaldos />}
+            <ErrorBoundary key={pantallaAccesible}>
+              <Suspense fallback={<CargandoModulo />}>
+                {pantallaAccesible === 'lotes' && <RegistroLotes />}
+                {pantallaAccesible === 'admin' && <RegistroViajes />}
+                {pantallaAccesible === 'excepciones' && <Excepciones />}
+                {pantallaAccesible === 'precintos' && <ListadoPrecintos />}
+                {pantallaAccesible === 'dashboard' && <Dashboard />}
+                {pantallaAccesible === 'reportes' && <Reportes />}
+                {pantallaAccesible === 'bitacora' && <Bitacora />}
+                {pantallaAccesible === 'conciliacion' && <Conciliacion />}
+                {pantallaAccesible === 'proyeccion' && <ProyeccionDemanda />}
+                {pantallaAccesible === 'cambiar-password' && <CambiarPassword />}
+                {pantallaAccesible === 'plantas' && <GestionPlantas />}
+                {pantallaAccesible === 'respaldos' && <PanelRespaldos />}
+              </Suspense>
+            </ErrorBoundary>
           </div>
         </div>
       )}
