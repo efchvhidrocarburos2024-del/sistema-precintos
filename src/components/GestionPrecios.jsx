@@ -28,8 +28,6 @@ const btnTabStyle = (activo) => ({
 // Estilos del Cotizador
 const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }
 const selectStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold', boxSizing: 'border-box' }
-const tdStyle = { padding: '10px 8px', borderBottom: '1px solid #eee', color: '#374151' }
-const tdRight = { padding: '10px 8px', borderBottom: '1px solid #eee', textAlign: 'right', color: '#374151' }
 
 const COLORS = ['#0B5FA5', '#10b981', '#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#f43f5e', '#84cc16', '#f97316', '#6366f1']
 
@@ -710,7 +708,8 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
   const ejecutarCotizacion = () => {
     setCotResultado(null)
-    if (!cotDatos || !cotPlanta || !cotProducto || !cotAlmacen || !cotColTope) return
+    if (!cotDatos) return
+    if (!cotPlanta || !cotProducto || !cotAlmacen || !cotColTope) return
 
     const d = cotDatos
     const factor = parseFloat(String(cotFactor).replace(',', '.')) || 0
@@ -750,8 +749,13 @@ export default function GestionPrecios({ setPantalla, rol }) {
   }, [vista, cotHoja, cotKey])
 
   useEffect(() => {
-    if (vista === 'cotizar' && cotDatos) ejecutarCotizacion()
-  }, [cotPlanta, cotProducto, cotAlmacen, cotColTope, cotFactor, cotAplicarPercepcion])
+    if (vista !== 'cotizar' || !cotDatos) return
+    if (!cotPlanta || !cotProducto || !cotAlmacen || !cotColTope) {
+      setCotResultado(null)
+      return
+    }
+    ejecutarCotizacion()
+  }, [cotPlanta, cotProducto, cotAlmacen, cotColTope, cotFactor, cotAplicarPercepcion, vista, cotDatos])
 
   const generarPDFCotizacion = () => {
     if (!cotResultado) return toast.error('Selecciona los criterios para cotizar')
@@ -1263,7 +1267,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
         {renderHeader()}
         <main style={{ padding: '40px 20px', maxWidth: '1200px', margin: '0 auto' }}>
 
-          {/* Fuentes vigentes */}
+          {/* Fuentes vigentes - PROTEGIDO CON d ? */}
           <Card style={{ padding: '15px 20px', marginBottom: '15px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', textAlign: 'left' }}>
             {cotCargandoDatos ? (
               <p style={{ margin: 0, color: '#1e40af', fontWeight: 'bold' }}>⏳ Cargando archivos vigentes...</p>
@@ -1272,11 +1276,11 @@ export default function GestionPrecios({ setPantalla, rol }) {
                 <p style={{ margin: '0 0 10px 0', color: '#991b1b', fontWeight: 'bold' }}>⚠️ {cotErrorDatos}</p>
                 <Boton variante="outline" tamano="sm" onClick={() => setCotKey(k => k + 1)}>🔄 Reintentar</Boton>
               </div>
-            ) : (
+            ) : d ? (
               <p style={{ margin: 0, fontSize: '13px', color: '#1e40af' }}>
                 📌 <strong>Fuentes:</strong> {d.precioNombre} <em>(hoja {d.hojaUsada})</em> &nbsp;|&nbsp; {d.topeNombre}
               </p>
-            )}
+            ) : null}
           </Card>
 
           {/* Criterios */}
@@ -1295,27 +1299,27 @@ export default function GestionPrecios({ setPantalla, rol }) {
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Planta</label>
                 <select value={cotPlanta} onChange={(e) => setCotPlanta(e.target.value)} style={selectStyle} disabled={!d}>
                   <option value="">Seleccione...</option>
-                  {d?.plantas.map(p => <option key={p} value={p}>{p}</option>)}
+                  {d?.plantas?.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Producto</label>
                 <select value={cotProducto} onChange={(e) => setCotProducto(e.target.value)} style={selectStyle} disabled={!d}>
                   <option value="">Seleccione...</option>
-                  {d?.productos.map(p => <option key={p} value={p}>{p}</option>)}
+                  {d?.productos?.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Almacén</label>
                 <select value={cotAlmacen} onChange={(e) => setCotAlmacen(e.target.value)} style={selectStyle} disabled={!d}>
                   <option value="">Seleccione...</option>
-                  {d?.topeRows ? [...new Set(d.topeRows.map(r => String(r[d.colAlmacen] || '').trim()).filter(Boolean))].sort().map(a => <option key={a} value={a}>{a}</option>) : null}
+                  {d?.topeRows ? [...new Set(d.topeRows.map(r => String(r[d?.colAlmacen] || '').trim()).filter(Boolean))].sort().map(a => <option key={a} value={a}>{a}</option>) : null}
                 </select>
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Columna Tope</label>
                 <select value={cotColTope} onChange={(e) => setCotColTope(e.target.value)} style={selectStyle} disabled={!d}>
-                  {d?.colTopes.map(c => <option key={c} value={c}>{c}</option>)}
+                  {d?.colTopes?.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
