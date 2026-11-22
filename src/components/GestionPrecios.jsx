@@ -9,8 +9,8 @@ import { Card, Boton } from './ui'
 
 // ===== CONSTANTES DE NEGOCIO =====
 const TASA_IGV = 0.18
-const TASA_PERCEPCION = 0.01   // Percepción 1% (activable por checkbox)
-const HOJA_PRECIO_COTIZACION = 'Precios Planta Con IGV'  // Fija, no editable
+const TASA_PERCEPCION = 0.01
+const HOJA_PRECIO_COTIZACION = 'Precios Planta Con IGV'
 
 const cardStyle = {
   backgroundColor: 'white', borderRadius: '12px', padding: '30px 20px', textAlign: 'center',
@@ -25,7 +25,6 @@ const btnTabStyle = (activo) => ({
   transition: 'all 0.2s'
 })
 
-// Estilos del Cotizador
 const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }
 const selectStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold', boxSizing: 'border-box' }
 const readOnlyFieldStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: '#f3f4f6', color: '#374151', fontWeight: 'bold', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '42px' }
@@ -67,7 +66,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [previewDataTope, setPreviewDataTope] = useState([])
   const [previewHeadersTope, setPreviewHeadersTope] = useState([])
 
-  // Previsualización multi-hoja
   const [hojasPreview, setHojasPreview] = useState([])
   const [hojaActiva, setHojaActiva] = useState(0)
 
@@ -85,7 +83,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
   const [auditoria, setAuditoria] = useState([])
 
-  // ESTADOS DE TENDENCIAS
   const [plantaSeleccionada, setPlantaSeleccionada] = useState('')
   const [productoSeleccionado, setProductoSeleccionado] = useState('')
   const [hojaTendencia, setHojaTendencia] = useState('Precio Base')
@@ -102,11 +99,11 @@ export default function GestionPrecios({ setPantalla, rol }) {
   const [cotDatos, setCotDatos] = useState(null)
   const [cotCargandoDatos, setCotCargandoDatos] = useState(false)
   const [cotErrorDatos, setCotErrorDatos] = useState('')
-  const [cotHoja] = useState(HOJA_PRECIO_COTIZACION)  // Fijo, no editable
+  const [cotHoja] = useState(HOJA_PRECIO_COTIZACION)
   const [cotPlanta, setCotPlanta] = useState('')
   const [cotProducto, setCotProducto] = useState('')
   const [cotAlmacen, setCotAlmacen] = useState('')
-  const [cotColTope, setCotColTope] = useState('TOPE S/IGV')  // Se setea automáticamente
+  const [cotColTope, setCotColTope] = useState('TOPE S/IGV')
   const [cotFactor, setCotFactor] = useState('')
   const [cotCantidad, setCotCantidad] = useState('')
   const [cotAplicarPercepcion, setCotAplicarPercepcion] = useState(true)
@@ -147,7 +144,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     return true;
   };
 
-  // Genera N° de cotización formato COT-YYYYMMDD-XXX
   const generarNumeroCotizacion = () => {
     const hoy = new Date()
     const yyyy = hoy.getFullYear()
@@ -703,7 +699,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
       const colTopes = cols.filter(c => normalizarTexto(c).includes('TOPE'))
       if (!colPlanta || !colAlmacen || !colArticulo) throw new Error('El archivo de Topes no tiene columnas PLANTA / ALMACEN / ARTICULO.')
 
-      // Columna Tope automática: primera columna que contenga "TOPE"
       const colTopeAuto = colTopes[0] || 'TOPE S/IGV'
       setCotColTope(colTopeAuto)
       setCotDatos({
@@ -747,11 +742,12 @@ export default function GestionPrecios({ setPantalla, rol }) {
     const finalSinPercepcion = precioBase - topeAjustado * (1 + TASA_IGV)
     const finalConPercepcion = finalSinPercepcion * (1 + TASA_PERCEPCION)
     const cantidad = parseFloat(String(cotCantidad).replace(',', '.')) || 0
-    const total = finalConPercepcion * cantidad
+    const precioFinal = cotAplicarPercepcion ? finalConPercepcion : finalSinPercepcion
+    const total = precioFinal * cantidad
 
     setCotResultado({
       precioBase, tope, factor, topeAjustado, colTope: cotColTope,
-      finalSinPercepcion, finalConPercepcion, cantidad, total,
+      finalSinPercepcion, finalConPercepcion, precioFinal, cantidad, total,
       aplicarPercepcion: cotAplicarPercepcion
     })
   }
@@ -762,6 +758,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
     }
   }, [vista, cotKey])
 
+  // FIX: cotCantidad agregado a las dependencias para recalcular el total en vivo
   useEffect(() => {
     if (vista !== 'cotizar' || !cotDatos) return
     if (!cotPlanta || !cotProducto || !cotAlmacen || !cotColTope) {
@@ -769,13 +766,15 @@ export default function GestionPrecios({ setPantalla, rol }) {
       return
     }
     ejecutarCotizacion()
-  }, [cotPlanta, cotProducto, cotAlmacen, cotColTope, cotFactor, cotAplicarPercepcion, vista, cotDatos])
+  }, [cotPlanta, cotProducto, cotAlmacen, cotColTope, cotFactor, cotCantidad, cotAplicarPercepcion, vista, cotDatos])
 
+  // ===== PDF DE COTIZACIÓN - SOLO 4 COLUMNAS =====
   const generarPDFCotizacion = () => {
     if (!cotResultado) return toast.error('Selecciona los criterios para cotizar')
     const r = cotResultado
     const doc = new jsPDF()
     const nro = generarNumeroCotizacion()
+    const aplicaPercepcion = r.aplicarPercepcion
 
     // Encabezado corporativo
     doc.setFillColor(11, 95, 165); doc.rect(0, 0, 210, 30, 'F')
@@ -792,43 +791,44 @@ export default function GestionPrecios({ setPantalla, rol }) {
     doc.text(`Planta: ${cotPlanta}`, 130, 40)
     doc.text(`Almacén: ${cotAlmacen}`, 130, 46)
 
-    // Determinar columnas según percepción
-    const aplicaPercepcion = r.aplicarPercepcion
-    const precioFinal = aplicaPercepcion ? r.finalConPercepcion : r.finalSinPercepcion
-    const totalCalculado = r.cantidad > 0 ? precioFinal * r.cantidad : 0
+    // Columna dinámica según percepción
+    const tituloPrecio = aplicaPercepcion ? 'FINAL C/IGV + PERC. (S/)' : 'FINAL C/IGV (S/)'
 
-    const head = aplicaPercepcion 
-      ? [['PRODUCTO', 'P. BASE C/IGV', 'TOPE − FACTOR', 'FINAL C/IGV + PERC.', 'CANT. (GAL)', 'TOTAL (S/)']]
-      : [['PRODUCTO', 'P. BASE C/IGV', 'TOPE − FACTOR', 'FINAL C/IGV', 'CANT. (GAL)', 'TOTAL (S/)']]
-
+    const head = [['PRODUCTO', tituloPrecio, 'CANT. (GAL)', 'TOTAL (S/)']]
     const body = [[
       cotProducto,
-      r.precioBase.toFixed(4),
-      `${r.tope.toFixed(4)} − ${r.factor.toFixed(4)} = ${r.topeAjustado.toFixed(4)}`,
-      precioFinal.toFixed(4),
+      r.precioFinal.toFixed(4),
       r.cantidad > 0 ? r.cantidad.toLocaleString('es-PE', { minimumFractionDigits: 2 }) : '—',
-      r.cantidad > 0 ? totalCalculado.toFixed(2) : '—'
+      r.cantidad > 0 ? r.total.toFixed(2) : '—'
     ]]
 
     autoTable(doc, {
-      startY: 60,
+      startY: 62,
       head,
       body,
       theme: 'grid',
-      headStyles: { fillColor: [11, 95, 165], fontSize: 8, fontStyle: 'bold' },
-      bodyStyles: { fontSize: 9, cellPadding: 4 },
+      headStyles: { fillColor: [11, 95, 165], fontSize: 9, fontStyle: 'bold', halign: 'center' },
+      bodyStyles: { fontSize: 11, cellPadding: 6 },
       columnStyles: { 
-        0: { halign: 'left' },
-        1: { halign: 'right' }, 
-        2: { halign: 'right' }, 
-        3: { halign: 'right', fontStyle: 'bold' },
-        4: { halign: 'center' },
-        5: { halign: 'right', fontStyle: 'bold' }
+        0: { halign: 'left', cellWidth: 60 },
+        1: { halign: 'right', fontStyle: 'bold' },
+        2: { halign: 'center' },
+        3: { halign: 'right', fontStyle: 'bold' }
       }
     })
 
-    // Pie: solo validez
-    let y = doc.lastAutoTable.finalY + 15
+    // Bloque TOTAL A PAGAR destacado (solo si hay cantidad)
+    let y = doc.lastAutoTable.finalY + 14
+    if (r.cantidad > 0) {
+      doc.setFillColor(11, 95, 165); doc.rect(110, y, 86, 14, 'F')
+      doc.setTextColor(255, 255, 255); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+      doc.text('TOTAL A PAGAR:', 114, y + 9)
+      doc.setFontSize(13)
+      doc.text(`S/ ${r.total.toFixed(2)}`, 192, y + 9, { align: 'right' })
+      y += 22
+    }
+
+    // Pie
     doc.setFontSize(9); doc.setTextColor(80, 80, 80); doc.setFont('helvetica', 'italic')
     doc.text('Cotización válida por 3 días calendario.', 14, y)
 
@@ -1296,7 +1296,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
         {renderHeader()}
         <main style={{ padding: '40px 20px', maxWidth: '1200px', margin: '0 auto' }}>
 
-          {/* Fuentes vigentes */}
+          {/* Fuentes vigentes - FORMATO LIMPIO */}
           <Card style={{ padding: '15px 20px', marginBottom: '15px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', textAlign: 'left' }}>
             {cotCargandoDatos ? (
               <p style={{ margin: 0, color: '#1e40af', fontWeight: 'bold' }}>⏳ Cargando archivos vigentes...</p>
@@ -1307,7 +1307,7 @@ export default function GestionPrecios({ setPantalla, rol }) {
               </div>
             ) : d ? (
               <p style={{ margin: 0, fontSize: '13px', color: '#1e40af' }}>
-                📌 <strong>Fuentes:</strong> {d.precioNombre} <em>(hoja {d.hojaUsada})</em> &nbsp;|&nbsp; {d.topeNombre}
+                📌 <strong>Fuentes:</strong> {d.precioNombre} &nbsp;|&nbsp; {d.topeNombre}
               </p>
             ) : null}
           </Card>
@@ -1316,7 +1316,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
           <Card style={{ padding: '30px', marginBottom: '20px' }}>
             <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', color: 'var(--text-dark)', textAlign: 'center' }}>🧾 Cotizar Combustibles</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
-              {/* Hoja de Precio FIJA - mismo estilo que selects */}
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Hoja de Precio</label>
                 <div style={readOnlyFieldStyle}>
@@ -1344,7 +1343,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
                   {d?.topeRows ? [...new Set(d.topeRows.map(r => String(r[d?.colAlmacen] || '').trim()).filter(Boolean))].sort().map(a => <option key={a} value={a}>{a}</option>) : null}
                 </select>
               </div>
-              {/* Columna Tope FIJA - mismo estilo que Hoja de Precio */}
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }}>Columna Tope</label>
                 <div style={readOnlyFieldStyle}>
@@ -1400,10 +1398,10 @@ export default function GestionPrecios({ setPantalla, rol }) {
                 {cotResultado.cantidad > 0 && (
                   <div style={{ backgroundColor: '#0f172a', padding: '12px 16px', borderRadius: '6px', textAlign: 'center' }}>
                     <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8', fontWeight: 'bold' }}>
-                      TOTAL: {cotResultado.cantidad.toLocaleString('es-PE')} gal × S/ {(cotAplicarPercepcion ? cotResultado.finalConPercepcion : cotResultado.finalSinPercepcion).toFixed(4)}
+                      TOTAL: {cotResultado.cantidad.toLocaleString('es-PE')} gal × S/ {cotResultado.precioFinal.toFixed(4)}
                     </p>
                     <p style={{ margin: '4px 0 0 0', fontSize: '26px', fontWeight: '900', color: '#10b981' }}>
-                      S/ {(cotAplicarPercepcion ? cotResultado.total : cotResultado.finalSinPercepcion * cotResultado.cantidad).toFixed(2)}
+                      S/ {cotResultado.total.toFixed(2)}
                     </p>
                   </div>
                 )}
