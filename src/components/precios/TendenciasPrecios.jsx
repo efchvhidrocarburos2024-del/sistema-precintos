@@ -1,6 +1,6 @@
 // src/components/precios/TendenciasPrecios.jsx
 import { useState, useMemo } from 'react'
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart } from 'recharts'
+import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { useTendenciasPrecios, formatCurrency, formatPercentage, getTrendColor } from './useTendenciasPrecios'
 
 const PALETA = {
@@ -28,7 +28,7 @@ const CustomTooltip = ({ active, payload, label }) => {
         <p style={{ margin: '0 0 8px', fontWeight: 700, color: PALETA.azulProfundo, fontSize: '13px' }}>
           {label}
         </p>
-        {payload.map((entry, index) => (
+        {payload && payload.map((entry, index) => (
           <p key={index} style={{ margin: '4px 0', fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: entry.color, fontWeight: 600 }}>{entry.name}:</span>
             <span style={{ color: PALETA.azulProfundo, fontWeight: 700 }}>
@@ -46,21 +46,28 @@ export default function TendenciasPrecios({ filtros }) {
   const { fechaDesde, fechaHasta, productos, planta, tipoGrafico = 'linea' } = filtros
   const { datos, cargando, error, estadisticas, recargar } = useTendenciasPrecios({
     fechaDesde, fechaHasta, productos, planta,
-    usarVistaMaterializada: true, // Usar vista materializada por defecto
+    usarVistaMaterializada: true,
   })
 
   const [vistaActiva, setVistaActiva] = useState('tendencia')
   const [productoSeleccionado, setProductoSeleccionado] = useState('todos')
 
-  const datosFiltrados = useMemo(() => {
-    if (productoSeleccionado === 'todos') return datos
-    return datos.filter(d => d.producto === productoSeleccionado)
-  }, [datos, productoSeleccionado])
+  // VALIDACIÓN: Asegurar que datos sea un array
+  const datosSeguros = useMemo(() => {
+    if (!datos || !Array.isArray(datos)) return []
+    return datos
+  }, [datos])
 
-  const productosUnicos = useMemo(() => 
-    [...new Set(datos.map(d => d.producto))], 
-    [datos]
-  )
+  const datosFiltrados = useMemo(() => {
+    if (productoSeleccionado === 'todos') return datosSeguros
+    return datosSeguros.filter(d => d.producto === productoSeleccionado)
+  }, [datosSeguros, productoSeleccionado])
+
+  // VALIDACIÓN: Evitar crash si datosSeguros está vacío
+  const productosUnicos = useMemo(() => {
+    if (!datosSeguros || datosSeguros.length === 0) return []
+    return [...new Set(datosSeguros.map(d => d.producto))]
+  }, [datosSeguros])
 
   const coloresPorProducto = useMemo(() => {
     const colores = [PALETA.azulProfundo, PALETA.cyanVibrante, PALETA.exito, PALETA.peligro, PALETA.alerta]
@@ -89,9 +96,6 @@ export default function TendenciasPrecios({ filtros }) {
         }} />
         <p style={{ color: PALETA.azulProfundo, fontWeight: 600, margin: 0 }}>
           Analizando tendencias de precios...
-        </p>
-        <p style={{ color: PALETA.grisMedio, fontSize: '13px', margin: '8px 0 0' }}>
-          Consultando base de datos optimizada
         </p>
       </div>
     )
@@ -122,10 +126,7 @@ export default function TendenciasPrecios({ filtros }) {
             borderRadius: '8px',
             fontWeight: 600,
             cursor: 'pointer',
-            transition: 'all 0.2s',
           }}
-          onMouseEnter={(e) => e.target.style.background = PALETA.cyanVibrante}
-          onMouseLeave={(e) => e.target.style.background = PALETA.azulProfundo}
         >
           Reintentar
         </button>
@@ -133,7 +134,7 @@ export default function TendenciasPrecios({ filtros }) {
     )
   }
 
-  if (!datos.length) {
+  if (!datosSeguros.length) {
     return (
       <div style={{
         padding: '60px 20px',
@@ -141,7 +142,7 @@ export default function TendenciasPrecios({ filtros }) {
         background: PALETA.grisClaro,
         borderRadius: '16px',
       }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.5 }}></div>
+        <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.5 }}>📉</div>
         <h3 style={{ margin: '0 0 8px', color: PALETA.azulProfundo }}>Sin datos disponibles</h3>
         <p style={{ margin: 0, color: PALETA.grisMedio, fontSize: '13px' }}>
           No hay registros de precios en el rango seleccionado
@@ -168,7 +169,7 @@ export default function TendenciasPrecios({ filtros }) {
           <KpiCard 
             titulo="Productos Analizados" 
             valor={estadisticas.productosAnalizados} 
-            icono="️"
+            icono="🏭"
             color={PALETA.cyanVibrante}
           />
           <KpiCard 
@@ -222,7 +223,7 @@ export default function TendenciasPrecios({ filtros }) {
           {[
             { id: 'tendencia', label: '📈 Tendencia', icon: 'linea' },
             { id: 'comparativa', label: '📊 Comparativa', icon: 'barra' },
-            { id: 'area', label: ' Área', icon: 'area' },
+            { id: 'area', label: '🔷 Área', icon: 'area' },
           ].map(vista => (
             <button
               key={vista.id}
@@ -235,7 +236,6 @@ export default function TendenciasPrecios({ filtros }) {
                 color: vistaActiva === vista.id ? PALETA.blanco : PALETA.azulProfundo,
                 fontWeight: 600,
                 cursor: 'pointer',
-                transition: 'all 0.2s',
               }}
             >
               {vista.label}
@@ -365,7 +365,7 @@ export default function TendenciasPrecios({ filtros }) {
           fontWeight: 700,
           fontSize: '14px',
         }}>
-          📋 Datos Detallados por Mes
+           Datos Detallados por Mes
         </div>
         <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -384,14 +384,10 @@ export default function TendenciasPrecios({ filtros }) {
               </tr>
             </thead>
             <tbody>
-              {datosFiltrados.map((row, i) => (
+              {datosFiltrados && datosFiltrados.map((row, i) => (
                 <tr key={i} style={{
                   background: i % 2 === 0 ? PALETA.blanco : PALETA.grisClaro,
-                  transition: 'background 0.2s',
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = `${PALETA.cyanVibrante}20`}
-                onMouseLeave={(e) => e.currentTarget.style.background = i % 2 === 0 ? PALETA.blanco : PALETA.grisClaro}
-                >
+                }}>
                   <td style={{ padding: '12px', fontWeight: 600, color: PALETA.azulProfundo }}>{row.mes}</td>
                   <td style={{ padding: '12px', color: PALETA.azulProfundo }}>{row.producto}</td>
                   <td style={{ padding: '12px', color: PALETA.grisMedio }}>{row.planta}</td>
@@ -426,18 +422,7 @@ function KpiCard({ titulo, valor, subtitulo, icono, color }) {
       borderRadius: '12px',
       border: `1px solid ${PALETA.grisMedio}`,
       boxShadow: '0 2px 8px rgba(0,51,160,0.06)',
-      transition: 'transform 0.2s, box-shadow 0.2s',
-      cursor: 'default',
-    }}
-    onMouseEnter={(e) => {
-      e.currentTarget.style.transform = 'translateY(-4px)'
-      e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,51,160,0.12)'
-    }}
-    onMouseLeave={(e) => {
-      e.currentTarget.style.transform = 'translateY(0)'
-      e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,51,160,0.06)'
-    }}
-    >
+    }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
         <div>
           <p style={{ margin: 0, fontSize: '12px', color: PALETA.grisMedio, fontWeight: 600, textTransform: 'uppercase' }}>
