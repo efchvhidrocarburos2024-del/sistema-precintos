@@ -1,8 +1,14 @@
 // ============================================================================
 //  SIGMO · MÓDULO 2 · REPOSITORIO DOCUMENTAL — Orquestador
+//  Misma ruta, mismo export, mismas props que el monolito anterior:
+//  App.jsx no necesita ningún cambio.
+//
+//  Seguridad: si App.jsx no pasa `rol` ni `user`, ambos se resuelven desde la
+//  sesión real de Supabase y la tabla usuarios→roles. Nunca desde un valor fijo.
 // ============================================================================
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
+import { supabase } from '../supabase'
 import { PALETA, CAPACIDAD_BYTES, mezclarHex, formatearBytes, iniciales } from './documental/constantes'
 import { Estilos, Fondo, Boton, Confirmar, Insignia } from './documental/base'
 import {
@@ -19,8 +25,36 @@ const NAV = [
   { id: 'auditoria', icono: '🧭', label: 'Bitácora' },
 ]
 
-export default function RepositorioDocumental({ setPantalla, rol = 'admin_sistema', user = null }) {
-  const usuario = user?.email || 'elmer.chumbimune@petroamerica.com.pe'
+export default function RepositorioDocumental({ setPantalla, rol, user }) {
+  // ---- Identidad y permisos: prop > sesión/BD > lectura -------------------
+  const [usuarioSesion, setUsuarioSesion] = useState('')
+  const [rolSesion, setRolSesion] = useState('')
+
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      try {
+        const { data: auth } = await supabase.auth.getUser()
+        const email = auth?.user?.email
+        if (!vivo || !email) return
+        setUsuarioSesion(email)
+
+        const { data } = await supabase
+          .from('usuarios')
+          .select('id_rol, roles(codigo)')
+          .eq('email', email)
+          .maybeSingle()
+        if (vivo && data?.roles?.codigo) {
+          setRolSesion(String(data.roles.codigo).toLowerCase())
+        }
+      } catch { /* sin sesión o sin join: queda modo lectura */ }
+    })()
+    return () => { vivo = false }
+  }, [])
+
+  const usuario = user?.email || usuarioSesion || 'sistema@sigmo.pe'
+  const rolEfectivo = rol || rolSesion || 'consulta'
+
   const repo = useDocumentos({ usuario })
 
   const [vista, setVista] = useState('biblioteca')
@@ -28,15 +62,18 @@ export default function RepositorioDocumental({ setPantalla, rol = 'admin_sistem
   const [confirmacion, setConfirmacion] = useState(null)
   const [catFiltro, setCatFiltro] = useState(null)
 
-  const puedeCargar = ['admin_sistema', 'jefe_pricing', 'analista_comercial'].includes(rol)
-  const puedeGestionar = ['admin_sistema', 'jefe_pricing'].includes(rol)
-  const puedeEliminar = rol === 'admin_sistema'
+  const puedeCargar = ['admin_sistema', 'jefe_pricing', 'analista_comercial'].includes(rolEfectivo)
+  const puedeGestionar = ['admin_sistema', 'jefe_pricing'].includes(rolEfectivo)
+  const puedeEliminar = rolEfectivo === 'admin_sistema'
 
   const activos = useMemo(() => repo.documentos.filter(d => !d.eliminado), [repo.documentos])
   const papelera = useMemo(() => repo.documentos.filter(d => d.eliminado), [repo.documentos])
   const bytes = useMemo(() => activos.reduce((s, d) => s + (d.tamano_bytes || 0), 0), [activos])
   const usoPct = Math.min(100, (bytes / CAPACIDAD_BYTES) * 100)
-  const detalle = useMemo(() => repo.documentos.find(d => d.id === detalleId) || null, [repo.documentos, detalleId])
+  const detalle = useMemo(
+    () => repo.documentos.find(d => d.id === detalleId) || null,
+    [repo.documentos, detalleId],
+  )
 
   const conteos = {
     biblioteca: activos.length, carga: null, categorias: repo.categorias.length,
@@ -49,7 +86,9 @@ export default function RepositorioDocumental({ setPantalla, rol = 'admin_sistem
   }, [setPantalla])
 
   const abrir = useCallback(id => setDetalleId(id), [])
-  const verCategoria = useCallback(id => { setCatFiltro(id); setVista('biblioteca'); toast.success('Categoría aplicada en la biblioteca') }, [])
+  const verCategoria = useCallback(id => {
+    setCatFiltro(id); setVista('biblioteca'); toast.success('Categoría aplicada en la biblioteca')
+  }, [])
 
   useEffect(() => {
     if (detalleId && !repo.documentos.some(d => d.id === detalleId)) setDetalleId(null)
@@ -60,9 +99,11 @@ export default function RepositorioDocumental({ setPantalla, rol = 'admin_sistem
       <Estilos />
       <Fondo />
 
+      {/* ------------------------------------------------------- cabecera -- */}
       <header className="rd-top">
         <div className="rd-top-in">
           <button className="rd-volver" onClick={volver}>← SIGMO</button>
+
           <div className="rd-marca">
             <div className="rd-sello">📁</div>
             <div style={{ minWidth: 0 }}>
@@ -76,32 +117,49 @@ export default function RepositorioDocumental({ setPantalla, rol = 'admin_sistem
           </div>
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginLeft: 'auto' }}>
-            <Insignia color={repo.modo === 'supabase' ? PALETA.lima : PALETA.ambar} solido style={{ fontSize: 10.5, padding: '5px 11px' }}>
+            <Insignia color={repo.modo === 'supabase' ? PALETA.lima : PALETA.ambar} solido
+              style={{ fontSize: 10.5, padding: '5px 11px' }}>
               {repo.modo === 'supabase' ? '● SUPABASE ACTIVO' : '● MODO LOCAL'}
             </Insignia>
+
             <div className="rd-medidor">
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: '#BFE2F0', fontWeight: 700 }}>
-                <span>Almacenamiento</span><span style={{ color: '#fff' }}>{formatearBytes(bytes)} / 512 MB</span>
+                <span>Almacenamiento</span>
+                <span style={{ color: '#fff' }}>{formatearBytes(bytes)} / 512 MB</span>
               </div>
-              <div className="rd-medidor-bar"><div className="rd-medidor-fill" style={{ width: `${Math.max(2, usoPct)}%` }} /></div>
+              <div className="rd-medidor-bar">
+                <div className="rd-medidor-fill" style={{ width: `${Math.max(2, usoPct)}%` }} />
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 11px 5px 6px', borderRadius: 99, background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)' }}>
-              <span style={{ width: 28, height: 28, borderRadius: '50%', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 900, color: PALETA.tinta, background: `linear-gradient(135deg,${PALETA.lima},${PALETA.cyan})` }}>{iniciales(usuario)}</span>
-              <span style={{ fontSize: 11.5, color: '#EAF4FA', fontWeight: 700, maxWidth: 168, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{usuario.split('@')[0]}</span>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 11px 5px 6px', borderRadius: 99, background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)' }}
+              title={`${usuario} · rol ${rolEfectivo}`}>
+              <span style={{ width: 28, height: 28, borderRadius: '50%', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 900, color: PALETA.tinta, background: `linear-gradient(135deg,${PALETA.lima},${PALETA.cyan})`, flex: 'none' }}>
+                {iniciales(usuario)}
+              </span>
+              <span style={{ fontSize: 11.5, color: '#EAF4FA', fontWeight: 700, maxWidth: 168, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {usuario.split('@')[0]}
+              </span>
             </div>
-            <Boton tamano="sm" variante="gh" icono="⟳" onClick={() => { repo.recargar(); toast.success('Repositorio sincronizado') }}>Sincronizar</Boton>
+
+            <Boton tamano="sm" variante="gh" icono="⟳" title="Recargar datos"
+              onClick={() => { repo.recargar(); toast.success('Repositorio sincronizado') }}>Sincronizar</Boton>
+
             {puedeCargar && vista !== 'carga' && (
-              <Boton tamano="sm" icono="📤" onClick={() => setVista('carga')} style={{ background: `linear-gradient(100deg,${PALETA.ambar},#D97706)`, color: '#fff' }}>Publicar</Boton>
+              <Boton tamano="sm" icono="📤" onClick={() => setVista('carga')}
+                style={{ background: `linear-gradient(100deg,${PALETA.ambar},#D97706)`, color: '#fff' }}>Publicar</Boton>
             )}
           </div>
         </div>
       </header>
 
+      {/* ---------------------------------------------------------- cuerpo -- */}
       <div className="rd-cuerpo">
         <nav className="rd-rail" aria-label="Secciones del repositorio">
           {NAV.map(n => (
             <button key={n.id} className={`rd-nav ${vista === n.id ? 'on' : ''}`} onClick={() => setVista(n.id)}>
-              <span style={{ fontSize: 16 }}>{n.icono}</span><span>{n.label}</span>
+              <span style={{ fontSize: 16 }} aria-hidden>{n.icono}</span>
+              <span>{n.label}</span>
               {conteos[n.id] !== null && <span className="n">{conteos[n.id]}</span>}
             </button>
           ))}
@@ -135,18 +193,25 @@ export default function RepositorioDocumental({ setPantalla, rol = 'admin_sistem
               onIrCarga={() => setVista('carga')} puedeCargar={puedeCargar} categoriaInicial={catFiltro} />
           )}
           {vista === 'carga' && (
-            <CargaDocumental repo={repo} puedeCargar={puedeCargar} onPublicado={() => { setCatFiltro(null); setVista('biblioteca') }} />
+            <CargaDocumental repo={repo} puedeCargar={puedeCargar}
+              onPublicado={() => { setCatFiltro(null); setVista('biblioteca') }} />
           )}
           {vista === 'categorias' && (
             <GestorCategorias repo={repo} puedeGestionar={puedeGestionar} onVerCategoria={verCategoria} />
           )}
           {vista === 'estadisticas' && <PanelEstadisticas repo={repo} onAbrir={abrir} />}
-          {vista === 'papelera' && <PapeleraDocumental repo={repo} puedeEliminar={puedeEliminar} onConfirmar={setConfirmacion} />}
+          {vista === 'papelera' && (
+            <PapeleraDocumental repo={repo} puedeEliminar={puedeEliminar} onConfirmar={setConfirmacion} />
+          )}
           {vista === 'auditoria' && <AuditoriaDocumental repo={repo} onAbrir={abrir} />}
         </main>
       </div>
 
-      {detalle && <DetalleDocumento doc={detalle} repo={repo} puedeGestionar={puedeGestionar} onCerrar={() => setDetalleId(null)} onConfirmar={setConfirmacion} />}
+      {detalle && (
+        <DetalleDocumento doc={detalle} repo={repo} puedeGestionar={puedeGestionar}
+          onCerrar={() => setDetalleId(null)} onConfirmar={setConfirmacion} />
+      )}
+
       <Confirmar estado={confirmacion} onCerrar={() => setConfirmacion(null)} />
     </div>
   )
