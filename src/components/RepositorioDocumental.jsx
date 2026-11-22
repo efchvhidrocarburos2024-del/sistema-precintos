@@ -1,525 +1,163 @@
-import { useState, useEffect } from 'react'
-import { supabase } from '../supabase'
+// ============================================================================
+//  SIGMO · MÓDULO 2 · REPOSITORIO DOCUMENTAL — Orquestador
+// ============================================================================
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
-import { PageHeader, Card, Input, Select, Boton } from './ui'
+import { PALETA, CAPACIDAD_BYTES, mezclarHex, formatearBytes, iniciales } from './documental/constantes'
+import { Estilos, Fondo, Boton, Confirmar, Insignia } from './documental/base'
+import {
+  useDocumentos, BibliotecaDocumental, CargaDocumental, DetalleDocumento,
+  GestorCategorias, PanelEstadisticas, PapeleraDocumental, AuditoriaDocumental,
+} from './documental'
 
-// Estilos reutilizables para las tarjetas (idénticos a los de Precintos)
-const cardStyle = {
-  backgroundColor: 'white',
-  borderRadius: '12px',
-  padding: '40px 20px',
-  textAlign: 'center',
-  boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-  border: '2px solid transparent',
-  cursor: 'pointer',
-  transition: 'all 0.2s',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center'
-}
+const NAV = [
+  { id: 'biblioteca', icono: '🗂️', label: 'Biblioteca' },
+  { id: 'carga', icono: '📤', label: 'Publicar' },
+  { id: 'categorias', icono: '🏷️', label: 'Categorías' },
+  { id: 'estadisticas', icono: '📊', label: 'Métricas' },
+  { id: 'papelera', icono: '🗑️', label: 'Papelera' },
+  { id: 'auditoria', icono: '🧭', label: 'Bitácora' },
+]
 
-// Estilos para los botones del header
-const btnHeaderStyle = {
-  background: '#f3f4f6',
-  border: '1px solid #d1d5db',
-  color: '#374151',
-  padding: '6px 12px',
-  borderRadius: '6px',
-  cursor: 'pointer',
-  fontSize: '13px',
-  fontWeight: 'bold'
-}
+export default function RepositorioDocumental({ setPantalla, rol = 'admin_sistema', user = null }) {
+  const usuario = user?.email || 'elmer.chumbimune@petroamerica.com.pe'
+  const repo = useDocumentos({ usuario })
 
-export default function RepositorioDocumental({ setPantalla, rol }) {
-  // Vistas: 'menu', 'menu_subir', 'form_subir', 'visualizar'
-  const [vista, setVista] = useState('menu') 
-  
-  // Variable para saber si el usuario solo puede ver
-  const esSoloLectura = rol === 'auditor';
+  const [vista, setVista] = useState('biblioteca')
+  const [detalleId, setDetalleId] = useState(null)
+  const [confirmacion, setConfirmacion] = useState(null)
+  const [catFiltro, setCatFiltro] = useState(null)
 
-  // --- ESTADOS DEL FORMULARIO ---
-  const [categoria, setCategoria] = useState('')
-  const [archivo, setArchivo] = useState(null)
-  const [nombre, setNombre] = useState('')
-  const [descripcion, setDescripcion] = useState('')
-  const [tipoDoc, setTipoDoc] = useState('')
-  const [terminal, setTerminal] = useState('')
-  const [proveedor, setProveedor] = useState('')
-  const [producto, setProducto] = useState('')
-  const [version, setVersion] = useState('')
-  const [buscandoVersion, setBuscandoVersion] = useState(false)
-  const [subiendo, setSubiendo] = useState(false)
+  const puedeCargar = ['admin_sistema', 'jefe_pricing', 'analista_comercial'].includes(rol)
+  const puedeGestionar = ['admin_sistema', 'jefe_pricing'].includes(rol)
+  const puedeEliminar = rol === 'admin_sistema'
 
-  // --- ESTADOS PARA CATÁLOGOS ---
-  const [listaPlantas, setListaPlantas] = useState([])
-  const [listaProveedores, setListaProveedores] = useState([])
-  const [listaProductos, setListaProductos] = useState([])
+  const activos = useMemo(() => repo.documentos.filter(d => !d.eliminado), [repo.documentos])
+  const papelera = useMemo(() => repo.documentos.filter(d => d.eliminado), [repo.documentos])
+  const bytes = useMemo(() => activos.reduce((s, d) => s + (d.tamano_bytes || 0), 0), [activos])
+  const usoPct = Math.min(100, (bytes / CAPACIDAD_BYTES) * 100)
+  const detalle = useMemo(() => repo.documentos.find(d => d.id === detalleId) || null, [repo.documentos, detalleId])
 
-  // --- ESTADOS PARA VISUALIZAR Y FILTROS ---
-  const [documentos, setDocumentos] = useState([])
-  const [docSeleccionado, setDocSeleccionado] = useState(null)
-  const [cargandoDocs, setCargandoDocs] = useState(false)
-  
-  const [filtroTexto, setFiltroTexto] = useState('')
-  const [filtroTipoDoc, setFiltroTipoDoc] = useState('Todos')
-  const [filtroTerminal, setFiltroTerminal] = useState('Todas')
-  const [filtroProveedor, setFiltroProveedor] = useState('Todos')
+  const conteos = {
+    biblioteca: activos.length, carga: null, categorias: repo.categorias.length,
+    estadisticas: null, papelera: papelera.length, auditoria: repo.auditoria.length,
+  }
 
-  // --- EFECTOS ---
+  const volver = useCallback(() => {
+    if (typeof setPantalla === 'function') setPantalla('')
+    else window.history.back()
+  }, [setPantalla])
+
+  const abrir = useCallback(id => setDetalleId(id), [])
+  const verCategoria = useCallback(id => { setCatFiltro(id); setVista('biblioteca'); toast.success('Categoría aplicada en la biblioteca') }, [])
+
   useEffect(() => {
-    async function cargarCatalogos() {
-      const [resPlantas, resProv, resProd] = await Promise.all([
-        supabase.from('plantas').select('nombre, codigo').eq('activo', true).order('nombre'),
-        supabase.from('proveedores').select('codigo, nombre').eq('activo', true).order('nombre'),
-        supabase.from('productos').select('codigo, nombre').eq('activo', true).order('codigo')
-      ])
-      if (resPlantas.data) setListaPlantas(resPlantas.data)
-      if (resProv.data) setListaProveedores(resProv.data)
-      if (resProd.data) setListaProductos(resProd.data)
-    }
-    cargarCatalogos()
+    if (detalleId && !repo.documentos.some(d => d.id === detalleId)) setDetalleId(null)
+  }, [repo.documentos, detalleId])
 
-    if (vista === 'visualizar') {
-      cargarDocumentos()
-    }
-  }, [vista])
+  return (
+    <div className="rd-app">
+      <Estilos />
+      <Fondo />
 
-  // --- LÓGICA DE AUTO-VERSIONADO ---
-  const handleTipoGuiaChange = async (e) => {
-    const nuevoTipo = e.target.value;
-    setTipoDoc(nuevoTipo);
-    
-    if (!nuevoTipo) {
-      setVersion('');
-      return;
-    }
-
-    setBuscandoVersion(true);
-    try {
-      const { data, error } = await supabase
-        .from('documentos')
-        .select('version')
-        .eq('categoria', 'Guías')
-        .eq('tipo_documento', nuevoTipo)
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (error) throw error;
-
-      if (data && data.length > 0 && data[0].version) {
-        const versionStr = data[0].version.replace(/[^0-9.]/g, '');
-        const partes = versionStr.split('.');
-        
-        let major = parseInt(partes[0]) || 1;
-        let minor = parseInt(partes[1]) || 0;
-
-        minor += 1;
-        if (minor >= 10) {
-          major += 1;
-          minor = 0;
-        }
-
-        setVersion(`V${major}.${minor}`);
-      } else {
-        setVersion('V1.0');
-      }
-    } catch (error) {
-      console.error("Error al calcular versión:", error);
-      setVersion('V1.0');
-    } finally {
-      setBuscandoVersion(false);
-    }
-  };
-
-  async function cargarDocumentos() {
-    setCargandoDocs(true)
-    const { data, error } = await supabase
-      .from('documentos')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (error) toast.error('Error al cargar documentos')
-    else {
-      setDocumentos(data || [])
-      if (data && data.length > 0) setDocSeleccionado(data[0])
-    }
-    setCargandoDocs(false)
-  }
-
-  const manejarSeleccionArchivo = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('El archivo supera el límite de 10MB')
-      e.target.value = ''
-      return
-    }
-    setArchivo(file)
-  }
-
-  async function handleSubir(e) {
-    e.preventDefault()
-    if (!archivo) return toast.error('Selecciona un archivo')
-    if (!tipoDoc) return toast.error('Selecciona el tipo de documento')
-    
-    setSubiendo(true)
-    try {
-      const fileExt = archivo.name.split('.').pop()
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`
-      const filePath = `${categoria}/${fileName}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('documentos_sigmo')
-        .upload(filePath, archivo)
-
-      if (uploadError) throw uploadError
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('documentos_sigmo')
-        .getPublicUrl(filePath)
-
-      const { data: { user } } = await supabase.auth.getUser()
-
-      const { error: dbError } = await supabase
-        .from('documentos')
-        .insert({
-          nombre: nombre.trim() || archivo.name,
-          categoria,
-          tipo_documento: tipoDoc,
-          terminal: terminal || null,
-          proveedor: proveedor || null,
-          producto: producto || null,
-          version: version || null,
-          descripcion: descripcion.trim(),
-          url: publicUrl,
-          subido_por: user.id
-        })
-
-      if (dbError) throw dbError
-
-      toast.success('Documento subido correctamente')
-      // Limpiar formulario
-      setArchivo(null); setNombre(''); setDescripcion(''); setTipoDoc(''); setTerminal(''); setProveedor(''); setProducto(''); setVersion('');
-      setVista('visualizar')
-    } catch (error) {
-      toast.error('Error: ' + (error.message || 'Inténtalo de nuevo'))
-    } finally {
-      setSubiendo(false)
-    }
-  }
-
-  const iniciarSubida = (cat) => {
-    setCategoria(cat)
-    setVista('form_subir')
-  }
-
-  // Función para renderizar el Header Común
-  const renderHeader = () => (
-    <header style={{ padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-        {vista === 'menu' ? (
-          <button onClick={() => setPantalla('')} style={btnHeaderStyle}>← SIGMO</button>
-        ) : (
-          <button onClick={() => setVista('menu')} style={btnHeaderStyle}>← Volver al Menú</button>
-        )}
-        <h1 style={{ margin: 0, color: 'var(--primary-blue)', fontSize: '28px', fontWeight: '900' }}>
-          {vista === 'menu' ? 'Repositorio Documental' : 'Gestión de Archivos'}
-        </h1>
-      </div>
-      <button onClick={() => setPantalla('cambiar-password')} style={btnHeaderStyle}>
-        Mi Perfil
-      </button>
-    </header>
-  )
-
-  // --- VISTA 1: MENÚ PRINCIPAL (TARJETAS) ---
-  if (vista === 'menu') {
-    return (
-      <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
-        {renderHeader()}
-        <main style={{ flex: 1, padding: '40px 20px', maxWidth: '1100px', margin: '0 auto', width: '100%' }}>
-          <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-            <h2 style={{ color: 'var(--text-dark)', fontSize: '24px', marginBottom: '10px' }}>¿Qué deseas hacer hoy?</h2>
-            <p style={{ color: 'var(--text-light)', fontSize: '15px' }}>Selecciona una opción para comenzar</p>
+      <header className="rd-top">
+        <div className="rd-top-in">
+          <button className="rd-volver" onClick={volver}>← SIGMO</button>
+          <div className="rd-marca">
+            <div className="rd-sello">📁</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 10, letterSpacing: 1.6, textTransform: 'uppercase', color: '#9FE3F5', fontWeight: 800 }}>
+                Módulo 2 · Acervo controlado
+              </div>
+              <h1 style={{ margin: '1px 0 0', fontSize: 20, fontWeight: 900, color: '#fff', letterSpacing: -.4, lineHeight: 1.15 }}>
+                Repositorio Documental
+              </h1>
+            </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '25px' }}>
-            {/* Tarjeta Visualizar */}
-            <div 
-              onClick={() => setVista('visualizar')} 
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--primary-blue)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.transform = 'translateY(0)'; }}
-              style={cardStyle}
-            >
-              <div style={{ fontSize: '60px', marginBottom: '15px' }}>📂</div>
-              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Visualizar Documentos</h3>
-              <p style={{ color: 'var(--text-light)', fontSize: '13px', margin: 0 }}>Explora el repositorio con visor integrado.</p>
-            </div>
-
-            {/* Tarjeta Subir (Oculta si es auditor) */}
-            {!esSoloLectura && (
-              <div 
-                onClick={() => setVista('menu_subir')} 
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--primary-blue)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                style={cardStyle}
-              >
-                <div style={{ fontSize: '60px', marginBottom: '15px' }}>📤</div>
-                <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Subir Documento</h3>
-                <p style={{ color: 'var(--text-light)', fontSize: '13px', margin: 0 }}>Añade archivos técnicos, operativos o guías.</p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginLeft: 'auto' }}>
+            <Insignia color={repo.modo === 'supabase' ? PALETA.lima : PALETA.ambar} solido style={{ fontSize: 10.5, padding: '5px 11px' }}>
+              {repo.modo === 'supabase' ? '● SUPABASE ACTIVO' : '● MODO LOCAL'}
+            </Insignia>
+            <div className="rd-medidor">
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: '#BFE2F0', fontWeight: 700 }}>
+                <span>Almacenamiento</span><span style={{ color: '#fff' }}>{formatearBytes(bytes)} / 512 MB</span>
               </div>
+              <div className="rd-medidor-bar"><div className="rd-medidor-fill" style={{ width: `${Math.max(2, usoPct)}%` }} /></div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 11px 5px 6px', borderRadius: 99, background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)' }}>
+              <span style={{ width: 28, height: 28, borderRadius: '50%', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 900, color: PALETA.tinta, background: `linear-gradient(135deg,${PALETA.lima},${PALETA.cyan})` }}>{iniciales(usuario)}</span>
+              <span style={{ fontSize: 11.5, color: '#EAF4FA', fontWeight: 700, maxWidth: 168, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{usuario.split('@')[0]}</span>
+            </div>
+            <Boton tamano="sm" variante="gh" icono="⟳" onClick={() => { repo.recargar(); toast.success('Repositorio sincronizado') }}>Sincronizar</Boton>
+            {puedeCargar && vista !== 'carga' && (
+              <Boton tamano="sm" icono="📤" onClick={() => setVista('carga')} style={{ background: `linear-gradient(100deg,${PALETA.ambar},#D97706)`, color: '#fff' }}>Publicar</Boton>
             )}
           </div>
-        </main>
-      </div>
-    )
-  }
+        </div>
+      </header>
 
-  // --- VISTA 2: SUBMENÚ CATEGORÍAS ---
-  if (vista === 'menu_subir') {
-    return (
-      <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
-        {renderHeader()}
-        <main style={{ flex: 1, padding: '40px 20px', maxWidth: '1100px', margin: '0 auto', width: '100%' }}>
-          <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-            <h2 style={{ color: 'var(--text-dark)', fontSize: '24px', marginBottom: '10px' }}>¿Qué documento vas a subir?</h2>
-            <p style={{ color: 'var(--text-light)', fontSize: '15px' }}>Selecciona la categoría</p>
-          </div>
+      <div className="rd-cuerpo">
+        <nav className="rd-rail" aria-label="Secciones del repositorio">
+          {NAV.map(n => (
+            <button key={n.id} className={`rd-nav ${vista === n.id ? 'on' : ''}`} onClick={() => setVista(n.id)}>
+              <span style={{ fontSize: 16 }}>{n.icono}</span><span>{n.label}</span>
+              {conteos[n.id] !== null && <span className="n">{conteos[n.id]}</span>}
+            </button>
+          ))}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
-            <div onClick={() => iniciarSubida('Técnicos')} style={cardStyle}>
-              <div style={{ fontSize: '40px', marginBottom: '15px' }}>⚙️</div>
-              <h4 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Documentos Técnicos</h4>
-              <p style={{ color: 'var(--text-light)', fontSize: '13px', margin: 0 }}>Certificados, fichas técnicas.</p>
-            </div>
-            <div onClick={() => iniciarSubida('Operativos')} style={cardStyle}>
-              <div style={{ fontSize: '40px', marginBottom: '15px' }}>📋</div>
-              <h4 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Documentos Operativos</h4>
-              <p style={{ color: 'var(--text-light)', fontSize: '13px', margin: 0 }}>Inducción, registros, criterios.</p>
-            </div>
-            <div onClick={() => iniciarSubida('Guías')} style={cardStyle}>
-              <div style={{ fontSize: '40px', marginBottom: '15px' }}>🚚</div>
-              <h4 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Guías</h4>
-              <p style={{ color: 'var(--text-light)', fontSize: '13px', margin: 0 }}>Guías de remisión, manuales.</p>
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${PALETA.borde}` }}>
+            <div className="rd-lab" style={{ padding: '0 4px 7px' }}>Estado del acervo</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '0 4px' }}>
+              <Linea etiqueta="Vigentes" valor={activos.filter(d => d.vigente).length} color={PALETA.exito} />
+              <Linea etiqueta="Obsoletos" valor={activos.filter(d => !d.vigente).length} color={PALETA.suave} />
+              <Linea etiqueta="Destacados" valor={activos.filter(d => d.destacado).length} color={PALETA.ambar} />
+              <Linea etiqueta="Versiones" valor={repo.versiones.length} color={PALETA.violeta} />
             </div>
           </div>
-        </main>
-      </div>
-    )
-  }
 
-  // --- VISTA 3: FORMULARIO DINÁMICO ---
-  if (vista === 'form_subir') {
-    return (
-      <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
-        {renderHeader()}
-        <main style={{ flex: 1, padding: '40px 20px', maxWidth: '800px', margin: '0 auto', width: '100%' }}>
-          <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-            <h2 style={{ color: 'var(--text-dark)', fontSize: '24px', marginBottom: '10px' }}>Subir {categoria}</h2>
-            <p style={{ color: 'var(--text-light)', fontSize: '15px' }}>Completa los metadatos del documento</p>
-          </div>
-
-          <Card>
-            <form onSubmit={handleSubir} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              
-              <div style={{ padding: '20px', border: archivo ? '2px solid var(--success-green)' : '2px dashed #cbd5e1', borderRadius: '8px', textAlign: 'center', cursor: 'pointer', backgroundColor: archivo ? '#f0fdf4' : '#f8fafc' }} onClick={() => document.getElementById('file-upload').click()}>
-                <input type="file" onChange={manejarSeleccionArchivo} style={{ display: 'none' }} id="file-upload" />
-                <div style={{ fontSize: '30px', marginBottom: '10px' }}>{archivo ? '✅' : '☁️'}</div>
-                <span style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>{archivo ? archivo.name : 'Haz clic para buscar tu archivo'}</span>
-              </div>
-
-              {categoria === 'Técnicos' && (
-                <>
-                  <Select label="Tipo de Documento" value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} required options={[
-                    { value: '', label: 'Seleccione...' },
-                    { value: 'Certificado de calidad', label: 'Certificado de Calidad' },
-                    { value: 'Ficha de datos de seguridad', label: 'Ficha de Datos de Seguridad' },
-                    { value: 'Ficha de especificación técnica', label: 'Ficha de Especificación Técnica' }
-                  ]} />
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                    <Select label="Terminal" value={terminal} onChange={(e) => setTerminal(e.target.value)} options={[
-                      { value: '', label: 'Todas' },
-                      ...listaPlantas.map(p => ({ value: p.nombre, label: p.nombre }))
-                    ]} />
-                    
-                    <Select label="Proveedor" value={proveedor} onChange={(e) => setProveedor(e.target.value)} options={[
-                      { value: '', label: 'Seleccione...' },
-                      ...listaProveedores.map(p => ({ value: `${p.codigo} - ${p.nombre}`, label: `${p.codigo} - ${p.nombre}` }))
-                    ]} />
-                  </div>
-
-                  <Select label="Producto" value={producto} onChange={(e) => setProducto(e.target.value)} options={[
-                    { value: '', label: 'Seleccione...' },
-                    ...listaProductos.map(p => ({ value: `${p.codigo} - ${p.nombre}`, label: `${p.codigo} - ${p.nombre}` }))
-                  ]} />
-                </>
-              )}
-
-              {categoria === 'Operativos' && (
-                <>
-                  <Select label="Tipo de Documento" value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)} required options={[
-                    { value: '', label: 'Seleccione...' },
-                    { value: 'Documentos para inducción de conductores', label: 'Inducción de conductores' },
-                    { value: 'Documentos para el registro de unidades', label: 'Registro de unidades' },
-                    { value: 'Documentos para el registro de unidades y conductores por proveedor', label: 'Registro de unidades y conductores por proveedor' },
-                    { value: 'Criterios de carga por terminal', label: 'Criterios de carga por terminal' }
-                  ]} />
-                  <Select label="Terminal" value={terminal} onChange={(e) => setTerminal(e.target.value)} options={[
-                    { value: '', label: 'Todas' },
-                    ...listaPlantas.map(p => ({ value: p.nombre, label: p.nombre }))
-                  ]} />
-                </>
-              )}
-
-              {categoria === 'Guías' && (
-                <>
-                  <Select 
-                    label="Tipo de Guía" 
-                    value={tipoDoc} 
-                    onChange={handleTipoGuiaChange} 
-                    required 
-                    options={[
-                      { value: '', label: 'Seleccione una guía...' },
-                      { value: 'Guía para la Solicitud de Códigos de Anulación de Facturas', label: 'Guía para la Solicitud de Códigos de Anulación de Facturas' },
-                      { value: 'Guía de uso – Generación de pedidos en el aplicativo', label: 'Guía de uso – Generación de pedidos en el aplicativo' },
-                      { value: 'Guía de Procedimiento para la Emisión de la GRE en el Portal SUNAT', label: 'Guía de Procedimiento para la Emisión de la GRE en el Portal SUNAT' },
-                      { value: 'Guía para informe de levantamiento de observación - Terminal Pampilla', label: 'Guía para informe de levantamiento de observación - Terminal Pampilla' },
-                      { value: 'Guía Básica del SCOP', label: 'Guía Básica del SCOP' },
-                      { value: 'Guía de procedimiento para anular un SCOP entre mayoristas en la plataforma virtual de Osinergmin', label: 'Guía de procedimiento para anular un SCOP entre mayoristas en la plataforma virtual de Osinergmin' }
-                    ]} 
-                  />
-                  
-                  <Input 
-                    label={buscandoVersion ? "Calculando versión..." : "Versión (Autocalculada)"} 
-                    value={buscandoVersion ? "..." : version} 
-                    readOnly 
-                    placeholder="Se calculará automáticamente"
-                    style={{ backgroundColor: '#f3f4f6', cursor: 'not-allowed' }}
-                  />
-                </>
-              )}
-
-              <Input label="Nombre visible del archivo (Opcional)" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Si se deja vacío, se usará el nombre del archivo" />
-              <Input label="Descripción breve (Opcional)" value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Ej. Documento válido para el mes de Octubre" />
-
-              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                <Boton variante="outline" onClick={() => setVista('menu_subir')} style={{ flex: 1 }} disabled={subiendo}>Cancelar</Boton>
-                <Boton tipo="submit" variante="primary" disabled={subiendo || !archivo || buscandoVersion} style={{ flex: 2 }}>
-                  {subiendo ? 'Subiendo...' : 'Confirmar y Subir'}
-                </Boton>
-              </div>
-            </form>
-          </Card>
-        </main>
-      </div>
-    )
-  }
-
-  // --- VISTA 4: VISOR DE DOCUMENTOS Y FILTROS ---
-  if (vista === 'visualizar') {
-    const docsFiltrados = documentos.filter(d => {
-      const coincideTexto = d.nombre.toLowerCase().includes(filtroTexto.toLowerCase()) || 
-                            (d.tipo_documento && d.tipo_documento.toLowerCase().includes(filtroTexto.toLowerCase()));
-      const coincideTipo = filtroTipoDoc === 'Todos' || d.tipo_documento === filtroTipoDoc;
-      const coincideTerminal = filtroTerminal === 'Todas' || d.terminal === filtroTerminal;
-      const coincideProveedor = filtroProveedor === 'Todos' || d.proveedor === filtroProveedor;
-      
-      return coincideTexto && coincideTipo && coincideTerminal && coincideProveedor;
-    });
-
-    const tiposUnicos = ['Todos', ...new Set(documentos.map(d => d.tipo_documento).filter(Boolean))];
-    const terminalesUnicas = ['Todas', ...new Set(documentos.map(d => d.terminal).filter(Boolean))];
-    const proveedoresUnicos = ['Todos', ...new Set(documentos.map(d => d.proveedor).filter(Boolean))];
-
-    return (
-      <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)', display: 'flex', flexDirection: 'column' }}>
-        {renderHeader()}
-        <main style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          
-          <div style={{ display: 'flex', gap: '20px', flex: 1, overflow: 'hidden' }}>
-            {/* Panel Izquierdo: Filtros y Lista */}
-            <div style={{ width: '450px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <Input placeholder="🔍 Buscar por nombre o descripción..." value={filtroTexto} onChange={(e) => setFiltroTexto(e.target.value)} label={null} />
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <Select value={filtroTipoDoc} onChange={(e) => setFiltroTipoDoc(e.target.value)} label={null} options={tiposUnicos.map(t => ({ value: t, label: t }))} />
-                <Select value={filtroTerminal} onChange={(e) => setFiltroTerminal(e.target.value)} label={null} options={terminalesUnicas.map(t => ({ value: t, label: t }))} />
-              </div>
-              <Select value={filtroProveedor} onChange={(e) => setFiltroProveedor(e.target.value)} label={null} options={proveedoresUnicos.map(p => ({ value: p, label: p }))} />
-              
-              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '5px' }}>
-                {cargandoDocs ? (
-                  <p style={{ textAlign: 'center', color: 'var(--text-light)' }}>Cargando...</p>
-                ) : docsFiltrados.length === 0 ? (
-                  <p style={{ textAlign: 'center', color: 'var(--text-light)' }}>No hay documentos que coincidan con los filtros.</p>
-                ) : (
-                  docsFiltrados.map(doc => (
-                    <Card 
-                      key={doc.id} 
-                      style={{ 
-                        padding: '15px', 
-                        cursor: 'pointer', 
-                        border: docSeleccionado?.id === doc.id ? '2px solid var(--primary-blue)' : '1px solid #eee',
-                        backgroundColor: docSeleccionado?.id === doc.id ? '#eff6ff' : 'white',
-                        position: 'relative'
-                      }}
-                      onClick={() => setDocSeleccionado(doc)}
-                    >
-                      <div style={{ display: 'flex', gap: '15px' }}>
-                        <div style={{ fontSize: '30px' }}>📄</div>
-                        <div style={{ flex: 1 }}>
-                          <h4 style={{ margin: '0 0 5px 0', color: 'var(--text-dark)', fontSize: '15px' }}>{doc.nombre}</h4>
-                          <p style={{ margin: 0, fontSize: '13px', color: 'var(--primary-blue)', fontWeight: 'bold' }}>
-                            {doc.tipo_documento} {doc.version ? `(${doc.version})` : ''}
-                          </p>
-                          
-                          <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-light)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            {doc.terminal && <span>🏭 Terminal: {doc.terminal}</span>}
-                            {doc.proveedor && <span>🏢 Proveedor: {doc.proveedor}</span>}
-                            <span>📅 Emisión: {new Date(doc.created_at).toLocaleDateString()}</span>
-                          </div>
-
-                          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                            <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-blue)', textDecoration: 'none', fontSize: '16px' }} title="Ver documento">👁️</a>
-                            <a href={doc.url} download target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-blue)', textDecoration: 'none', fontSize: '16px' }} title="Descargar">📥</a>
-                          </div>
-                        </div>
-                        <div style={{ position: 'absolute', top: '15px', right: '15px', backgroundColor: '#DCFCE7', color: '#166534', padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
-                          Activo
-                        </div>
-                      </div>
-                    </Card>
-                  ))
-                )}
-              </div>
+          {repo.modo === 'local' && (
+            <div style={{ marginTop: 10, padding: 11, borderRadius: 12, background: mezclarHex(PALETA.ambar, .12), border: `1px solid ${mezclarHex(PALETA.ambar, .35)}` }}>
+              <div style={{ fontSize: 11, fontWeight: 900, color: '#92400E', marginBottom: 5 }}>⚡ Modo local activo</div>
+              <p style={{ margin: '0 0 9px', fontSize: 10.8, color: '#92400E', lineHeight: 1.55 }}>
+                Operando con el acervo precargado y persistencia en este navegador. Ejecuta
+                <code style={{ background: 'rgba(255,255,255,.6)', padding: '1px 4px', borderRadius: 4, margin: '0 3px' }}>database/02_repositorio_documental.sql</code>
+                en Supabase para conectar el almacenamiento real.
+              </p>
+              <Boton tamano="sm" variante="gh" onClick={repo.reiniciarDemo} style={{ width: '100%' }}>Restaurar acervo</Boton>
             </div>
+          )}
+        </nav>
 
-            {/* Panel Derecho: Visor PDF */}
-            <div style={{ flex: 1, backgroundColor: '#525659', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
-              {docSeleccionado ? (
-                <>
-                  <div style={{ padding: '10px 20px', backgroundColor: '#323639', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{docSeleccionado.nombre} {docSeleccionado.version ? `- ${docSeleccionado.version}` : ''}</span>
-                    <div style={{ display: 'flex', gap: '15px' }}>
-                      <a href={docSeleccionado.url} download target="_blank" rel="noopener noreferrer" style={{ color: 'white', textDecoration: 'none', fontSize: '13px' }}>📥 Descargar</a>
-                      <a href={docSeleccionado.url} target="_blank" rel="noopener noreferrer" style={{ color: 'white', textDecoration: 'underline', fontSize: '13px' }}>Abrir ↗</a>
-                    </div>
-                  </div>
-                  <iframe src={`${docSeleccionado.url}#toolbar=0&navpanes=0`} style={{ flex: 1, width: '100%', border: 'none' }} title="Visor PDF" />
-                </>
-              ) : (
-                <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white', flexDirection: 'column' }}>
-                  <div style={{ fontSize: '60px', marginBottom: '15px' }}>👁️</div>
-                  <h3>Ningún documento seleccionado</h3>
-                  <p style={{ opacity: 0.7 }}>Selecciona un documento de la izquierda para visualizarlo</p>
-                </div>
-              )}
-            </div>
-          </div>
+        <main style={{ minWidth: 0 }}>
+          {vista === 'biblioteca' && (
+            <BibliotecaDocumental key={catFiltro || 'todas'} repo={repo} onAbrir={abrir}
+              onIrCarga={() => setVista('carga')} puedeCargar={puedeCargar} categoriaInicial={catFiltro} />
+          )}
+          {vista === 'carga' && (
+            <CargaDocumental repo={repo} puedeCargar={puedeCargar} onPublicado={() => { setCatFiltro(null); setVista('biblioteca') }} />
+          )}
+          {vista === 'categorias' && (
+            <GestorCategorias repo={repo} puedeGestionar={puedeGestionar} onVerCategoria={verCategoria} />
+          )}
+          {vista === 'estadisticas' && <PanelEstadisticas repo={repo} onAbrir={abrir} />}
+          {vista === 'papelera' && <PapeleraDocumental repo={repo} puedeEliminar={puedeEliminar} onConfirmar={setConfirmacion} />}
+          {vista === 'auditoria' && <AuditoriaDocumental repo={repo} onAbrir={abrir} />}
         </main>
       </div>
-    )
-  }
+
+      {detalle && <DetalleDocumento doc={detalle} repo={repo} puedeGestionar={puedeGestionar} onCerrar={() => setDetalleId(null)} onConfirmar={setConfirmacion} />}
+      <Confirmar estado={confirmacion} onCerrar={() => setConfirmacion(null)} />
+    </div>
+  )
+}
+
+function Linea({ etiqueta, valor, color }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5 }}>
+      <span style={{ width: 8, height: 8, borderRadius: 3, background: color, flex: 'none' }} />
+      <span style={{ color: PALETA.suave, fontWeight: 600, flex: 1 }}>{etiqueta}</span>
+      <span style={{ color: PALETA.tinta, fontWeight: 900 }}>{valor}</span>
+    </div>
+  )
 }
