@@ -55,14 +55,15 @@ const celdaExcel = (it) => {
 
 const AZUL = 'var(--primary-blue, #0B5FA5)'
 const VERDE = '#059669'
-const selectStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #334155', fontSize: '13px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold', boxSizing: 'border-box' }
-const labelStyle = { display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px', color: 'var(--text-dark, #111827)' }
+const ALTO_CONTROL = '42px'
+const selectStyle = { width: '100%', height: ALTO_CONTROL, padding: '0 10px', borderRadius: '8px', border: '1px solid #334155', fontSize: '13px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold', boxSizing: 'border-box' }
+const labelStyle = { display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px', color: 'var(--text-dark, #111827)', lineHeight: '16px' }
 
 // Campo fijo de solo lectura (las listas NO se seleccionan manualmente)
 const campoFijoStyle = {
   width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #334155',
   fontSize: '13px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold',
-  boxSizing: 'border-box', minHeight: '42px', display: 'flex', alignItems: 'center', gap: '8px',
+  boxSizing: 'border-box', minHeight: ALTO_CONTROL, display: 'flex', alignItems: 'center', gap: '8px',
   lineHeight: 1.3, wordBreak: 'break-word', cursor: 'default',
 }
 
@@ -115,7 +116,6 @@ export default function ComparadorPrecios({ archivos, archivosTopes, onVolver })
   // ----------------------------------------------------------
   // AUTOSELECCIÓN FIJA: Actual = más reciente, Previa = la anterior,
   // según la fecha del NOMBRE del archivo (Precios y Topes).
-  // El usuario no puede cambiarlas ni intercambiarlas.
   // ----------------------------------------------------------
   useEffect(() => {
     const ord = ordenarPorFecha(tipo === 'precios' ? archivos : archivosTopes)
@@ -345,17 +345,14 @@ export default function ComparadorPrecios({ archivos, archivosTopes, onVolver })
         </div>
 
         <Card style={{ padding: '30px', marginBottom: '20px' }}>
-          <p style={{ margin: '0 0 18px 0', fontSize: '12px', color: '#1e40af', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '8px 12px' }}>
-            ⚡ <strong>Selección automática (fija):</strong> «Lista Actual» es la más reciente y «Lista Previa» la inmediatamente anterior, según la fecha en el nombre del archivo (si no tiene fecha, se usa la de subida). Se actualiza sola al subir nuevas listas.
-          </p>
-
           {lista.length < 2 && (
             <p style={{ margin: '0 0 18px 0', fontSize: '13px', color: '#92400e', backgroundColor: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '8px', padding: '10px 12px', fontWeight: 'bold' }}>
               ⚠️ Se necesitan al menos dos {tipo === 'precios' ? 'listas de precios' : 'archivos de topes'} para comparar. Sube más archivos desde «Cargar Nueva Lista & Topes».
             </p>
           )}
 
-          <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          {/* Fila de controles alineados: etiquetas de igual altura + controles de 42px */}
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: '220px' }}>
               <label style={labelStyle}>Lista Previa</label>
               <div style={campoFijoStyle} title={fileBase?.nombre_archivo || ''}>
@@ -385,14 +382,17 @@ export default function ComparadorPrecios({ archivos, archivosTopes, onVolver })
               </div>
             )}
 
-            <Boton
-              variante="primary"
-              onClick={comparar}
-              disabled={cargando || lista.length < 2 || !idBase || !idNuevo || idBase === idNuevo}
-              style={{ height: '42px', backgroundColor: colorTipo }}
-            >
-              {cargando ? '⏳ Comparando...' : '⚖️ Comparar Ahora'}
-            </Boton>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={{ ...labelStyle, visibility: 'hidden' }}>Comparar</label>
+              <Boton
+                variante="primary"
+                onClick={comparar}
+                disabled={cargando || lista.length < 2 || !idBase || !idNuevo || idBase === idNuevo}
+                style={{ height: ALTO_CONTROL, backgroundColor: colorTipo }}
+              >
+                {cargando ? '⏳ Comparando...' : '⚖️ Comparar Ahora'}
+              </Boton>
+            </div>
           </div>
         </Card>
 
