@@ -56,6 +56,8 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   const [items, setItems] = useState([])
   const [numeroLote, setNumeroLote] = useState('')
   const [cliente, setCliente] = useState('')
+  const [rucCliente, setRucCliente] = useState('')
+  const [direccionCliente, setDireccionCliente] = useState('')
   const [aplicaPercepcion, setAplicaPercepcion] = useState(true)
   const [papelera, setPapelera] = useState(null)
   const [guardando, setGuardando] = useState(false)
@@ -310,6 +312,8 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         numero_cotizacion: numero,
         fecha_cotizacion: hoy,
         cliente: cliente || null,
+        ruc_cliente: rucCliente || null,
+        direccion_cliente: direccionCliente || null,
         planta: it.planta,
         almacen: it.almacen,
         producto: it.producto,
@@ -339,11 +343,11 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   }
 
   // ----------------------------------------------------------
-  // PDF de toda la cotización (SIN columna Almacén)
+  // PDF profesional de toda la cotización
   // ----------------------------------------------------------
   const generarPDFLote = () => {
     if (itemsDerivados.length === 0) return toast.error('Agrega al menos un ítem a la cotización.')
-    const toastId = toast.loading('Generando PDF de la cotización...')
+    const toastId = toast.loading('Generando PDF profesional...')
     try {
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
       const W = doc.internal.pageSize.getWidth()
@@ -352,18 +356,33 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       const fecha = new Date().toLocaleDateString('es-PE')
 
       const encabezado = () => {
+        // Header azul corporativo
         doc.setFillColor(0, 51, 160)
         doc.rect(0, 0, W, 26, 'F')
         doc.setFillColor(0, 174, 239)
         doc.rect(0, 26, W, 1.5, 'F')
+        
+        // Logo Petroamérica (si existe)
+        try {
+          const logoData = '/logo-p.png'
+          doc.addImage(logoData, 'PNG', 14, 8, 20, 20)
+        } catch (e) {
+          console.log('Logo no disponible')
+        }
+        
         doc.setTextColor(255, 255, 255)
         doc.setFontSize(16); doc.setFont(undefined, 'bold')
-        doc.text('SIGMO · Cotización de Combustibles', 14, 12)
+        doc.text('SIGMO · Cotización de Combustibles', 40, 12)
         doc.setFontSize(10); doc.setFont(undefined, 'normal')
-        doc.text(`N° ${numero}  ·  ${fecha}`, 14, 20)
+        doc.text(`N° ${numero}  ·  ${fecha}`, 40, 20)
+        
+        // Información del cliente
         doc.setFontSize(10)
         doc.text(`Cliente: ${cliente || '—'}`, W - 14, 12, { align: 'right' })
-        doc.text(`Percepción: ${aplicaPercepcion ? 'APLICADA (1%)' : 'NO aplicada'}`, W - 14, 20, { align: 'right' })
+        doc.text(`RUC: ${rucCliente || '—'}`, W - 14, 17, { align: 'right' })
+        doc.text(`Dirección: ${direccionCliente || '—'}`, W - 14, 22, { align: 'right' })
+        doc.text(`Percepción: ${aplicaPercepcion ? 'APLICADA (1%)' : 'NO aplicada'}`, W - 14, 27, { align: 'right' })
+        
         doc.setTextColor(40, 40, 40)
       }
       encabezado()
@@ -395,26 +414,47 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         didDrawPage: (d) => { if (d.pageNumber > 1) encabezado() },
       })
 
-      const yNota = (doc.lastAutoTable?.finalY || 40) + 8
-      doc.setFontSize(9); doc.setTextColor(110, 110, 110)
-      doc.text(
-        aplicaPercepcion
-          ? 'Precios con IGV incluidos. Percepción del 1% aplicada sobre el precio final de cada ítem.'
-          : 'Precios con IGV incluidos. Sin percepción aplicada.',
+      // Condiciones comerciales
+      const yCondiciones = (doc.lastAutoTable?.finalY || 40) + 15
+      doc.setFontSize(9); doc.setTextColor(40, 40, 40); doc.setFont(undefined, 'bold')
+      doc.text('CONDICIONES COMERCIALES:', 14, yCondiciones)
+      doc.setFont(undefined, 'normal')
+      doc.text('• Validez de cotización: 7 días hábiles', 14, yCondiciones + 5)
+      doc.text('• Pago: Contado / Crédito 30 días', 14, yCondiciones + 10)
+      doc.text('• Precios sujetos a variación sin previo aviso', 14, yCondiciones + 15)
+      doc.text('• Entrega según disponibilidad de stock', 14, yCondiciones + 20)
+
+      // Espacio para firma
+      const yFirma = H - 45
+      doc.line(14, yFirma, 100, yFirma)
+      doc.text('_________________________', 14, yFirma + 5)
+      doc.text('Gerente Comercial', 14, yFirma + 10)
+      
+      doc.line(W - 86, yFirma, W - 14, yFirma)
+      doc.text('_________________________', W - 86, yFirma + 5)
+      doc.text('Cliente', W - 86, yFirma + 10)
+
+      // Nota al pie
+      const yNota = yFirma - 10
+      doc.setFontSize(8); doc.setTextColor(100, 100, 100)
+      doc.text(aplicaPercepcion
+        ? 'Precios con IGV incluidos. Percepción del 1% aplicada sobre el precio final de cada ítem.'
+        : 'Precios con IGV incluidos. Sin percepción aplicada.',
         14, yNota
       )
-      doc.text(`${totales.count} ítem(s) en esta cotización.`, 14, yNota + 5)
+      doc.text(`${totales.count} ítem(s) en esta cotización.`, 14, yNota + 4)
 
+      // Footer corporativo
       const pageCount = doc.getNumberOfPages()
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i)
         doc.setFontSize(8); doc.setTextColor(130, 130, 130)
-        doc.text(`Página ${i} de ${pageCount}`, W - 14, H - 8, { align: 'right' })
-        doc.text('Documento generado por SIGMO · Precios, Topes & Cotización', 14, H - 8)
+        doc.text(`Página ${i} de ${pageCount} | Generado por SIGMO v1.0`, W - 14, H - 8, { align: 'right' })
+        doc.text('Petroamérica S.A.C. | Av. Principal 123, Lima | Tel: (01) 123-4567', 14, H - 8)
       }
 
-      doc.save(`Cotizacion_${numero}.pdf`)
-      toast.success('PDF de la cotización generado', { id: toastId })
+      doc.save(`Cotizacion_Profesional_${numero}.pdf`)
+      toast.success('PDF profesional generado', { id: toastId })
     } catch (error) {
       toast.error('Error al generar PDF: ' + error.message, { id: toastId })
     }
@@ -440,8 +480,8 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       <main style={{ padding: '30px 20px', maxWidth: '1400px', margin: '0 auto' }}>
         <Card style={{ padding: '15px 20px', marginBottom: '15px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', textAlign: 'left' }}>
           {cotCargandoDatos ? <p style={{ margin: 0, color: '#1e40af', fontWeight: 'bold' }}>⏳ Cargando archivos vigentes...</p>
-            : cotErrorDatos ? <div><p style={{ margin: '0 0 10px 0', color: '#991b1b', fontWeight: 'bold' }}>⚠️ {cotErrorDatos}</p><Boton variante="outline" tamano="sm" onClick={() => setCotKey(k => k + 1)}>🔄 Reintentar</Boton></div>
-            : cotDatos ? <p style={{ margin: 0, fontSize: '13px', color: '#1e40af' }}>📌 <strong>Fuentes:</strong> {cotDatos.precioNombre} | {cotDatos.topeNombre}</p> : null}
+            : cotErrorDatos ? <div><p style={{ margin: '0 0 10px 0', color: '#991b1b', fontWeight: 'bold' }}>️ {cotErrorDatos}</p><Boton variante="outline" tamano="sm" onClick={() => setCotKey(k => k + 1)}>🔄 Reintentar</Boton></div>
+            : cotDatos ? <p style={{ margin: 0, fontSize: '13px', color: '#1e40af' }}> <strong>Fuentes:</strong> {cotDatos.precioNombre} | {cotDatos.topeNombre}</p> : null}
         </Card>
 
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -452,7 +492,6 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
                 {editingIndex !== null ? `✏️ Editando ítem #${editingIndex + 1}` : ' Cotizar'}
               </h2>
               
-              {/* CAMPOS OCULTOS - Hoja de Precio y Columna Tope */}
               <div style={{ display: 'none' }}>
                 <div>{HOJA_PRECIO_COTIZACION}</div>
                 <div>{cotColTope}</div>
@@ -487,7 +526,6 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
               </div>
             </Card>
 
-            {/* Desglose en vivo del ítem en curso */}
             <Card style={{ padding: '20px' }}>
               <h3 style={{ margin: '0 0 12px', color: AZUL, fontSize: '16px' }}>📊 Desglose de la cotización en curso</h3>
               {previewEnriquecido ? (
@@ -515,7 +553,12 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px', alignItems: 'end', marginBottom: '15px' }}>
-                <div><label style={labelStyle}>Cliente (aplica a toda la cotización)</label><input type="text" value={cliente} onChange={e => setCliente(e.target.value)} placeholder="Nombre del cliente" style={inputStyle} /></div>
+                <div>
+                  <label style={labelStyle}>Cliente (aplica a toda la cotización)</label>
+                  <input type="text" value={cliente} onChange={e => setCliente(e.target.value)} placeholder="Nombre del cliente" style={{ ...inputStyle, marginBottom: '8px' }} />
+                  <input type="text" value={rucCliente} onChange={e => setRucCliente(e.target.value)} placeholder="RUC del cliente" style={inputStyle} />
+                  <input type="text" value={direccionCliente} onChange={e => setDireccionCliente(e.target.value)} placeholder="Dirección del cliente" style={{ ...inputStyle, marginTop: '8px' }} />
+                </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 'bold', color: '#92400e', fontSize: '13px', backgroundColor: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '8px', padding: '10px 12px' }}>
                   <input type="checkbox" checked={aplicaPercepcion} onChange={e => setAplicaPercepcion(e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
                   Percepción (1%) × 1.01
@@ -524,7 +567,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
 
               {itemsDerivados.length === 0 ? (
                 <div style={{ padding: '40px 20px', textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #d1d5db' }}>
-                  <div style={{ fontSize: '44px', marginBottom: '10px' }}>️</div>
+                  <div style={{ fontSize: '44px', marginBottom: '10px' }}>🗂️</div>
                   <h3 style={{ margin: '0 0 6px', color: 'var(--text-dark)' }}>La cotización está vacía</h3>
                   <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-light)' }}>Configura un ítem a la izquierda y pulsa «Agregar a la cotización». Puedes acumular varias cotizaciones y guardarlas o exportarlas juntas.</p>
                 </div>
@@ -555,7 +598,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
                           <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 'bold', color: it.total > 0 ? '#059669' : '#6b7280', fontSize: '14px' }}>{it.total > 0 ? it.total.toFixed(2) : '—'}</td>
                           <td style={{ padding: '8px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                             <button onClick={() => editarItem(i)} title="Editar" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px' }}>✏️</button>
-                            <button onClick={() => eliminarItem(i)} title="Eliminar" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px' }}>️</button>
+                            <button onClick={() => eliminarItem(i)} title="Eliminar" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px' }}>🗑️</button>
                           </td>
                         </tr>
                       ))}
@@ -574,12 +617,12 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
 
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '18px' }}>
                 <Boton variante="success" onClick={guardarLote} disabled={guardando || itemsDerivados.length === 0}>{guardando ? '⏳ Guardando...' : `💾 Guardar Cotización en Historial (${totales.count})`}</Boton>
-                <Boton variante="primary" onClick={generarPDFLote} disabled={itemsDerivados.length === 0}>📄 Generar PDF de cotización</Boton>
-                <Boton variante="outline" onClick={vaciarLote} disabled={itemsDerivados.length === 0}> Vaciar</Boton>
+                <Boton variante="primary" onClick={generarPDFLote} disabled={itemsDerivados.length === 0}> Generar PDF Profesional</Boton>
+                <Boton variante="outline" onClick={vaciarLote} disabled={itemsDerivados.length === 0}>🧹 Vaciar</Boton>
                 {papelera && <Boton variante="outline" onClick={deshacer}>↩️ Deshacer</Boton>}
               </div>
               <p style={{ margin: '12px 0 0', fontSize: '12px', color: 'var(--text-light)' }}>
-                El PDF y el guardado incluyen <strong>todos los ítems de la cotización</strong> con un mismo número. La percepción se aplica a toda la cotización y recalcula los totales al instante.
+                El PDF profesional incluye logo corporativo, condiciones comerciales y espacio para firmas. La percepción se aplica a toda la cotización y recalcula los totales al instante.
               </p>
             </Card>
           </div>
