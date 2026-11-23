@@ -75,7 +75,8 @@ export default function VisualizadorPrecios({ archivos, archivosTopes, puedeGest
     boxShadow: activo ? '0 2px 6px rgba(0,0,0,0.15)' : 'none',
   })
 
-  const thStyle = { padding: '15px', color: 'white' }
+  const thStyle = { padding: '15px', color: 'white', textAlign: 'center' }
+  const tdStyle = { padding: '15px', textAlign: 'center', color: '#374151' }
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
@@ -103,8 +104,8 @@ export default function VisualizadorPrecios({ archivos, archivosTopes, puedeGest
               <tr>
                 <th style={thStyle}>Fecha de registro</th>
                 <th style={thStyle}>NOMBRE</th>
-                <th style={{ ...thStyle, textAlign: 'center' }}>ESTADO</th>
-                <th style={{ ...thStyle, textAlign: 'center' }}>ACCIONES</th>
+                <th style={thStyle}>ESTADO</th>
+                <th style={thStyle}>ACCIONES</th>
               </tr>
             </thead>
             <tbody>
@@ -118,14 +119,14 @@ export default function VisualizadorPrecios({ archivos, archivosTopes, puedeGest
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f9ff'}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = f.es_vigente ? '#ecfdf5' : 'white'}
                 >
-                  <td style={{ padding: '15px', color: '#374151' }}>{new Date(f.created_at).toLocaleDateString()}</td>
-                  <td style={{ padding: '15px', fontWeight: 'bold', color: '#111827' }}>{subVista === 'precios' ? '📄' : ''} {f.nombre_archivo}</td>
-                  <td style={{ padding: '15px', textAlign: 'center' }}>{f.es_vigente ? <span style={{ color: '#166534', fontWeight: 'bold' }}>VIGENTE</span> : 'HISTÓRICO'}</td>
-                  <td style={{ padding: '15px', textAlign: 'center' }}>
+                  <td style={tdStyle}>{new Date(f.created_at).toLocaleDateString()}</td>
+                  <td style={{ ...tdStyle, fontWeight: 'bold', color: '#111827' }}>{subVista === 'precios' ? '📄' : '📊'} {f.nombre_archivo}</td>
+                  <td style={tdStyle}>{f.es_vigente ? <span style={{ color: '#166534', fontWeight: 'bold' }}>VIGENTE</span> : 'HISTÓRICO'}</td>
+                  <td style={tdStyle}>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                      <Boton variante="outline" tamano="sm" onClick={() => verComoPDF(f)} title="Ver como PDF">️</Boton>
+                      <Boton variante="outline" tamano="sm" onClick={() => verComoPDF(f)} title="Ver como PDF">👁️</Boton>
                       {puedeGestionar && !f.es_vigente && <Boton variante="success" tamano="sm" onClick={() => onMarcarVigente(f.id, f.nombre_archivo, subVista)} title="Marcar como vigente">✅</Boton>}
-                      {puedeGestionar && <Boton variante="danger" tamano="sm" onClick={() => { setArchivoAEliminar({ ...f, tipo: subVista }); setModalEliminarAbierto(true) }} title="Eliminar">️</Boton>}
+                      {puedeGestionar && <Boton variante="danger" tamano="sm" onClick={() => { setArchivoAEliminar({ ...f, tipo: subVista }); setModalEliminarAbierto(true) }} title="Eliminar">🗑️</Boton>}
                     </div>
                   </td>
                 </tr>
