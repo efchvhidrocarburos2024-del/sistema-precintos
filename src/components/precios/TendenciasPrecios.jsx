@@ -78,26 +78,29 @@ export default function TendenciasPrecios({ filtros }) {
 
   if (cargando) {
     return (
-      <div style={{ 
-        padding: '60px 20px', 
-        textAlign: 'center',
-        background: `linear-gradient(135deg, ${PALETA.grisClaro} 0%, ${PALETA.blanco} 100%)`,
-        borderRadius: '16px',
-        border: `1px solid ${PALETA.grisMedio}`,
-      }}>
+      <>
+        <style>{'@keyframes spin { to { transform: rotate(360deg); } }'}</style>
         <div style={{
-          width: '48px',
-          height: '48px',
-          borderRadius: '50%',
-          border: `4px solid ${PALETA.grisClaro}`,
-          borderTopColor: PALETA.azulProfundo,
-          animation: 'spin 1s linear infinite',
-          margin: '0 auto 16px',
-        }} />
-        <p style={{ color: PALETA.azulProfundo, fontWeight: 600, margin: 0 }}>
-          Analizando tendencias de precios...
-        </p>
-      </div>
+          padding: '60px 20px',
+          textAlign: 'center',
+          background: `linear-gradient(135deg, ${PALETA.grisClaro} 0%, ${PALETA.blanco} 100%)`,
+          borderRadius: '16px',
+          border: `1px solid ${PALETA.grisMedio}`,
+        }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '50%',
+            border: `4px solid ${PALETA.grisClaro}`,
+            borderTopColor: PALETA.azulProfundo,
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 16px',
+          }} />
+          <p style={{ color: PALETA.azulProfundo, fontWeight: 600, margin: 0 }}>
+            Analizando tendencias de precios...
+          </p>
+        </div>
+      </>
     )
   }
 
@@ -160,27 +163,27 @@ export default function TendenciasPrecios({ filtros }) {
           gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
           gap: '16px',
         }}>
-          <KpiCard 
-            titulo="Total Registros" 
-            valor={estadisticas.totalRegistros.toLocaleString()} 
+          <KpiCard
+            titulo="Total Registros"
+            valor={estadisticas.totalRegistros.toLocaleString()}
             icono="📊"
             color={PALETA.azulProfundo}
           />
-          <KpiCard 
-            titulo="Productos Analizados" 
-            valor={estadisticas.productosAnalizados} 
-            icono="🏭"
+          <KpiCard
+            titulo="Productos Analizados"
+            valor={estadisticas.productosAnalizados}
+            icono="🛢️"
             color={PALETA.cyanVibrante}
           />
-          <KpiCard 
-            titulo="Tendencia General" 
+          <KpiCard
+            titulo="Tendencia General"
             valor={formatPercentage(estadisticas.tendenciaGeneral)}
             subtitulo={estadisticas.tendenciaGeneral > 0 ? 'Al alza' : 'A la baja'}
             icono={estadisticas.tendenciaGeneral > 0 ? '📈' : '📉'}
             color={getTrendColor(estadisticas.tendenciaGeneral)}
           />
-          <KpiCard 
-            titulo="Volatilidad Promedio" 
+          <KpiCard
+            titulo="Volatilidad Promedio"
             valor={`${estadisticas.volatilidadPromedio.toFixed(2)}%`}
             subtitulo={estadisticas.volatilidadPromedio > 5 ? 'Alta' : 'Estable'}
             icono="〰️"
@@ -256,19 +259,19 @@ export default function TendenciasPrecios({ filtros }) {
           {vistaActiva === 'tendencia' && (
             <LineChart data={datosFiltrados}>
               <CartesianGrid strokeDasharray="3 3" stroke={PALETA.grisMedio} opacity={0.3} />
-              <XAxis 
-                dataKey="mes" 
+              <XAxis
+                dataKey="mes"
                 stroke={PALETA.grisMedio}
                 tick={{ fill: PALETA.azulProfundo, fontSize: 12 }}
               />
-              <YAxis 
+              <YAxis
                 stroke={PALETA.grisMedio}
                 tickFormatter={(value) => `S/ ${value}`}
                 tick={{ fill: PALETA.azulProfundo, fontSize: 12 }}
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend />
-              {productoSeleccionado === 'todos' 
+              {productoSeleccionado === 'todos'
                 ? productosUnicos.map((prod, i) => (
                     <Line
                       key={prod}
@@ -300,12 +303,12 @@ export default function TendenciasPrecios({ filtros }) {
           {vistaActiva === 'comparativa' && (
             <BarChart data={datosFiltrados}>
               <CartesianGrid strokeDasharray="3 3" stroke={PALETA.grisMedio} opacity={0.3} />
-              <XAxis 
-                dataKey="mes" 
+              <XAxis
+                dataKey="mes"
                 stroke={PALETA.grisMedio}
                 tick={{ fill: PALETA.azulProfundo, fontSize: 12 }}
               />
-              <YAxis 
+              <YAxis
                 stroke={PALETA.grisMedio}
                 tickFormatter={(value) => `S/ ${value}`}
                 tick={{ fill: PALETA.azulProfundo, fontSize: 12 }}
@@ -327,23 +330,23 @@ export default function TendenciasPrecios({ filtros }) {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={PALETA.grisMedio} opacity={0.3} />
-              <XAxis 
-                dataKey="mes" 
+              <XAxis
+                dataKey="mes"
                 stroke={PALETA.grisMedio}
                 tick={{ fill: PALETA.azulProfundo, fontSize: 12 }}
               />
-              <YAxis 
+              <YAxis
                 stroke={PALETA.grisMedio}
                 tickFormatter={(value) => `S/ ${value}`}
                 tick={{ fill: PALETA.azulProfundo, fontSize: 12 }}
               />
               <Tooltip content={<CustomTooltip />} />
-              <Area 
-                type="monotone" 
-                dataKey="promedio" 
+              <Area
+                type="monotone"
+                dataKey="promedio"
                 name="Precio Promedio"
-                stroke={PALETA.azulProfundo} 
-                fill="url(#colorPrecio)" 
+                stroke={PALETA.azulProfundo}
+                fill="url(#colorPrecio)"
                 strokeWidth={3}
               />
             </AreaChart>
@@ -394,9 +397,9 @@ export default function TendenciasPrecios({ filtros }) {
                   <td style={{ padding: '12px', fontWeight: 700, color: PALETA.azulProfundo }}>{formatCurrency(row.promedio)}</td>
                   <td style={{ padding: '12px', color: PALETA.exito }}>{formatCurrency(row.minimo)}</td>
                   <td style={{ padding: '12px', color: PALETA.peligro }}>{formatCurrency(row.maximo)}</td>
-                  <td style={{ 
-                    padding: '12px', 
-                    fontWeight: 700, 
+                  <td style={{
+                    padding: '12px',
+                    fontWeight: 700,
                     color: getTrendColor(row.variacion),
                     fontSize: '13px',
                   }}>
