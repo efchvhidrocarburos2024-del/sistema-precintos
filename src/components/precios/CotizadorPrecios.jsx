@@ -265,7 +265,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
     if (isNaN(precioBaseSinIGV)) return { error: 'Precio base no válido.' }
     
     // Paso 2: Calcular Precio Base Total = Precio SIN IGV × Galones (CORRECCIÓN: usar toFixed para evitar errores de punto flotante)
-    const precioBaseTotal = Number((precioBaseSinIGV * galones).toFixed(2))
+    const precioBaseTotal = Number((precioBaseSinIGV * galones).toFixed(2)) // corregido
     
     // Paso 3: Obtener TOPE S/IGV
     const t = d.topeRows.find(r =>
