@@ -56,8 +56,6 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   const [items, setItems] = useState([])
   const [numeroLote, setNumeroLote] = useState('')
   const [cliente, setCliente] = useState('')
-  const [rucCliente, setRucCliente] = useState('')
-  const [direccionCliente, setDireccionCliente] = useState('')
   const [aplicaPercepcion, setAplicaPercepcion] = useState(true)
   const [papelera, setPapelera] = useState(null)
   const [guardando, setGuardando] = useState(false)
@@ -287,7 +285,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
     if (items.length === 0) return
     setPapelera({ items: [...items], numero: numeroLote })
     setItems([]); setNumeroLote(''); setEditingIndex(null); limpiarForm()
-    toast('Cotización vaciada. Puedes deshacer.', { icon: '' })
+    toast('Cotización vaciada. Puedes deshacer.', { icon: '🧹' })
   }
 
   const deshacer = () => {
@@ -312,8 +310,6 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         numero_cotizacion: numero,
         fecha_cotizacion: hoy,
         cliente: cliente || null,
-        ruc_cliente: rucCliente || null,
-        direccion_cliente: direccionCliente || null,
         planta: it.planta,
         almacen: it.almacen,
         producto: it.producto,
@@ -378,16 +374,14 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         
         // Información del cliente
         doc.setFontSize(10)
-        doc.text(`Cliente: ${cliente || '—'}`, W - 14, 12, { align: 'right' })
-        doc.text(`RUC: ${rucCliente || '—'}`, W - 14, 17, { align: 'right' })
-        doc.text(`Dirección: ${direccionCliente || '—'}`, W - 14, 22, { align: 'right' })
-        doc.text(`Percepción: ${aplicaPercepcion ? 'APLICADA (1%)' : 'NO aplicada'}`, W - 14, 27, { align: 'right' })
+        doc.text(`Cliente: ${cliente || '—'}`, W - 14, 17, { align: 'right' })
+        doc.text(`Percepción: ${aplicaPercepcion ? 'APLICADA (1%)' : 'NO aplicada'}`, W - 14, 22, { align: 'right' })
         
         doc.setTextColor(40, 40, 40)
       }
       encabezado()
 
-      // TABLA SIN COLUMNA ALMACÉN
+      // TABLA SIN COLUMNA ALMACÉN - DATOS CENTRADOS
       autoTable(doc, {
         startY: 34,
         margin: { top: 32, left: 14, right: 14 },
@@ -401,15 +395,17 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
           it.total > 0 ? it.total.toFixed(2) : '—',
         ]),
         foot: [['', '', '', 'TOTAL', totales.galones > 0 ? totales.galones.toLocaleString('es-PE') : '—', totales.monto.toFixed(2)]],
-        styles: { fontSize: 10, cellPadding: 3, textColor: [40, 40, 40] },
-        headStyles: { fillColor: [0, 51, 160], textColor: 255, fontStyle: 'bold', fontSize: 10 },
-        footStyles: { fillColor: [0, 174, 239], textColor: 255, fontStyle: 'bold', fontSize: 11 },
+        styles: { fontSize: 10, cellPadding: 3, textColor: [40, 40, 40], halign: 'center' },
+        headStyles: { fillColor: [0, 51, 160], textColor: 255, fontStyle: 'bold', fontSize: 10, halign: 'center' },
+        footStyles: { fillColor: [0, 174, 239], textColor: 255, fontStyle: 'bold', fontSize: 11, halign: 'center' },
         alternateRowStyles: { fillColor: [245, 247, 250] },
         columnStyles: {
           0: { cellWidth: 12, halign: 'center', fontStyle: 'bold', textColor: [0, 51, 160] },
-          3: { halign: 'right' },
-          4: { halign: 'right' },
-          5: { halign: 'right', fontStyle: 'bold', textColor: [5, 150, 105] },
+          1: { halign: 'center' },
+          2: { halign: 'center' },
+          3: { halign: 'center' },
+          4: { halign: 'center' },
+          5: { halign: 'center', fontStyle: 'bold', textColor: [5, 150, 105] },
         },
         didDrawPage: (d) => { if (d.pageNumber > 1) encabezado() },
       })
@@ -444,13 +440,13 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       )
       doc.text(`${totales.count} ítem(s) en esta cotización.`, 14, yNota + 4)
 
-      // Footer corporativo
+      // Footer corporativo con dirección actualizada
       const pageCount = doc.getNumberOfPages()
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i)
         doc.setFontSize(8); doc.setTextColor(130, 130, 130)
         doc.text(`Página ${i} de ${pageCount} | Generado por SIGMO v1.0`, W - 14, H - 8, { align: 'right' })
-        doc.text('Petroamérica S.A.C. | Av. Principal 123, Lima | Tel: (01) 123-4567', 14, H - 8)
+        doc.text('Petroamérica S.A.C. | Calle San Martín 583, Miraflores 15074, Lima', 14, H - 8)
       }
 
       doc.save(`Cotizacion_Profesional_${numero}.pdf`)
@@ -481,7 +477,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         <Card style={{ padding: '15px 20px', marginBottom: '15px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', textAlign: 'left' }}>
           {cotCargandoDatos ? <p style={{ margin: 0, color: '#1e40af', fontWeight: 'bold' }}>⏳ Cargando archivos vigentes...</p>
             : cotErrorDatos ? <div><p style={{ margin: '0 0 10px 0', color: '#991b1b', fontWeight: 'bold' }}>️ {cotErrorDatos}</p><Boton variante="outline" tamano="sm" onClick={() => setCotKey(k => k + 1)}>🔄 Reintentar</Boton></div>
-            : cotDatos ? <p style={{ margin: 0, fontSize: '13px', color: '#1e40af' }}> <strong>Fuentes:</strong> {cotDatos.precioNombre} | {cotDatos.topeNombre}</p> : null}
+            : cotDatos ? <p style={{ margin: 0, fontSize: '13px', color: '#1e40af' }}>📌 <strong>Fuentes:</strong> {cotDatos.precioNombre} | {cotDatos.topeNombre}</p> : null}
         </Card>
 
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -518,7 +514,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
                 <Boton variante="success" onClick={agregarItem} disabled={!!preview.error || cotCargandoDatos} style={{ flex: 1 }}>
-                  {editingIndex !== null ? '💾 Actualizar ítem' : '➕ Agregar a la cotización'}
+                  {editingIndex !== null ? ' Actualizar ítem' : '➕ Agregar a la cotización'}
                 </Boton>
                 {editingIndex !== null && (
                   <Boton variante="outline" onClick={() => { setEditingIndex(null); limpiarForm() }}>Cancelar</Boton>
@@ -527,7 +523,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
             </Card>
 
             <Card style={{ padding: '20px' }}>
-              <h3 style={{ margin: '0 0 12px', color: AZUL, fontSize: '16px' }}>📊 Desglose de la cotización en curso</h3>
+              <h3 style={{ margin: '0 0 12px', color: AZUL, fontSize: '16px' }}> Desglose de la cotización en curso</h3>
               {previewEnriquecido ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <Paso etiqueta={`PASO 1 — Precio Base C/IGV (${previewEnriquecido.producto} en ${previewEnriquecido.planta})`} valor={`S/ ${previewEnriquecido.precioBase.toFixed(4)}`} color={AZUL} />
@@ -555,9 +551,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px', alignItems: 'end', marginBottom: '15px' }}>
                 <div>
                   <label style={labelStyle}>Cliente (aplica a toda la cotización)</label>
-                  <input type="text" value={cliente} onChange={e => setCliente(e.target.value)} placeholder="Nombre del cliente" style={{ ...inputStyle, marginBottom: '8px' }} />
-                  <input type="text" value={rucCliente} onChange={e => setRucCliente(e.target.value)} placeholder="RUC del cliente" style={inputStyle} />
-                  <input type="text" value={direccionCliente} onChange={e => setDireccionCliente(e.target.value)} placeholder="Dirección del cliente" style={{ ...inputStyle, marginTop: '8px' }} />
+                  <input type="text" value={cliente} onChange={e => setCliente(e.target.value)} placeholder="Nombre del cliente" style={inputStyle} />
                 </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 'bold', color: '#92400e', fontSize: '13px', backgroundColor: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '8px', padding: '10px 12px' }}>
                   <input type="checkbox" checked={aplicaPercepcion} onChange={e => setAplicaPercepcion(e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
@@ -598,7 +592,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
                           <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 'bold', color: it.total > 0 ? '#059669' : '#6b7280', fontSize: '14px' }}>{it.total > 0 ? it.total.toFixed(2) : '—'}</td>
                           <td style={{ padding: '8px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                             <button onClick={() => editarItem(i)} title="Editar" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px' }}>✏️</button>
-                            <button onClick={() => eliminarItem(i)} title="Eliminar" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px' }}>🗑️</button>
+                            <button onClick={() => eliminarItem(i)} title="Eliminar" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px' }}>️</button>
                           </td>
                         </tr>
                       ))}
@@ -617,7 +611,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
 
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '18px' }}>
                 <Boton variante="success" onClick={guardarLote} disabled={guardando || itemsDerivados.length === 0}>{guardando ? '⏳ Guardando...' : `💾 Guardar Cotización en Historial (${totales.count})`}</Boton>
-                <Boton variante="primary" onClick={generarPDFLote} disabled={itemsDerivados.length === 0}> Generar PDF Profesional</Boton>
+                <Boton variante="primary" onClick={generarPDFLote} disabled={itemsDerivados.length === 0}>📄 Generar PDF Profesional</Boton>
                 <Boton variante="outline" onClick={vaciarLote} disabled={itemsDerivados.length === 0}>🧹 Vaciar</Boton>
                 {papelera && <Boton variante="outline" onClick={deshacer}>↩️ Deshacer</Boton>}
               </div>
