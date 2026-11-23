@@ -11,13 +11,13 @@ import Login from './components/Login'
 import LobbyModulos from './components/LobbyModulos'
 import MenuPrecintos from './components/MenuPrecintos'
 import NavbarPrecintos from './components/NavbarPrecintos'
+import ResetPassword from './components/ResetPassword'
 
 // ============================================================
 // MÓDULOS — carga perezosa (cada uno genera su propio chunk)
 // ============================================================
 // Autenticación secundaria
 const ForgotPassword = lazy(() => import('./components/ForgotPassword'))
-const ResetPassword = lazy(() => import('./components/ResetPassword'))
 
 // Módulos operativos de precintos
 const RegistroLotes = lazy(() => import('./components/RegistroLotes'))
