@@ -18,23 +18,47 @@ export default function Login({ setPantalla }) {
   const manejarLogin = async (e) => {
     e.preventDefault()
     setError('')
-    if (!validarEmail(email)) { setError('Ingresa un correo electrónico válido.'); return }
-    if (!password) { setError('Ingresa tu contraseña.'); return }
+    
+    const emailLimpio = email.trim()
+    if (!validarEmail(emailLimpio)) { 
+      setError('Ingresa un correo electrónico válido.')
+      return 
+    }
+    if (!password) { 
+      setError('Ingresa tu contraseña.')
+      return 
+    }
+    
     setCargando(true)
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+      const { error } = await supabase.auth.signInWithPassword({ 
+        email: emailLimpio, 
+        password 
+      })
+      
       if (error) {
-        const msg = /invalid login credentials/i.test(error.message)
-          ? 'Credenciales incorrectas. Verifica tu correo y contraseña.'
-          : error.message
+        let msg = error.message
+        
+        // Traducción de errores comunes de Supabase para mejor UX
+        if (/invalid login credentials/i.test(error.message)) {
+          msg = 'Credenciales incorrectas. Verifica tu correo y contraseña.'
+        } else if (/email not confirmed/i.test(error.message)) {
+          msg = 'Tu correo aún no ha sido confirmado. Revisa tu bandeja de entrada o spam.'
+        } else if (/rate limit|security purposes|too many/i.test(error.message)) {
+          msg = 'Demasiados intentos fallidos. Espera unos minutos e intenta nuevamente.'
+        }
+        
         setError(msg)
         toast.error(msg)
       } else {
         toast.success('Bienvenido a SIGMO')
+        // No necesitamos llamar a setPantalla aquí, App.jsx lo maneja automáticamente 
+        // al detectar el cambio en onAuthStateChange.
       }
     } catch {
-      setError('No se pudo conectar con el servidor. Intenta nuevamente.')
-      toast.error('Error de conexión')
+      const msg = 'No se pudo conectar con el servidor. Intenta nuevamente.'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setCargando(false)
     }
@@ -45,11 +69,12 @@ export default function Login({ setPantalla }) {
     width: '100%', 
     padding: '12px 14px', 
     borderRadius: '8px', 
-    border: '1px solid #d1d5db',  // Borde gris claro
-    backgroundColor: '#ffffff',     // Fondo blanco
-    color: '#111827',              // Texto negro
+    border: '1px solid #d1d5db',
+    backgroundColor: '#ffffff',
+    color: '#111827',
     fontSize: '14px', 
-    boxSizing: 'border-box' 
+    boxSizing: 'border-box',
+    transition: 'border-color 0.2s, box-shadow 0.2s'
   }
 
   return (
@@ -67,7 +92,7 @@ export default function Login({ setPantalla }) {
         {/* LOGO CORPORATIVO */}
         <img
           src="/logo-p.png"
-          alt="Logo Petro America"
+          alt="Logo Petro América"
           onError={(e) => { e.currentTarget.style.display = 'none' }}
           style={{ height: '84px', width: 'auto', margin: '0 auto 6px', display: 'block' }}
         />
@@ -76,42 +101,61 @@ export default function Login({ setPantalla }) {
         <p style={{ margin: '0 0 2px', fontSize: '15px', color: '#6b7280' }}>Sistema de Gestión Modular</p>
         <p style={{ margin: '0 0 26px', fontSize: '13px', color: '#9ca3af' }}>Ingresa tus credenciales para acceder</p>
 
+        {/* Banner de error con role="alert" para lectores de pantalla */}
         {error && (
-          <div style={{ marginBottom: '16px', padding: '10px 12px', borderRadius: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '13px', fontWeight: 'bold', textAlign: 'left' }}>
+          <div 
+            role="alert"
+            style={{ marginBottom: '16px', padding: '10px 12px', borderRadius: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '13px', fontWeight: 'bold', textAlign: 'left' }}
+          >
             ⚠️ {error}
           </div>
         )}
 
         <form onSubmit={manejarLogin} style={{ textAlign: 'left' }}>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px', color: '#111827', textAlign: 'center' }}>
+          <label 
+            htmlFor="email-input" 
+            style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px', color: '#111827', textAlign: 'center' }}
+          >
             Correo electrónico <span style={{ color: '#dc2626' }}>*</span>
           </label>
           <input
+            id="email-input"
             className="login-input"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="tu@correo.com"
             autoComplete="email"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck="false"
             style={{ ...inputStyle, marginBottom: '18px' }}
           />
 
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px', color: '#111827', textAlign: 'center' }}>
+          <label 
+            htmlFor="password-input" 
+            style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px', color: '#111827', textAlign: 'center' }}
+          >
             Contraseña <span style={{ color: '#dc2626' }}>*</span>
           </label>
           <div style={{ position: 'relative', marginBottom: '22px' }}>
             <input
+              id="password-input"
               className="login-input"
               type={verPassword ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Tu contraseña"
               autoComplete="current-password"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck="false"
               style={{ ...inputStyle, paddingRight: '44px' }}
             />
             <button
               type="button"
               onClick={() => setVerPassword(v => !v)}
+              aria-label={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
               title={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
               style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#6b7280', padding: '4px' }}
             >
@@ -124,13 +168,16 @@ export default function Login({ setPantalla }) {
             disabled={cargando}
             style={{ width: '100%', padding: '14px', borderRadius: '8px', border: 'none', backgroundColor: AZUL, color: '#fff', fontSize: '16px', fontWeight: 'bold', cursor: cargando ? 'not-allowed' : 'pointer', opacity: cargando ? 0.7 : 1, transition: 'all 0.2s' }}
           >
-            {cargando ? ' Ingresando...' : 'Iniciar Sesión en SIGMO'}
+            {cargando ? '⏳ Ingresando...' : 'Iniciar Sesión en SIGMO'}
           </button>
         </form>
 
         <button
+          type="button"
           onClick={() => setPantalla('forgot')}
-          style={{ marginTop: '16px', padding: '10px 18px', borderRadius: '8px', border: `1px solid ${AZUL}`, backgroundColor: 'transparent', color: AZUL, fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' }}
+          style={{ marginTop: '16px', padding: '10px 18px', borderRadius: '8px', border: `1px solid ${AZUL}`, backgroundColor: 'transparent', color: AZUL, fontSize: '14px', fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 0.2s' }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(0, 51, 160, 0.05)'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
         >
           ¿Olvidaste tu contraseña?
         </button>

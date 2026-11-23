@@ -301,22 +301,18 @@ function App() {
   // ----------------------------------------------------------
   if (!sesion) {
     return (
-      <ErrorBoundary key={esRecuperacion ? 'reset' : pantalla || 'login'}>
-        <Suspense fallback={<CargandoModulo texto="Cargando…" />}>
-          {esRecuperacion && <ResetPassword />}
-          {!esRecuperacion && pantalla === 'forgot' && <ForgotPassword setPantalla={setPantalla} />}
-          {!esRecuperacion && pantalla !== 'forgot' && <Login setPantalla={setPantalla} />}
-        </Suspense>
-      </ErrorBoundary>
-    )
-  }
-
-  // --- PANTALLA DE CARGA ---
-  if (cargandoRol) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f3f4f6' }}>
-        <h2 style={{ color: '#0B5FA5' }}>Cargando perfil...</h2>
-      </div>
+      <>
+        {/* ✅ FIX: El Toaster debe existir también en las vistas públicas para mostrar errores de login */}
+        <Toaster position="top-right" toastOptions={{ duration: 4000, style: { fontWeight: 'bold' } }} />
+        
+        <ErrorBoundary key={esRecuperacion ? 'reset' : pantalla || 'login'}>
+          <Suspense fallback={<CargandoModulo texto="Cargando…" />}>
+            {esRecuperacion && <ResetPassword />}
+            {!esRecuperacion && pantalla === 'forgot' && <ForgotPassword setPantalla={setPantalla} />}
+            {!esRecuperacion && pantalla !== 'forgot' && <Login setPantalla={setPantalla} />}
+          </Suspense>
+        </ErrorBoundary>
+      </>
     )
   }
 
