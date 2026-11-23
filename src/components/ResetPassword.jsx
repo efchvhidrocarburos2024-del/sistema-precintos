@@ -17,52 +17,57 @@ export default function ResetPassword({ setPantalla }) {
   const [cargandoToken, setCargandoToken] = useState(true)
 
   useEffect(() => {
-    console.log(' Hash actual:', window.location.hash)
-    console.log('🔍 Search params:', window.location.search)
+    console.log('🔍 URL actual:', window.location.href)
+    console.log('🔍 Hash:', window.location.hash)
+    console.log('🔍 Search:', window.location.search)
 
-    // Verificar si hay token en la URL (viene del correo)
-    const hash = window.location.hash
+    // Obtener parámetros de la URL
     const searchParams = new URLSearchParams(window.location.search)
+    const hashParams = new URLSearchParams(window.location.hash.substring(1))
     
-    // Buscar access_token tanto en hash como en search params
-    let accessToken = null
+    // Buscar token en diferentes lugares
+    let token = searchParams.get('token') || 
+                hashParams.get('access_token') || 
+                searchParams.get('access_token')
     
-    if (hash && hash.includes('access_token')) {
-      const params = new URLSearchParams(hash.substring(1))
-      accessToken = params.get('access_token')
-    } else if (searchParams.get('access_token')) {
-      accessToken = searchParams.get('access_token')
-    }
+    const type = searchParams.get('type') || hashParams.get('type')
     
-    console.log('🔑 Access token encontrado:', accessToken ? 'SÍ' : 'NO')
+    console.log('🔑 Token encontrado:', token ? 'SÍ' : 'NO')
+    console.log(' Type:', type)
 
-    if (!accessToken) {
+    if (!token) {
       setError('Enlace inválido o expirado. Solicita un nuevo enlace de recuperación.')
       setCargandoToken(false)
       return
     }
 
-    // Establecer la sesión con el token
-    supabase.auth.setSession({ access_token: accessToken, refresh_token: '' })
-      .then(({ error, data }) => {
-        console.log(' Resultado setSession:', { error, data })
-        if (error) {
-          if (/expired|invalid/i.test(error.message)) {
-            setError('Este enlace ha expirado. Por favor solicita uno nuevo.')
+    // Si es tipo recovery, intentar establecer sesión
+    if (type === 'recovery') {
+      supabase.auth.setSession({ access_token: token, refresh_token: '' })
+        .then(({ error, data }) => {
+          console.log('📊 Resultado setSession:', { error, data })
+          if (error) {
+            if (/expired|invalid/i.test(error.message)) {
+              setError('Este enlace ha expirado. Por favor solicita uno nuevo.')
+            } else {
+              setError('Error al validar el enlace: ' + error.message)
+            }
+            setCargandoToken(false)
           } else {
-            setError('Error al validar el enlace: ' + error.message)
+            setTokenValido(true)
+            setCargandoToken(false)
           }
+        })
+        .catch(err => {
+          console.error('❌ Error en setSession:', err)
+          setError('Error técnico al procesar el enlace.')
           setCargandoToken(false)
-        } else {
-          setTokenValido(true)
-          setCargandoToken(false)
-        }
-      })
-      .catch(err => {
-        console.error('❌ Error en setSession:', err)
-        setError('Error técnico al procesar el enlace.')
-        setCargandoToken(false)
-      })
+        })
+    } else {
+      // Si no es recovery, mostrar error
+      setError('Tipo de enlace no soportado.')
+      setCargandoToken(false)
+    }
   }, [])
 
   const validarPassword = (pwd) => {
@@ -190,7 +195,7 @@ export default function ResetPassword({ setPantalla }) {
               title={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
               style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#9aa3af', padding: '4px' }}
             >
-              {verPassword ? '' : '👁️'}
+              {verPassword ? '' : '️'}
             </button>
           </div>
 
