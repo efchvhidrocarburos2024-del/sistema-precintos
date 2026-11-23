@@ -145,10 +145,15 @@ function App() {
   // Autenticación
   // ----------------------------------------------------------
   useEffect(() => {
-    if (
-      window.location.hash.includes('type=recovery') ||
-      window.location.search.includes('type=recovery')
-    ) {
+    // Detectar recuperación por hash o search params
+    const hash = window.location.hash
+    const isRecoveryHash = hash.includes('access_token') && hash.includes('type=recovery')
+    
+    // También verificar search params
+    const searchParams = new URLSearchParams(window.location.search)
+    const isRecoverySearch = searchParams.get('type') === 'recovery'
+    
+    if (isRecoveryHash || isRecoverySearch) {
       setEsRecuperacion(true)
     }
 
