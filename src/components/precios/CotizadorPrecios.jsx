@@ -33,7 +33,6 @@ const parseNum = (v) => {
 
 const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }
 const selectStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #334155', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold', boxSizing: 'border-box' }
-const readOnlyFieldStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: '#f3f4f6', color: '#374151', fontWeight: 'bold', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '42px', textAlign: 'center' }
 const labelStyle = { display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }
 const AZUL = 'var(--primary-blue, #0B5FA5)'
 
@@ -99,7 +98,6 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         const colTopeAuto = colTopes[0] || 'TOPE S/IGV'
         setCotColTope(colTopeAuto)
         
-        // Crear mapa de combinaciones válidas desde TOPES
         const combinacionesValidas = new Map()
         topeRows.forEach(row => {
           const planta = String(row[colPlanta] || '').trim().toUpperCase()
@@ -287,7 +285,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
     if (items.length === 0) return
     setPapelera({ items: [...items], numero: numeroLote })
     setItems([]); setNumeroLote(''); setEditingIndex(null); limpiarForm()
-    toast('Cotización vaciada. Puedes deshacer.', { icon: '🧹' })
+    toast('Cotización vaciada. Puedes deshacer.', { icon: '' })
   }
 
   const deshacer = () => {
@@ -442,7 +440,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       <main style={{ padding: '30px 20px', maxWidth: '1400px', margin: '0 auto' }}>
         <Card style={{ padding: '15px 20px', marginBottom: '15px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', textAlign: 'left' }}>
           {cotCargandoDatos ? <p style={{ margin: 0, color: '#1e40af', fontWeight: 'bold' }}>⏳ Cargando archivos vigentes...</p>
-            : cotErrorDatos ? <div><p style={{ margin: '0 0 10px 0', color: '#991b1b', fontWeight: 'bold' }}>️ {cotErrorDatos}</p><Boton variante="outline" tamano="sm" onClick={() => setCotKey(k => k + 1)}>🔄 Reintentar</Boton></div>
+            : cotErrorDatos ? <div><p style={{ margin: '0 0 10px 0', color: '#991b1b', fontWeight: 'bold' }}>⚠️ {cotErrorDatos}</p><Boton variante="outline" tamano="sm" onClick={() => setCotKey(k => k + 1)}>🔄 Reintentar</Boton></div>
             : cotDatos ? <p style={{ margin: 0, fontSize: '13px', color: '#1e40af' }}>📌 <strong>Fuentes:</strong> {cotDatos.precioNombre} | {cotDatos.topeNombre}</p> : null}
         </Card>
 
@@ -453,9 +451,14 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
               <h2 style={{ margin: '0 0 18px', fontSize: '20px', color: 'var(--text-dark)', textAlign: 'center' }}>
                 {editingIndex !== null ? `✏️ Editando ítem #${editingIndex + 1}` : ' Cotizar'}
               </h2>
+              
+              {/* CAMPOS OCULTOS - Hoja de Precio y Columna Tope */}
+              <div style={{ display: 'none' }}>
+                <div>{HOJA_PRECIO_COTIZACION}</div>
+                <div>{cotColTope}</div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div><label style={labelStyle}>Hoja de Precio</label><div style={readOnlyFieldStyle}>{HOJA_PRECIO_COTIZACION}</div></div>
-                <div><label style={labelStyle}>Columna Tope</label><div style={readOnlyFieldStyle}>{cotColTope}</div></div>
                 <div><label style={labelStyle}>Planta</label>
                   <select value={fPlanta} onChange={e => setFPlanta(e.target.value)} style={selectStyle} disabled={!cotDatos}>
                     <option value="">Seleccione...</option>{cotDatos?.plantas?.map(p => <option key={p} value={p}>{p}</option>)}
@@ -521,7 +524,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
 
               {itemsDerivados.length === 0 ? (
                 <div style={{ padding: '40px 20px', textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #d1d5db' }}>
-                  <div style={{ fontSize: '44px', marginBottom: '10px' }}>🗂️</div>
+                  <div style={{ fontSize: '44px', marginBottom: '10px' }}>️</div>
                   <h3 style={{ margin: '0 0 6px', color: 'var(--text-dark)' }}>La cotización está vacía</h3>
                   <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-light)' }}>Configura un ítem a la izquierda y pulsa «Agregar a la cotización». Puedes acumular varias cotizaciones y guardarlas o exportarlas juntas.</p>
                 </div>
@@ -572,7 +575,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '18px' }}>
                 <Boton variante="success" onClick={guardarLote} disabled={guardando || itemsDerivados.length === 0}>{guardando ? '⏳ Guardando...' : `💾 Guardar Cotización en Historial (${totales.count})`}</Boton>
                 <Boton variante="primary" onClick={generarPDFLote} disabled={itemsDerivados.length === 0}>📄 Generar PDF de cotización</Boton>
-                <Boton variante="outline" onClick={vaciarLote} disabled={itemsDerivados.length === 0}>🧹 Vaciar</Boton>
+                <Boton variante="outline" onClick={vaciarLote} disabled={itemsDerivados.length === 0}> Vaciar</Boton>
                 {papelera && <Boton variante="outline" onClick={deshacer}>↩️ Deshacer</Boton>}
               </div>
               <p style={{ margin: '12px 0 0', fontSize: '12px', color: 'var(--text-light)' }}>
