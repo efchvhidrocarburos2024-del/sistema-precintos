@@ -93,7 +93,7 @@ export default function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol })
       <main style={{ padding: '40px 28px', maxWidth: '1400px', margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: '36px' }}>
           <h2 style={{ margin: '0 0 8px', fontSize: '30px', fontWeight: 800, color: AZUL }}>Bienvenido a SIGMO</h2>
-          <p style={{ margin: 0, fontSize: '16px', color: '#6b7280' }}>Selecciona el módulo que deseas gestionar</p>
+          <p style={{ margin: 0, fontSize: '16px', color: '#6b7280' }}>Selecciona el módulo que deseas</p>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
