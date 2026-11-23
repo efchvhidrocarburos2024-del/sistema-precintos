@@ -159,6 +159,16 @@ function App() {
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSesion(session)
+      
+      // Si hay sesión pero no estamos logueados normalmente, podría ser recuperación
+      if (session && !pantalla) {
+        // Verificar si es una sesión de recuperación
+        const lastHash = sessionStorage.getItem('last_hash')
+        if (lastHash && lastHash.includes('type=recovery')) {
+          setEsRecuperacion(true)
+          sessionStorage.removeItem('last_hash')
+        }
+      }
     })
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {

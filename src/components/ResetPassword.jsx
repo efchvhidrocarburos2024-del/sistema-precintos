@@ -13,61 +13,14 @@ export default function ResetPassword({ setPantalla }) {
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState('')
   const [exito, setExito] = useState(false)
-  const [tokenValido, setTokenValido] = useState(false)
-  const [cargandoToken, setCargandoToken] = useState(true)
 
   useEffect(() => {
-    console.log('🔍 URL actual:', window.location.href)
-    console.log('🔍 Hash:', window.location.hash)
-    console.log('🔍 Search:', window.location.search)
-
-    // Obtener parámetros de la URL
-    const searchParams = new URLSearchParams(window.location.search)
-    const hashParams = new URLSearchParams(window.location.hash.substring(1))
-    
-    // Buscar token en diferentes lugares
-    let token = searchParams.get('token') || 
-                hashParams.get('access_token') || 
-                searchParams.get('access_token')
-    
-    const type = searchParams.get('type') || hashParams.get('type')
-    
-    console.log('🔑 Token encontrado:', token ? 'SÍ' : 'NO')
-    console.log(' Type:', type)
-
-    if (!token) {
-      setError('Enlace inválido o expirado. Solicita un nuevo enlace de recuperación.')
-      setCargandoToken(false)
-      return
-    }
-
-    // Si es tipo recovery, intentar establecer sesión
-    if (type === 'recovery') {
-      supabase.auth.setSession({ access_token: token, refresh_token: '' })
-        .then(({ error, data }) => {
-          console.log('📊 Resultado setSession:', { error, data })
-          if (error) {
-            if (/expired|invalid/i.test(error.message)) {
-              setError('Este enlace ha expirado. Por favor solicita uno nuevo.')
-            } else {
-              setError('Error al validar el enlace: ' + error.message)
-            }
-            setCargandoToken(false)
-          } else {
-            setTokenValido(true)
-            setCargandoToken(false)
-          }
-        })
-        .catch(err => {
-          console.error('❌ Error en setSession:', err)
-          setError('Error técnico al procesar el enlace.')
-          setCargandoToken(false)
-        })
-    } else {
-      // Si no es recovery, mostrar error
-      setError('Tipo de enlace no soportado.')
-      setCargandoToken(false)
-    }
+    // Verificar si hay sesión activa (debería haberla después del clic en el enlace)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        setError('No hay sesión activa. Solicita un nuevo enlace de recuperación.')
+      }
+    })
   }, [])
 
   const validarPassword = (pwd) => {
@@ -110,18 +63,6 @@ export default function ResetPassword({ setPantalla }) {
 
   const inputStyle = { width: '100%', padding: '12px 14px', borderRadius: '8px', border: '1px solid #334155', backgroundColor: '#334155', color: '#fff', fontSize: '14px', boxSizing: 'border-box' }
 
-  if (cargandoToken) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--gray-bg, #eef1f5)', padding: '20px' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '40px', marginBottom: '16px' }}>⏳</div>
-          <h2 style={{ color: AZUL, margin: 0 }}>Validando enlace...</h2>
-          <p style={{ color: '#6b7280', margin: '8px 0 0' }}>Por favor espera unos segundos</p>
-        </div>
-      </div>
-    )
-  }
-
   if (exito) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--gray-bg, #eef1f5)', padding: '20px' }}>
@@ -133,21 +74,6 @@ export default function ResetPassword({ setPantalla }) {
           </p>
           <button onClick={() => setPantalla('')} style={{ padding: '12px 24px', borderRadius: '8px', border: 'none', backgroundColor: AZUL, color: '#fff', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' }}>
             Ir al Login
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  if (error && !exito && !tokenValido) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--gray-bg, #eef1f5)', padding: '20px' }}>
-        <div style={{ width: '100%', maxWidth: '440px', backgroundColor: '#fbfcfe', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,51,160,0.10)', padding: '40px 36px', textAlign: 'center' }}>
-          <div style={{ fontSize: '52px', marginBottom: '10px' }}>❌</div>
-          <h1 style={{ margin: '0 0 8px', fontSize: '24px', fontWeight: 900, color: '#dc2626' }}>Enlace inválido</h1>
-          <p style={{ margin: '0 0 24px', fontSize: '14px', color: '#6b7280' }}>{error}</p>
-          <button onClick={() => setPantalla('forgot')} style={{ padding: '12px 24px', borderRadius: '8px', border: `1px solid ${AZUL}`, backgroundColor: 'transparent', color: AZUL, fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' }}>
-            Solicitar nuevo enlace
           </button>
         </div>
       </div>
@@ -195,7 +121,7 @@ export default function ResetPassword({ setPantalla }) {
               title={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
               style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#9aa3af', padding: '4px' }}
             >
-              {verPassword ? '' : '️'}
+              {verPassword ? '🙈' : '👁️'}
             </button>
           </div>
 
