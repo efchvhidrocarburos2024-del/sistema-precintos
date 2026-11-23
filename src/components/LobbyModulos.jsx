@@ -1,139 +1,128 @@
 // src/components/LobbyModulos.jsx
-// Versión segura: Sin dependencias externas críticas que puedan romper el build
+import { ACCESO_LOBBY } from '../utils/permisos'
+
+const AZUL = '#0033A0'
 
 export default function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
-  // Estilos inline para evitar dependencia de CSS externo roto
-  const styles = {
-    container: { maxWidth: '1200px', margin: '0 auto', padding: '0 20px', fontFamily: 'system-ui, sans-serif' },
-    header: { padding: '20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', borderBottom: '1px solid #e5e7eb', marginBottom: '30px' },
-    title: { margin: 0, color: '#0033A0', fontSize: '32px', fontWeight: '900', letterSpacing: '1.5px' },
-    subtitle: { color: '#666666', fontSize: '14px', fontWeight: '500' },
-    userInfo: { color: '#0033A0', fontWeight: '600', fontSize: '14px', background: '#f0f4ff', padding: '8px 16px', borderRadius: '20px' },
-    btnLogout: { padding: '8px 16px', background: 'transparent', border: '1px solid #0033A0', color: '#0033A0', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '13px' },
-    grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginTop: '10px' },
-    card: { background: 'white', textAlign: 'center', padding: '30px 20px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #e5e7eb', transition: 'transform 0.2s, box-shadow 0.2s', cursor: 'pointer' },
-    cardHover: { transform: 'translateY(-5px)', boxShadow: '0 12px 20px rgba(0,51,160,0.1)' },
-    icon: { fontSize: '48px', marginBottom: '15px', display: 'block' },
-    h3: { margin: '0 0 10px 0', color: '#0033A0', fontSize: '18px', fontWeight: '800' },
-    p: { color: '#666666', fontSize: '14px', marginBottom: '20px', lineHeight: '1.5' },
-    btnPrimary: { width: '100%', padding: '10px', background: '#0033A0', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '700', fontSize: '14px' },
-    btnDisabled: { width: '100%', padding: '10px', background: '#e5e7eb', color: '#9ca3af', border: 'none', borderRadius: '6px', cursor: 'not-allowed', fontWeight: '700', fontSize: '14px' },
-  }
-
-  // Lógica de permisos segura (Fallback si ACCESO_LOBBY no existe)
-  // Asumimos que si no hay restricción explícita, el usuario logueado puede ver lo básico
-  const puedeVerPrecintos = true // Simplificado para evitar crash por undefined
-  const puedeVerRepositorio = true 
-  const puedeVerCatalogos = rol === 'admin_sistema' || rol === 'jefe_pricing'
-  const esAdmin = rol === 'admin_sistema'
-
-  const handleCardClick = (screenId) => {
-    if (typeof setPantalla === 'function') {
-      setPantalla(screenId)
-    } else {
-      console.error('setPantalla no es una función')
-    }
-  }
+  const modulos = [
+    {
+      id: 'precintos_menu',
+      icono: '📦',
+      titulo: 'Gestión de Precintos',
+      desc: 'Control de viajes, SCOP, inventario de plantas y reportes.',
+      visible: ACCESO_LOBBY.PRECINTOS.includes(rol),
+    },
+    {
+      id: 'repositorio',
+      icono: '📁',
+      titulo: 'Repositorio Documental',
+      desc: 'Archivos técnicos, operativos y guías por categorías.',
+      visible: ACCESO_LOBBY.REPOSITORIO.includes(rol),
+    },
+    {
+      id: 'catalogos',
+      icono: '⚙️',
+      titulo: 'Catálogos Maestros',
+      desc: 'Proveedores, productos, terminales y usuarios.',
+      visible: ACCESO_LOBBY.CATALOGOS.includes(rol),
+    },
+    {
+      id: 'precios_menu',
+      icono: '💰',
+      titulo: 'Precios, Topes & Cotización',
+      desc: 'Consulta y gestión de listas de precios, topes y cotizaciones.',
+      visible: true,
+    },
+    {
+      id: null,
+      icono: '🚚',
+      titulo: 'Gestión de Flota',
+      desc: 'Control de vehículos y conductores.',
+      proximo: true,
+      visible: true,
+    },
+    {
+      id: null,
+      icono: '📊',
+      titulo: 'Business Intelligence',
+      desc: 'Dashboards avanzados y KPIs.',
+      proximo: true,
+      visible: true,
+    },
+  ].filter(m => m.visible)
 
   return (
-    <div style={styles.container}>
-      {/* Header */}
-      <header style={styles.header}>
-        <div>
-          <h1 style={styles.title}>SIGMO</h1>
-          <span style={styles.subtitle}>Sistema de Gestión Modular</span>
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg, #eef1f5)' }}>
+      <style>{`
+        .lobby-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+        .lobby-card:hover { transform: translateY(-4px); box-shadow: 0 12px 28px rgba(0,51,160,0.14); }
+        .lobby-btn { transition: filter 0.15s ease, transform 0.15s ease; }
+        .lobby-btn:hover:not(:disabled) { filter: brightness(1.12); transform: translateY(-1px); }
+      `}</style>
+
+      {/* ============ HEADER CON LOGO ============ */}
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', backgroundColor: 'white', padding: '14px 28px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <img
+            src="/logo-p.png"
+            alt="Logo Petro America"
+            onError={(e) => { e.currentTarget.style.display = 'none' }}
+            style={{ height: '46px', width: 'auto', display: 'block' }}
+          />
+          <div>
+            <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 900, color: AZUL, letterSpacing: '-0.5px', lineHeight: 1.1 }}>SIGMO</h1>
+            <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>Sistema de Gestión Modular</p>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
-          <span style={styles.userInfo}>
-             {sesion?.user?.email || 'Usuario'} ({rol?.toUpperCase() || 'SIN ROL'})
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <span style={{ padding: '9px 18px', borderRadius: '999px', backgroundColor: '#eff6ff', color: '#1e40af', fontWeight: 'bold', fontSize: '14px' }}>
+            {sesion?.user?.email} ({String(rol || '').toUpperCase()})
           </span>
-          <button style={styles.btnLogout} onClick={cerrarSesion}>Cerrar Sesión</button>
+          <button
+            onClick={cerrarSesion}
+            className="lobby-btn"
+            style={{ padding: '9px 18px', borderRadius: '8px', border: `1px solid ${AZUL}`, backgroundColor: 'white', color: AZUL, fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            Cerrar Sesión
+          </button>
         </div>
       </header>
 
-      <div style={{ marginBottom: '20px' }}>
-        <h2 style={{ margin: 0, color: '#0033A0', fontSize: '24px' }}>Bienvenido a SIGMO</h2>
-        <p style={{ margin: '5px 0 0', color: '#666666' }}>Selecciona el módulo que deseas gestionar</p>
-      </div>
-
-      <div style={styles.grid}>
-        
-        {/* MÓDULO: PRECINTOS */}
-        {puedeVerPrecintos && (
-          <div 
-            style={styles.card} 
-            onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.cardHover)}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.05)' }}
-            onClick={() => handleCardClick('precintos_menu')}
-          >
-            <span style={styles.icon}>📦</span>
-            <h3 style={styles.h3}>Gestión de Precintos</h3>
-            <p style={styles.p}>Control de viajes, SCOP, inventario de plantas y reportes.</p>
-            <button style={styles.btnPrimary}>Entrar al Módulo</button>
-          </div>
-        )}
-
-        {/* MÓDULO: REPOSITORIO */}
-        {puedeVerRepositorio && (
-          <div 
-            style={styles.card}
-            onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.cardHover)}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.05)' }}
-            onClick={() => handleCardClick('repositorio')}
-          >
-            <span style={styles.icon}>📂</span>
-            <h3 style={styles.h3}>Repositorio Documental</h3>
-            <p style={styles.p}>Archivos técnicos, operativos y guías por categorías.</p>
-            <button style={styles.btnPrimary}>Entrar al Módulo</button>
-          </div>
-        )}
-
-        {/* MÓDULO: CATÁLOGOS */}
-        {puedeVerCatalogos && (
-          <div 
-            style={styles.card}
-            onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.cardHover)}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.05)' }}
-            onClick={() => handleCardClick('catalogos')}
-          >
-            <span style={styles.icon}>⚙️</span>
-            <h3 style={styles.h3}>Catálogos Maestros</h3>
-            <p style={styles.p}>Proveedores, productos, terminales y usuarios.</p>
-            <button style={styles.btnPrimary}>Entrar al Módulo</button>
-          </div>
-        )}
-
-        {/* MÓDULO: PRECIOS (Siempre visible para roles logueados) */}
-        <div 
-          style={styles.card}
-          onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.cardHover)}
-          onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.05)' }}
-          onClick={() => handleCardClick('precios_menu')}
-        >
-          <span style={styles.icon}>💰</span>
-          <h3 style={styles.h3}>Precios, Topes & Cotización</h3>
-          <p style={styles.p}>Consulta y gestión de listas de precios, topes y cotizaciones.</p>
-          <button style={styles.btnPrimary}>Entrar al Módulo</button>
+      {/* ============ BIENVENIDA ============ */}
+      <main style={{ padding: '40px 28px', maxWidth: '1400px', margin: '0 auto' }}>
+        <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+          <h2 style={{ margin: '0 0 8px', fontSize: '30px', fontWeight: 800, color: AZUL }}>Bienvenido a SIGMO</h2>
+          <p style={{ margin: 0, fontSize: '16px', color: '#6b7280' }}>Selecciona el módulo que deseas gestionar</p>
         </div>
 
-        {/* FUTUROS MÓDULOS (Solo Admin) */}
-        {esAdmin && (
-          <>
-            <div style={{ ...styles.card, opacity: 0.6, cursor: 'default' }}>
-              <span style={styles.icon}>🚚</span>
-              <h3 style={styles.h3}>Gestión de Flota</h3>
-              <p style={styles.p}>Control de vehículos y conductores.</p>
-              <button style={styles.btnDisabled} disabled>Próximamente</button>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
+          {modulos.map((m) => (
+            <div
+              key={m.titulo}
+              className="lobby-card"
+              style={{ backgroundColor: '#fbfcfe', borderRadius: '14px', boxShadow: '0 4px 14px rgba(0,51,160,0.08)', padding: '30px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '12px' }}
+            >
+              <div style={{ fontSize: '52px', lineHeight: 1, opacity: m.proximo ? 0.55 : 1 }}>{m.icono}</div>
+              <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: m.proximo ? '#7c93c4' : AZUL }}>{m.titulo}</h3>
+              <p style={{ margin: 0, fontSize: '14px', color: '#6b7280', flex: 1 }}>{m.desc}</p>
+              {m.proximo ? (
+                <button disabled style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#e5e7eb', color: '#9ca3af', fontSize: '15px', fontWeight: 'bold', cursor: 'not-allowed' }}>
+                  Próximamente
+                </button>
+              ) : (
+                <button
+                  onClick={() => setPantalla(m.id)}
+                  className="lobby-btn"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: AZUL, color: '#fff', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  Entrar al Módulo
+                </button>
+              )}
             </div>
-            <div style={{ ...styles.card, opacity: 0.6, cursor: 'default' }}>
-              <span style={styles.icon}>📊</span>
-              <h3 style={styles.h3}>Business Intelligence</h3>
-              <p style={styles.p}>Dashboards avanzados y KPIs.</p>
-              <button style={styles.btnDisabled} disabled>Próximamente</button>
-            </div>
-          </>
-        )}
-      </div>
+          ))}
+        </div>
+      </main>
     </div>
   )
 }
