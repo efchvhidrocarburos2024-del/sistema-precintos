@@ -31,10 +31,62 @@ const parseNum = (v) => {
   return Number.isFinite(n) ? n : 0
 }
 
+// Función para convertir números a letras en español
+const numeroALetras = (num) => {
+  if (num === 0) return 'cero'
+  
+  const unidades = ['', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve']
+  const especiales = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve']
+  const decenas = ['', 'diez', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa']
+  const centenas = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos']
+  
+  const convertirGrupo = (n) => {
+    if (n === 0) return ''
+    if (n < 10) return unidades[n]
+    if (n < 20) return especiales[n - 10]
+    if (n < 100) {
+      const decena = Math.floor(n / 10)
+      const unidad = n % 10
+      if (unidad === 0) return decenas[decena]
+      if (decena === 2) return `veinti${unidades[unidad]}`
+      return `${decenas[decena]} y ${unidades[unidad]}`
+    }
+    if (n < 1000) {
+      const centena = Math.floor(n / 100)
+      const resto = n % 100
+      if (centena === 1 && resto === 0) return 'cien'
+      if (resto === 0) return centenas[centena]
+      return `${centenas[centena]} ${convertirGrupo(resto)}`
+    }
+    if (n < 1000000) {
+      const millar = Math.floor(n / 1000)
+      const resto = n % 1000
+      if (millar === 1) {
+        if (resto === 0) return 'mil'
+        return `mil ${convertirGrupo(resto)}`
+      }
+      if (resto === 0) return `${convertirGrupo(millar)} mil`
+      return `${convertirGrupo(millar)} mil ${convertirGrupo(resto)}`
+    }
+    return num.toString()
+  }
+  
+  const parteEntera = Math.floor(num)
+  const parteDecimal = Math.round((num - parteEntera) * 100)
+  
+  const enteroLetras = convertirGrupo(parteEntera)
+  
+  if (parteDecimal === 0) {
+    return `${enteroLetras} soles`
+  }
+  
+  return `${enteroLetras} con ${parteDecimal}/100 soles`
+}
+
 const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }
 const selectStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #334155', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold', boxSizing: 'border-box' }
 const labelStyle = { display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }
-const AZUL = 'var(--primary-blue, #0B5FA5)'
+const AZUL = '#0033A0' // Color azul del logo
 
 export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, onCotizacionGuardada }) {
   // Fuentes vigentes
@@ -352,8 +404,8 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       const fecha = new Date().toLocaleDateString('es-PE')
 
       const encabezado = () => {
-        // Header azul corporativo
-        doc.setFillColor(0, 51, 160)
+        // Header BLANCO con texto AZUL
+        doc.setFillColor(255, 255, 255) // Fondo blanco
         doc.rect(0, 0, W, 26, 'F')
         doc.setFillColor(0, 174, 239)
         doc.rect(0, 26, W, 1.5, 'F')
@@ -366,7 +418,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
           console.log('Logo no disponible')
         }
         
-        doc.setTextColor(255, 255, 255)
+        doc.setTextColor(0, 51, 160) // Texto azul (#0033A0)
         doc.setFontSize(16); doc.setFont(undefined, 'bold')
         doc.text('SIGMO · Cotización de Combustibles', 40, 12)
         doc.setFontSize(10); doc.setFont(undefined, 'normal')
@@ -392,12 +444,12 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
           it.producto, 
           it.precioFinal.toFixed(4),
           it.cantidad > 0 ? it.cantidad.toLocaleString('es-PE') : '—',
-          it.total > 0 ? it.total.toFixed(2) : '—',
+          'S/ ' + it.total.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + numeroALetras(it.total) + ')',
         ]),
-        foot: [['', '', '', 'TOTAL', totales.galones > 0 ? totales.galones.toLocaleString('es-PE') : '—', totales.monto.toFixed(2)]],
-        styles: { fontSize: 10, cellPadding: 3, textColor: [40, 40, 40], halign: 'center' },
+        foot: [['', '', '', 'TOTAL', totales.galones > 0 ? totales.galones.toLocaleString('es-PE') : '—', 'S/ ' + totales.monto.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + numeroALetras(totales.monto) + ')']],
+        styles: { fontSize: 9, cellPadding: 3, textColor: [40, 40, 40], halign: 'center' },
         headStyles: { fillColor: [0, 51, 160], textColor: 255, fontStyle: 'bold', fontSize: 10, halign: 'center' },
-        footStyles: { fillColor: [0, 174, 239], textColor: 255, fontStyle: 'bold', fontSize: 11, halign: 'center' },
+        footStyles: { fillColor: [0, 174, 239], textColor: 255, fontStyle: 'bold', fontSize: 10, halign: 'center' },
         alternateRowStyles: { fillColor: [245, 247, 250] },
         columnStyles: {
           0: { cellWidth: 12, halign: 'center', fontStyle: 'bold', textColor: [0, 51, 160] },
@@ -405,7 +457,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
           2: { halign: 'center' },
           3: { halign: 'center' },
           4: { halign: 'center' },
-          5: { halign: 'center', fontStyle: 'bold', textColor: [5, 150, 105] },
+          5: { halign: 'center', fontStyle: 'bold', textColor: [5, 150, 105], cellWidth: 70 },
         },
         didDrawPage: (d) => { if (d.pageNumber > 1) encabezado() },
       })
@@ -476,7 +528,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       <main style={{ padding: '30px 20px', maxWidth: '1400px', margin: '0 auto' }}>
         <Card style={{ padding: '15px 20px', marginBottom: '15px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', textAlign: 'left' }}>
           {cotCargandoDatos ? <p style={{ margin: 0, color: '#1e40af', fontWeight: 'bold' }}>⏳ Cargando archivos vigentes...</p>
-            : cotErrorDatos ? <div><p style={{ margin: '0 0 10px 0', color: '#991b1b', fontWeight: 'bold' }}>️ {cotErrorDatos}</p><Boton variante="outline" tamano="sm" onClick={() => setCotKey(k => k + 1)}>🔄 Reintentar</Boton></div>
+            : cotErrorDatos ? <div><p style={{ margin: '0 0 10px 0', color: '#991b1b', fontWeight: 'bold' }}>⚠️ {cotErrorDatos}</p><Boton variante="outline" tamano="sm" onClick={() => setCotKey(k => k + 1)}> Reintentar</Boton></div>
             : cotDatos ? <p style={{ margin: 0, fontSize: '13px', color: '#1e40af' }}>📌 <strong>Fuentes:</strong> {cotDatos.precioNombre} | {cotDatos.topeNombre}</p> : null}
         </Card>
 
@@ -514,7 +566,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
                 <Boton variante="success" onClick={agregarItem} disabled={!!preview.error || cotCargandoDatos} style={{ flex: 1 }}>
-                  {editingIndex !== null ? ' Actualizar ítem' : '➕ Agregar a la cotización'}
+                  {editingIndex !== null ? '💾 Actualizar ítem' : ' Agregar a la cotización'}
                 </Boton>
                 {editingIndex !== null && (
                   <Boton variante="outline" onClick={() => { setEditingIndex(null); limpiarForm() }}>Cancelar</Boton>
@@ -523,7 +575,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
             </Card>
 
             <Card style={{ padding: '20px' }}>
-              <h3 style={{ margin: '0 0 12px', color: AZUL, fontSize: '16px' }}> Desglose de la cotización en curso</h3>
+              <h3 style={{ margin: '0 0 12px', color: AZUL, fontSize: '16px' }}>📊 Desglose de la cotización en curso</h3>
               {previewEnriquecido ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <Paso etiqueta={`PASO 1 — Precio Base C/IGV (${previewEnriquecido.producto} en ${previewEnriquecido.planta})`} valor={`S/ ${previewEnriquecido.precioBase.toFixed(4)}`} color={AZUL} />
@@ -592,7 +644,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
                           <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 'bold', color: it.total > 0 ? '#059669' : '#6b7280', fontSize: '14px' }}>{it.total > 0 ? it.total.toFixed(2) : '—'}</td>
                           <td style={{ padding: '8px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                             <button onClick={() => editarItem(i)} title="Editar" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px' }}>✏️</button>
-                            <button onClick={() => eliminarItem(i)} title="Eliminar" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px' }}>️</button>
+                            <button onClick={() => eliminarItem(i)} title="Eliminar" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px' }}>🗑️</button>
                           </td>
                         </tr>
                       ))}
