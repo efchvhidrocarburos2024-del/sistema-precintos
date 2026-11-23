@@ -728,7 +728,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
                 {papelera && <Boton variante="outline" onClick={deshacer}>↩️ Deshacer</Boton>}
               </div>
               <p style={{ margin: '12px 0 0', fontSize: '12px', color: 'var(--text-light)' }}>
-                El PDF profesional incluye logo corporativo, condiciones comerciales y espacio para firmas. La percepción se aplica a toda la cotización y recalcula los totales al instante.
+                El PDF profesional incluye logo corporativo, condiciones comerciales y espacio para firmas. La percepción se aplica a toda la cotización; recalcula los totales al instante.
               </p>
             </Card>
           </div>
