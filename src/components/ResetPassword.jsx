@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
-import { useNavigate, useSearchParams } from 'react-router-dom'
 
 const AZUL = '#0033A0'
 const CYAN = '#00AEEF'
@@ -14,8 +13,7 @@ export default function ResetPassword({ setPantalla }) {
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState('')
   const [exito, setExito] = useState(false)
-  const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
+  const [tokenValido, setTokenValido] = useState(false)
 
   useEffect(() => {
     // Verificar si hay token en la URL (viene del correo)
@@ -38,7 +36,13 @@ export default function ResetPassword({ setPantalla }) {
     supabase.auth.setSession({ access_token: accessToken, refresh_token: '' })
       .then(({ error }) => {
         if (error) {
-          setError('Token inválido o expirado. Solicita un nuevo enlace.')
+          if (/expired|invalid/i.test(error.message)) {
+            setError('Este enlace ha expirado. Por favor solicita uno nuevo.')
+          } else {
+            setError('Error al validar el enlace: ' + error.message)
+          }
+        } else {
+          setTokenValido(true)
         }
       })
   }, [])
@@ -71,7 +75,7 @@ export default function ResetPassword({ setPantalla }) {
       
       // Redirigir al login después de 3 segundos
       setTimeout(() => {
-        navigate('/')
+        setPantalla('')
       }, 3000)
     } catch (err) {
       setError(err.message || 'No se pudo actualizar la contraseña.')
@@ -92,7 +96,7 @@ export default function ResetPassword({ setPantalla }) {
           <p style={{ margin: '0 0 24px', fontSize: '14px', color: '#6b7280' }}>
             Tu contraseña ha sido cambiada exitosamente. Serás redirigido al login en unos segundos...
           </p>
-          <button onClick={() => navigate('/')} style={{ padding: '12px 24px', borderRadius: '8px', border: 'none', backgroundColor: AZUL, color: '#fff', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' }}>
+          <button onClick={() => setPantalla('')} style={{ padding: '12px 24px', borderRadius: '8px', border: 'none', backgroundColor: AZUL, color: '#fff', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' }}>
             Ir al Login
           </button>
         </div>
@@ -100,7 +104,7 @@ export default function ResetPassword({ setPantalla }) {
     )
   }
 
-  if (error && !exito) {
+  if (error && !exito && !tokenValido) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--gray-bg, #eef1f5)', padding: '20px' }}>
         <div style={{ width: '100%', maxWidth: '440px', backgroundColor: '#fbfcfe', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,51,160,0.10)', padding: '40px 36px', textAlign: 'center' }}>
@@ -156,7 +160,7 @@ export default function ResetPassword({ setPantalla }) {
               title={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
               style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#9aa3af', padding: '4px' }}
             >
-              {verPassword ? '🙈' : '️'}
+              {verPassword ? '🙈' : '👁️'}
             </button>
           </div>
 
@@ -187,7 +191,7 @@ export default function ResetPassword({ setPantalla }) {
             disabled={cargando}
             style={{ width: '100%', padding: '14px', borderRadius: '8px', border: 'none', backgroundColor: AZUL, color: '#fff', fontSize: '15px', fontWeight: 'bold', cursor: cargando ? 'not-allowed' : 'pointer', opacity: cargando ? 0.7 : 1 }}
           >
-            {cargando ? '⏳ Actualizando...' : '🔐 Actualizar Contraseña'}
+            {cargando ? '⏳ Actualizando...' : ' Actualizar Contraseña'}
           </button>
         </form>
 
