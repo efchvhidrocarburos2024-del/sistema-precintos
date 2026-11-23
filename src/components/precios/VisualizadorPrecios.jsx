@@ -6,6 +6,8 @@ import autoTable from 'jspdf-autotable'
 import { Card, Boton } from '../ui'
 import toast from 'react-hot-toast'
 
+const AZUL = '#0033A0' // Color azul del logo de Petroamérica
+
 const normalizarTexto = (txt) => String(txt || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').replace(/N°/gi, 'N').trim().toUpperCase()
 const esPlantaValida = (nombre) => {
   const n = normalizarTexto(nombre)
@@ -69,7 +71,7 @@ export default function VisualizadorPrecios({ archivos, archivosTopes, puedeGest
   // Ambas pestañas usan el azul corporativo de los módulos
   const btnTabStyle = (activo) => ({
     padding: '10px 20px', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px',
-    backgroundColor: activo ? 'var(--primary-blue)' : '#f3f4f6', color: activo ? 'white' : '#4b5563', transition: 'all 0.2s',
+    backgroundColor: activo ? AZUL : '#f3f4f6', color: activo ? 'white' : '#4b5563', transition: 'all 0.2s',
     boxShadow: activo ? '0 2px 6px rgba(0,0,0,0.15)' : 'none',
   })
 
@@ -79,7 +81,7 @@ export default function VisualizadorPrecios({ archivos, archivosTopes, puedeGest
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
       <header style={{ padding: '20px 40px', display: 'flex', alignItems: 'center', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
         <button onClick={onVolver} style={{ background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }}>← Volver al Menú</button>
-        <h1 style={{ margin: '0 0 0 15px', color: 'var(--primary-blue)', fontSize: '28px', fontWeight: '900' }}>Visualizar Listas & Topes</h1>
+        <h1 style={{ margin: '0 0 0 15px', color: AZUL, fontSize: '28px', fontWeight: '900' }}>Visualizar Listas & Topes</h1>
       </header>
 
       <main style={{ padding: '40px 20px', maxWidth: '1100px', margin: '0 auto' }}>
@@ -88,18 +90,18 @@ export default function VisualizadorPrecios({ archivos, archivosTopes, puedeGest
             <button style={btnTabStyle(subVista === 'precios')} onClick={() => setSubVista('precios')}>📄 Listas de Precios</button>
             <button style={btnTabStyle(subVista === 'topes')} onClick={() => setSubVista('topes')}>📊 Topes</button>
           </div>
-          <Boton variante="outline" onClick={() => onIrComparar(subVista)} style={{ color: 'var(--primary-blue)' }}>⚖️ Comparar {subVista === 'precios' ? 'Precios' : 'Topes'}</Boton>
+          <Boton variante="outline" onClick={() => onIrComparar(subVista)} style={{ color: AZUL }}>⚖️ Comparar {subVista === 'precios' ? 'Precios' : 'Topes'}</Boton>
         </div>
 
         <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#6b7280' }}>
-          📅 La columna <strong>FECHA DE SUBIDA</strong> indica la fecha en que el documento se cargó al sistema (no la fecha interna de la lista).
+          📅 La columna <strong>Fecha de registro</strong> indica la fecha en que el documento se cargó al sistema (no la fecha interna de la lista).
         </p>
 
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead style={{ backgroundColor: 'var(--primary-blue)', textAlign: 'left' }}>
+            <thead style={{ backgroundColor: AZUL, textAlign: 'left' }}>
               <tr>
-                <th style={thStyle}>FECHA DE SUBIDA</th>
+                <th style={thStyle}>Fecha de registro</th>
                 <th style={thStyle}>NOMBRE</th>
                 <th style={{ ...thStyle, textAlign: 'center' }}>ESTADO</th>
                 <th style={{ ...thStyle, textAlign: 'center' }}>ACCIONES</th>
@@ -107,15 +109,23 @@ export default function VisualizadorPrecios({ archivos, archivosTopes, puedeGest
             </thead>
             <tbody>
               {(subVista === 'precios' ? archivos : archivosTopes).map(f => (
-                <tr key={f.id} style={{ borderBottom: '1px solid #eee' }}>
+                <tr 
+                  key={f.id} 
+                  style={{ 
+                    borderBottom: '1px solid #eee',
+                    transition: 'background-color 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f9ff'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = f.es_vigente ? '#ecfdf5' : 'white'}
+                >
                   <td style={{ padding: '15px', color: '#374151' }}>{new Date(f.created_at).toLocaleDateString()}</td>
-                  <td style={{ padding: '15px', fontWeight: 'bold', color: '#111827' }}>{subVista === 'precios' ? '📄' : '📊'} {f.nombre_archivo}</td>
+                  <td style={{ padding: '15px', fontWeight: 'bold', color: '#111827' }}>{subVista === 'precios' ? '📄' : ''} {f.nombre_archivo}</td>
                   <td style={{ padding: '15px', textAlign: 'center' }}>{f.es_vigente ? <span style={{ color: '#166534', fontWeight: 'bold' }}>VIGENTE</span> : 'HISTÓRICO'}</td>
                   <td style={{ padding: '15px', textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                      <Boton variante="outline" tamano="sm" onClick={() => verComoPDF(f)} title="Ver como PDF">👁️</Boton>
+                      <Boton variante="outline" tamano="sm" onClick={() => verComoPDF(f)} title="Ver como PDF">️</Boton>
                       {puedeGestionar && !f.es_vigente && <Boton variante="success" tamano="sm" onClick={() => onMarcarVigente(f.id, f.nombre_archivo, subVista)} title="Marcar como vigente">✅</Boton>}
-                      {puedeGestionar && <Boton variante="danger" tamano="sm" onClick={() => { setArchivoAEliminar({ ...f, tipo: subVista }); setModalEliminarAbierto(true) }} title="Eliminar">🗑️</Boton>}
+                      {puedeGestionar && <Boton variante="danger" tamano="sm" onClick={() => { setArchivoAEliminar({ ...f, tipo: subVista }); setModalEliminarAbierto(true) }} title="Eliminar">️</Boton>}
                     </div>
                   </td>
                 </tr>
