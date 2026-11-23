@@ -177,19 +177,19 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       setItems(prev => prev.map((it, i) => (i === editingIndex ? preview.data : it)))
       setEditingIndex(null)
       limpiarForm()
-      toast.success('Ítem actualizado en el lote')
+      toast.success('Ítem actualizado en la cotización')
       return
     }
     const dup = items.some(it =>
       it.planta === preview.data.planta && it.producto === preview.data.producto &&
       it.almacen === preview.data.almacen && it.factor === preview.data.factor
     )
-    if (dup) return toast.error('Ese ítem (planta/producto/almacén/factor) ya está en el lote. Edítalo si cambia la cantidad.')
+    if (dup) return toast.error('Ese ítem (planta/producto/almacén/factor) ya está en la cotización. Edítalo si cambia la cantidad.')
     if (items.length === 0) setNumeroLote(generarNumeroCotizacion())
     setItems(prev => [...prev, preview.data])
     setPapelera(null)
     limpiarForm()
-    toast.success('Ítem agregado al lote')
+    toast.success('Ítem agregado a la cotización')
   }
 
   const editarItem = (i) => {
@@ -210,7 +210,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
     if (items.length === 0) return
     setPapelera({ items: [...items], numero: numeroLote })
     setItems([]); setNumeroLote(''); setEditingIndex(null); limpiarForm()
-    toast('Lote vaciado. Puedes deshacer.', { icon: '🧹' })
+    toast('Cotización vaciada. Puedes deshacer.', { icon: '🧹' })
   }
 
   const deshacer = () => {
@@ -225,7 +225,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   // Guardar TODO el lote en historial
   // ----------------------------------------------------------
   const guardarLote = async () => {
-    if (itemsDerivados.length === 0) return toast.error('Agrega al menos un ítem al lote.')
+    if (itemsDerivados.length === 0) return toast.error('Agrega al menos un ítem a la cotización.')
     setGuardando(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -253,7 +253,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       }))
       const { data, error } = await supabase.from('cotizaciones').insert(rows).select()
       if (error) throw error
-      toast.success(`Lote ${numero} guardado en historial (${rows.length} ítems)`)
+      toast.success(`Cotización ${numero} guardada en historial (${rows.length} ítems)`)
       if (onCotizacionGuardada) onCotizacionGuardada(data[0])
       setItems([]); setNumeroLote(''); setPapelera(null); setEditingIndex(null); limpiarForm()
     } catch (error) {
@@ -267,8 +267,8 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   // PDF de TODO el lote
   // ----------------------------------------------------------
   const generarPDFLote = () => {
-    if (itemsDerivados.length === 0) return toast.error('Agrega al menos un ítem al lote.')
-    const toastId = toast.loading('Generando PDF del lote...')
+    if (itemsDerivados.length === 0) return toast.error('Agrega al menos un ítem a la cotización.')
+    const toastId = toast.loading('Generando PDF de la cotización...')
     try {
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
       const W = doc.internal.pageSize.getWidth()
@@ -282,7 +282,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         doc.setFontSize(15); doc.setFont(undefined, 'bold')
         doc.text('SIGMO · Cotización de Combustibles', 14, 11)
         doc.setFontSize(10); doc.setFont(undefined, 'normal')
-        doc.text(`Lote ${numero}  ·  ${fecha}`, 14, 18)
+        doc.text(`N° ${numero}  ·  ${fecha}`, 14, 18)
         doc.setFontSize(10)
         doc.text(`Cliente: ${cliente || '—'}`, W - 14, 11, { align: 'right' })
         doc.text(`Percepción: ${aplicaPercepcion ? 'APLICADA (1%)' : 'NO aplicada'}`, W - 14, 18, { align: 'right' })
@@ -304,7 +304,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
           it.cantidad > 0 ? it.cantidad.toLocaleString('es-PE') : '—',
           it.total > 0 ? it.total.toFixed(2) : '—',
         ]),
-        foot: [[ '', '', '', '', '', '', '', '', 'TOTAL LOT', totales.galones > 0 ? totales.galones.toLocaleString('es-PE') : '—', totales.monto.toFixed(2) ]],
+        foot: [[ '', '', '', '', '', '', '', '', 'TOTAL', totales.galones > 0 ? totales.galones.toLocaleString('es-PE') : '—', totales.monto.toFixed(2) ]],
         styles: { fontSize: 8, cellPadding: 2 },
         headStyles: { fillColor: [0, 51, 160], textColor: 255, fontStyle: 'bold' },
         footStyles: { fillColor: [0, 174, 239], textColor: 255, fontStyle: 'bold' },
@@ -341,7 +341,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       }
 
       doc.save(`Cotizacion_${numero}.pdf`)
-      toast.success('PDF del lote generado', { id: toastId })
+      toast.success('PDF de la cotización generado', { id: toastId })
     } catch (error) {
       toast.error('Error al generar PDF: ' + error.message, { id: toastId })
     }
@@ -376,7 +376,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
           <div style={{ flex: '1 1 380px', minWidth: '320px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
             <Card style={{ padding: '25px' }}>
               <h2 style={{ margin: '0 0 18px', fontSize: '20px', color: 'var(--text-dark)', textAlign: 'center' }}>
-                {editingIndex !== null ? `✏️ Editando ítem #${editingIndex + 1}` : '🧾 Configurar ítem'}
+                {editingIndex !== null ? `✏️ Editando ítem #${editingIndex + 1}` : '🧾 Cotizar'}
               </h2>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div><label style={labelStyle}>Hoja de Precio</label><div style={readOnlyFieldStyle}>{HOJA_PRECIO_COTIZACION}</div></div>
@@ -401,7 +401,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
                 <Boton variante="success" onClick={agregarItem} disabled={!!preview.error || cotCargandoDatos} style={{ flex: 1 }}>
-                  {editingIndex !== null ? '💾 Actualizar ítem' : '➕ Agregar al lote'}
+                  {editingIndex !== null ? '💾 Actualizar ítem' : '➕ Agregar a la cotización'}
                 </Boton>
                 {editingIndex !== null && (
                   <Boton variante="outline" onClick={() => { setEditingIndex(null); limpiarForm() }}>Cancelar</Boton>
@@ -411,7 +411,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
 
             {/* Desglose en vivo del ítem en curso */}
             <Card style={{ padding: '20px' }}>
-              <h3 style={{ margin: '0 0 12px', color: AZUL, fontSize: '16px' }}>📊 Desglose del ítem en curso</h3>
+              <h3 style={{ margin: '0 0 12px', color: AZUL, fontSize: '16px' }}>📊 Desglose de la cotización en curso</h3>
               {previewEnriquecido ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <Paso etiqueta={`PASO 1 — Precio Base C/IGV (${previewEnriquecido.producto} en ${previewEnriquecido.planta})`} valor={`S/ ${previewEnriquecido.precioBase.toFixed(4)}`} color={AZUL} />
@@ -428,16 +428,16 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
             </Card>
           </div>
 
-          {/* ============ COLUMNA DERECHA: lote ============ */}
+          {/* ============ COLUMNA DERECHA: cotización ============ */}
           <div style={{ flex: '2 1 560px', minWidth: '320px' }}>
             <Card style={{ padding: '25px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '15px' }}>
-                <h2 style={{ margin: 0, fontSize: '20px', color: 'var(--text-dark)' }}>📚 Lote de cotización</h2>
+                <h2 style={{ margin: 0, fontSize: '20px', color: 'var(--text-dark)' }}>📚 Cotización</h2>
                 {numeroLote && <span style={{ padding: '4px 12px', borderRadius: '999px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e40af', fontWeight: 'bold', fontSize: '13px' }}>{numeroLote}</span>}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px', alignItems: 'end', marginBottom: '15px' }}>
-                <div><label style={labelStyle}>Cliente (aplica a todo el lote)</label><input type="text" value={cliente} onChange={e => setCliente(e.target.value)} placeholder="Nombre del cliente" style={inputStyle} /></div>
+                <div><label style={labelStyle}>Cliente (aplica a toda la cotización)</label><input type="text" value={cliente} onChange={e => setCliente(e.target.value)} placeholder="Nombre del cliente" style={inputStyle} /></div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 'bold', color: '#92400e', fontSize: '13px', backgroundColor: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '8px', padding: '10px 12px' }}>
                   <input type="checkbox" checked={aplicaPercepcion} onChange={e => setAplicaPercepcion(e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
                   Percepción (1%) × 1.01
@@ -447,8 +447,8 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
               {itemsDerivados.length === 0 ? (
                 <div style={{ padding: '40px 20px', textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #d1d5db' }}>
                   <div style={{ fontSize: '44px', marginBottom: '10px' }}>🗂️</div>
-                  <h3 style={{ margin: '0 0 6px', color: 'var(--text-dark)' }}>El lote está vacío</h3>
-                  <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-light)' }}>Configura un ítem a la izquierda y pulsa «Agregar al lote». Puedes acumular varias cotizaciones y guardarlas o exportarlas juntas.</p>
+                  <h3 style={{ margin: '0 0 6px', color: 'var(--text-dark)' }}>La cotización está vacía</h3>
+                  <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-light)' }}>Configura un ítem a la izquierda y pulsa «Agregar a la cotización». Puedes acumular varias cotizaciones y guardarlas o exportarlas juntas.</p>
                 </div>
               ) : (
                 <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '10px' }}>
@@ -499,13 +499,13 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
               )}
 
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '18px' }}>
-                <Boton variante="success" onClick={guardarLote} disabled={guardando || itemsDerivados.length === 0}>{guardando ? '⏳ Guardando...' : `💾 Guardar lote en Historial (${totales.count})`}</Boton>
-                <Boton variante="primary" onClick={generarPDFLote} disabled={itemsDerivados.length === 0}>📄 Generar PDF del lote</Boton>
+                <Boton variante="success" onClick={guardarLote} disabled={guardando || itemsDerivados.length === 0}>{guardando ? '⏳ Guardando...' : `💾 Guardar Cotización en Historial (${totales.count})`}</Boton>
+                <Boton variante="primary" onClick={generarPDFLote} disabled={itemsDerivados.length === 0}>📄 Generar PDF de cotización</Boton>
                 <Boton variante="outline" onClick={vaciarLote} disabled={itemsDerivados.length === 0}>🧹 Vaciar</Boton>
                 {papelera && <Boton variante="outline" onClick={deshacer}>↩️ Deshacer</Boton>}
               </div>
               <p style={{ margin: '12px 0 0', fontSize: '12px', color: 'var(--text-light)' }}>
-                El PDF y el guardado incluyen <strong>todos los ítems del lote</strong> con un mismo número de cotización. La percepción se aplica a todo el lote y recalcula los totales al instante.
+                El PDF y el guardado incluyen <strong>todos los ítems de la cotización</strong> con un mismo número. La percepción se aplica a toda la cotización y recalcula los totales al instante.
               </p>
             </Card>
           </div>
