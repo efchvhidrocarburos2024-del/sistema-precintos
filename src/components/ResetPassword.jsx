@@ -14,6 +14,7 @@ export default function ResetPassword({ setPantalla, onFinRecuperacion }) {
   const [error, setError] = useState('')
   const [exito, setExito] = useState(false)
   const [haySesion, setHaySesion] = useState(false)
+  const [esperaAgotada, setEsperaAgotada] = useState(false)
   const saliendoRef = useRef(false)
 
   // ----------------------------------------------------------
@@ -51,6 +52,16 @@ export default function ResetPassword({ setPantalla, onFinRecuperacion }) {
       listener.subscription.unsubscribe()
     }
   }, [])
+
+  // ----------------------------------------------------------
+  // ✅ Si en 4 segundos el enlace no logró establecer sesión,
+  // ofrecemos pedir uno nuevo en vez de dejar al usuario atrapado.
+  // ----------------------------------------------------------
+  useEffect(() => {
+    if (haySesion) { setEsperaAgotada(false); return }
+    const t = setTimeout(() => setEsperaAgotada(true), 4000)
+    return () => clearTimeout(t)
+  }, [haySesion])
 
   const validarPassword = (pwd) => {
     if (pwd.length < 8) return 'La contraseña debe tener al menos 8 caracteres.'
@@ -229,6 +240,17 @@ export default function ResetPassword({ setPantalla, onFinRecuperacion }) {
             {cargando ? '⏳ Actualizando...' : '🔐 Actualizar Contraseña'}
           </button>
         </form>
+
+        {/* ✅ Botón de rescate: si el enlace no estableció sesión en 4s */}
+        {!haySesion && esperaAgotada && (
+          <button
+            type="button"
+            onClick={() => { if (onFinRecuperacion) onFinRecuperacion(); setPantalla('forgot') }}
+            style={{ display: 'block', width: '100%', marginTop: '12px', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#b45309', color: '#fff', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            📨 El enlace no funcionó: solicitar uno nuevo
+          </button>
+        )}
 
         <button
           type="button"

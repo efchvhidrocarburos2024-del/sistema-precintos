@@ -125,7 +125,27 @@ function App() {
   const [rol, setRol] = useState(null)
   const [permisos, setPermisos] = useState([])
   const [cargandoRol, setCargandoRol] = useState(true)
-  const [esRecuperacion, setEsRecuperacion] = useState(false)
+
+  // ----------------------------------------------------------
+  // ✅ DETECCIÓN SINCRÓNICA de recuperación (en el primer render).
+  // Antes vivía dentro de un useEffect y llegaba tarde: supabase-js
+  // limpia el hash de la URL apenas procesa el token del enlace.
+  // ----------------------------------------------------------
+  const [recInicial] = useState(() => {
+    const hash = window.location.hash
+    const sp = new URLSearchParams(window.location.search)
+    const hp = new URLSearchParams(hash.replace(/^#/, ''))
+    const esRec =
+      (hash.includes('access_token') && (hash.includes('type=recovery') || hp.get('type') === 'recovery')) ||
+      sp.get('type') === 'recovery' ||
+      hp.get('type') === 'recovery' ||
+      window.location.pathname.includes('/auth/v1/verify')
+    const errRaw =
+      sp.get('error_description') || sp.get('error') ||
+      hp.get('error_description') || hp.get('error') || null
+    return { esRec, errRaw }
+  })
+  const [esRecuperacion, setEsRecuperacion] = useState(recInicial.esRec)
 
   const [mostrarAviso, setMostrarAviso] = useState(false)
   const timerRef = useRef(null)
@@ -143,21 +163,25 @@ function App() {
   }, [pantalla])
 
   // ----------------------------------------------------------
+  // ✅ Si el enlace de recuperación llegó con error (token expirado
+  // o ya usado), lo comunicamos al usuario y limpiamos la URL.
+  // ----------------------------------------------------------
+  useEffect(() => {
+    if (!recInicial.errRaw) return
+    const msg = /expired|expir/i.test(recInicial.errRaw)
+      ? 'El enlace de recuperación expiró. Solicita uno nuevo.'
+      : /invalid|used|single.use/i.test(recInicial.errRaw)
+        ? 'El enlace ya fue utilizado o es inválido. Solicita uno nuevo.'
+        : 'No se pudo validar el enlace de recuperación. Solicita uno nuevo.'
+    toast.error(msg, { duration: 6000 })
+    window.history.replaceState(null, '', window.location.pathname)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ----------------------------------------------------------
   // Autenticación
   // ----------------------------------------------------------
   useEffect(() => {
-    // Detectar recuperación por hash, search params o URL directa de verificación
-    const hash = window.location.hash
-    const searchParams = new URLSearchParams(window.location.search)
-
-    const isRecoveryHash = hash.includes('access_token') && hash.includes('type=recovery')
-    const isRecoverySearch = searchParams.get('type') === 'recovery'
-    const isVerifyUrl = window.location.pathname.includes('/auth/v1/verify')
-
-    if (isRecoveryHash || isRecoverySearch || isVerifyUrl) {
-      setEsRecuperacion(true)
-    }
-
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSesion(session)
 
@@ -259,9 +283,9 @@ function App() {
   }, [])
 
   // ----------------------------------------------------------
-  // ✅ NUEVO: salida limpia del flujo de recuperación
-  // Limpia el hash #access_token=...&type=recovery de la URL para que
-  // un F5 no vuelva a disparar el modo recuperación.
+  // ✅ Salida limpia del flujo de recuperación: baja la bandera y
+  // limpia el hash #access_token=...&type=recovery de la URL para
+  // que un F5 no vuelva a disparar el modo recuperación.
   // ----------------------------------------------------------
   const finRecuperacion = useCallback(() => {
     setEsRecuperacion(false)
@@ -308,9 +332,9 @@ function App() {
 
   // ----------------------------------------------------------
   // --- ✅ FLUJO DE RECUPERACIÓN (prioridad máxima) ---
-  // El enlace del correo crea una sesión de recuperación; por eso esta
-  // rama va ANTES de la comprobación de sesión: así el usuario ve el
-  // formulario de nueva contraseña en vez de entrar directo al Lobby.
+  // El enlace del correo crea una sesión de recuperación; por eso
+  // esta rama va ANTES de la comprobación de sesión: así el usuario
+  // ve el formulario de nueva contraseña en vez del Lobby/Login.
   // ----------------------------------------------------------
   if (esRecuperacion) {
     return (
@@ -329,7 +353,7 @@ function App() {
   if (!sesion) {
     return (
       <>
-        {/* ✅ FIX: el Toaster también debe existir sin sesión para ver los toasts de Login/Forgot */}
+        {/* ✅ El Toaster también existe sin sesión para ver toasts de Login/Forgot */}
         <Toaster position="top-right" toastOptions={{ duration: 4000, style: { fontWeight: 'bold' } }} />
         <ErrorBoundary key={pantalla || 'login'}>
           <Suspense fallback={<CargandoModulo texto="Cargando…" />}>
