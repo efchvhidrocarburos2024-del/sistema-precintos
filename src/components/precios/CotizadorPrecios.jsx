@@ -98,10 +98,28 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         if (!colPlanta || !colAlmacen || !colArticulo) throw new Error('El archivo de Topes no tiene columnas PLANTA / ALMACEN / ARTICULO.')
         const colTopeAuto = colTopes[0] || 'TOPE S/IGV'
         setCotColTope(colTopeAuto)
+        
+        // Crear mapa de combinaciones válidas desde TOPES
+        const combinacionesValidas = new Map()
+        topeRows.forEach(row => {
+          const planta = String(row[colPlanta] || '').trim().toUpperCase()
+          const almacen = String(row[colAlmacen] || '').trim().toUpperCase()
+          const articulo = String(row[colArticulo] || '').trim().toUpperCase()
+          
+          if (planta && almacen && articulo) {
+            const key = `${planta}|${almacen}`
+            if (!combinacionesValidas.has(key)) {
+              combinacionesValidas.set(key, new Set())
+            }
+            combinacionesValidas.get(key).add(articulo)
+          }
+        })
+        
         setCotDatos({
           precioNombre: precioVigente.nombre_archivo, topeNombre: topeVigente.nombre_archivo,
           hojaUsada: sheetP, headers, idxPlanta, filas, plantas, productos,
           topeRows, colPlanta, colAlmacen, colArticulo, colTopes, colTopeAuto,
+          combinacionesValidas, // NUEVO: mapa de combinaciones válidas
         })
       } catch (e) {
         setCotErrorDatos(e.message); setCotDatos(null)
@@ -112,10 +130,75 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
     cargarDatosCotizador()
   }, [cotKey])
 
-  const almacenes = useMemo(() => {
-    if (!cotDatos) return []
-    return [...new Set(cotDatos.topeRows.map(r => String(r[cotDatos.colAlmacen] || '').trim()).filter(Boolean))].sort()
-  }, [cotDatos])
+  // ----------------------------------------------------------
+  // Lógica de sincronización automática
+  // ----------------------------------------------------------
+  
+  // Obtener almacenes disponibles para la planta seleccionada
+  const almacenesDisponibles = useMemo(() => {
+    if (!cotDatos || !fPlanta) return []
+    
+    const plantaNormalizada = normalizarTexto(fPlanta)
+    const almacenesSet = new Set()
+    
+    cotDatos.topeRows.forEach(row => {
+      const rowPlanta = normalizarTexto(row[cotDatos.colPlanta])
+      const rowAlmacen = String(row[cotDatos.colAlmacen] || '').trim()
+      
+      if (rowPlanta === plantaNormalizada && rowAlmacen) {
+        almacenesSet.add(rowAlmacen)
+      }
+    })
+    
+    return [...almacenesSet].sort()
+  }, [cotDatos, fPlanta])
+
+  // Obtener productos disponibles para la combinación planta + almacén
+  const productosDisponibles = useMemo(() => {
+    if (!cotDatos || !fPlanta || !fAlmacen) return []
+    
+    const plantaNormalizada = normalizarTexto(fPlanta)
+    const almacenNormalizado = normalizarTexto(fAlmacen)
+    const productosSet = new Set()
+    
+    cotDatos.topeRows.forEach(row => {
+      const rowPlanta = normalizarTexto(row[cotDatos.colPlanta])
+      const rowAlmacen = normalizarTexto(row[cotDatos.colAlmacen])
+      const rowArticulo = String(row[cotDatos.colArticulo] || '').trim()
+      
+      if (rowPlanta === plantaNormalizada && rowAlmacen === almacenNormalizado && rowArticulo) {
+        productosSet.add(rowArticulo)
+      }
+    })
+    
+    return [...productosSet].sort()
+  }, [cotDatos, fPlanta, fAlmacen])
+
+  // Efecto para sincronizar almacén cuando cambia planta
+  useEffect(() => {
+    if (fPlanta && almacenesDisponibles.length > 0) {
+      // Si el almacén actual no es válido para la nueva planta, seleccionar el primero disponible
+      const almacenActualValido = almacenesDisponibles.includes(fAlmacen)
+      if (!almacenActualValido) {
+        setFAlmacen(almacenesDisponibles[0])
+      }
+    } else {
+      setFAlmacen('')
+    }
+  }, [fPlanta, almacenesDisponibles])
+
+  // Efecto para sincronizar producto cuando cambia planta o almacén
+  useEffect(() => {
+    if (fPlanta && fAlmacen && productosDisponibles.length > 0) {
+      // Si el producto actual no es válido para la nueva combinación, seleccionar el primero disponible
+      const productoActualValido = productosDisponibles.includes(fProducto)
+      if (!productoActualValido) {
+        setFProducto(productosDisponibles[0])
+      }
+    } else {
+      setFProducto('')
+    }
+  }, [fPlanta, fAlmacen, productosDisponibles])
 
   // ----------------------------------------------------------
   // Cálculo de un ítem (misma matemática de negocio)
@@ -202,7 +285,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   const eliminarItem = (i) => {
     setPapelera({ items: [...items], numero: numeroLote })
     setItems(prev => prev.filter((_, idx) => idx !== i))
-    if (editingIndex === i) { setEditingIndex(null); limpiarForm() }
+    if (editingIndex === i) { { setEditingIndex(null); limpiarForm() } }
     toast('Ítem eliminado. Puedes deshacer.', { icon: '🗑️' })
   }
 
@@ -364,7 +447,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         <Card style={{ padding: '15px 20px', marginBottom: '15px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', textAlign: 'left' }}>
           {cotCargandoDatos ? <p style={{ margin: 0, color: '#1e40af', fontWeight: 'bold' }}>⏳ Cargando archivos vigentes...</p>
             : cotErrorDatos ? <div><p style={{ margin: '0 0 10px 0', color: '#991b1b', fontWeight: 'bold' }}>⚠️ {cotErrorDatos}</p><Boton variante="outline" tamano="sm" onClick={() => setCotKey(k => k + 1)}>🔄 Reintentar</Boton></div>
-            : cotDatos ? <p style={{ margin: 0, fontSize: '13px', color: '#1e40af' }}>📌 <strong>Fuentes:</strong> {cotDatos.precioNombre} &nbsp;|&nbsp; {cotDatos.topeNombre}</p> : null}
+            : cotDatos ? <p style={{ margin: 0, fontSize: '13px', color: '#1e40af' }}>📌 <strong>Fuentes:</strong> {cotDatos.precioNombre} | {cotDatos.topeNombre}</p> : null}
         </Card>
 
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -372,7 +455,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
           <div style={{ flex: '1 1 380px', minWidth: '320px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
             <Card style={{ padding: '25px' }}>
               <h2 style={{ margin: '0 0 18px', fontSize: '20px', color: 'var(--text-dark)', textAlign: 'center' }}>
-                {editingIndex !== null ? `✏️ Editando ítem #${editingIndex + 1}` : '🧾 Cotizar'}
+                {editingIndex !== null ? `✏️ Editando ítem #${editingIndex + 1}` : ' Cotizar'}
               </h2>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div><label style={labelStyle}>Hoja de Precio</label><div style={readOnlyFieldStyle}>{HOJA_PRECIO_COTIZACION}</div></div>
@@ -383,13 +466,13 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
                   </select>
                 </div>
                 <div><label style={labelStyle}>Producto</label>
-                  <select value={fProducto} onChange={e => setFProducto(e.target.value)} style={selectStyle} disabled={!cotDatos}>
-                    <option value="">Seleccione...</option>{cotDatos?.productos?.map(p => <option key={p} value={p}>{p}</option>)}
+                  <select value={fProducto} onChange={e => setFProducto(e.target.value)} style={selectStyle} disabled={!cotDatos || !fPlanta || !fAlmacen}>
+                    <option value="">Seleccione...</option>{productosDisponibles.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
                 <div><label style={labelStyle}>Almacén</label>
-                  <select value={fAlmacen} onChange={e => setFAlmacen(e.target.value)} style={selectStyle} disabled={!cotDatos}>
-                    <option value="">Seleccione...</option>{almacenes.map(a => <option key={a} value={a}>{a}</option>)}
+                  <select value={fAlmacen} onChange={e => setFAlmacen(e.target.value)} style={selectStyle} disabled={!cotDatos || !fPlanta}>
+                    <option value="">Seleccione...</option>{almacenesDisponibles.map(a => <option key={a} value={a}>{a}</option>)}
                   </select>
                 </div>
                 <div><label style={labelStyle}>FACTOR (numérico)</label><input type="number" min="0" step="0.0001" value={fFactor} onChange={e => setFFactor(e.target.value)} placeholder="0.00" style={inputStyle} /></div>
@@ -428,7 +511,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
           <div style={{ flex: '2 1 560px', minWidth: '320px' }}>
             <Card style={{ padding: '25px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '15px' }}>
-                <h2 style={{ margin: 0, fontSize: '20px', color: 'var(--text-dark)' }}>📚 Cotización</h2>
+                <h2 style={{ margin: 0, fontSize: '20px', color: 'var(--text-dark)' }}> Cotización</h2>
                 {numeroLote && <span style={{ padding: '4px 12px', borderRadius: '999px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e40af', fontWeight: 'bold', fontSize: '13px' }}>{numeroLote}</span>}
               </div>
 
