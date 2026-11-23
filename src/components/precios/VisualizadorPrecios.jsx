@@ -10,7 +10,7 @@ const normalizarTexto = (txt) => String(txt || '').normalize("NFD").replace(/[\u
 const esPlantaValida = (nombre) => {
   const n = normalizarTexto(nombre)
   if (!n || n.length < 3 || n.includes('*') || !isNaN(Number(n))) return false
-  if (n.match(/\d{4}-\d{2}-\d{2}/) || n.match(/\d{2}\/\d{2}/\d{4}/)) return false
+  if (n.match(/\d{4}-\d{2}-\d{2}/) || n.match(/\d{2}\/\d{2}\/\d{4}/)) return false
   if (n.includes('TOTAL') || n.includes('IGV') || n.includes('ISC') || n.includes('RODAJE') || n.includes('INCREMENTO') || n.includes('INCLUSION') || n.includes('DISMINUCION') || n.includes('SISE') || n.includes('INGRESO')) return false
   return true
 }
