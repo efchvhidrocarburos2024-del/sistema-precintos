@@ -40,14 +40,27 @@ export default function Login({ setPantalla }) {
     }
   }
 
+  // ESTILOS ACTUALIZADOS - Fondo blanco, texto negro
+  const inputStyle = { 
+    width: '100%', 
+    padding: '12px 14px', 
+    borderRadius: '8px', 
+    border: '1px solid #d1d5db',  // Borde gris claro
+    backgroundColor: '#ffffff',     // Fondo blanco
+    color: '#111827',              // Texto negro
+    fontSize: '14px', 
+    boxSizing: 'border-box' 
+  }
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--gray-bg, #eef1f5)', padding: '20px' }}>
       <style>{`
-        @keyframes loginAparecer { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-        .login-card { animation: loginAparecer 0.4s ease; }
-        .login-input { width: 100%; padding: 12px 14px; borderRadius: 8px; border: 1px solid #334155; backgroundColor: #334155; color: #fff; fontSize: 14px; box-sizing: border-box; }
-        .login-input::placeholder { color: #9aa3af; }
-        .login-input:focus { outline: none; border-color: ${CYAN} !important; box-shadow: 0 0 0 3px rgba(0,174,239,0.18); }
+        .login-input::placeholder { color: #9ca3af; }
+        .login-input:focus { 
+          outline: none; 
+          border-color: ${CYAN} !important; 
+          box-shadow: 0 0 0 3px rgba(0,174,239,0.18); 
+        }
       `}</style>
 
       <div className="login-card" style={{ width: '100%', maxWidth: '420px', backgroundColor: '#fbfcfe', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,51,160,0.10)', padding: '40px 36px', textAlign: 'center' }}>
@@ -80,7 +93,7 @@ export default function Login({ setPantalla }) {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="tu@correo.com"
             autoComplete="email"
-            style={{ marginBottom: '18px' }}
+            style={{ ...inputStyle, marginBottom: '18px' }}
           />
 
           <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px', color: '#111827', textAlign: 'center' }}>
@@ -94,13 +107,13 @@ export default function Login({ setPantalla }) {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Tu contraseña"
               autoComplete="current-password"
-              style={{ paddingRight: '44px' }}
+              style={{ ...inputStyle, paddingRight: '44px' }}
             />
             <button
               type="button"
               onClick={() => setVerPassword(v => !v)}
               title={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-              style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#9aa3af', padding: '4px' }}
+              style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#6b7280', padding: '4px' }}
             >
               {verPassword ? '🙈' : '👁️'}
             </button>
@@ -111,7 +124,7 @@ export default function Login({ setPantalla }) {
             disabled={cargando}
             style={{ width: '100%', padding: '14px', borderRadius: '8px', border: 'none', backgroundColor: AZUL, color: '#fff', fontSize: '16px', fontWeight: 'bold', cursor: cargando ? 'not-allowed' : 'pointer', opacity: cargando ? 0.7 : 1, transition: 'all 0.2s' }}
           >
-            {cargando ? '⏳ Ingresando...' : 'Iniciar Sesión en SIGMO'}
+            {cargando ? ' Ingresando...' : 'Iniciar Sesión en SIGMO'}
           </button>
         </form>
 
