@@ -410,24 +410,24 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         doc.setFillColor(0, 174, 239)
         doc.rect(0, 26, W, 1.5, 'F')
         
-        // Logo Petroamérica (si existe)
+        // Logo Petroamérica (si existe) - ALINEADO CON EL TEXTO
         try {
           const logoData = '/logo-p.png'
-          doc.addImage(logoData, 'PNG', 14, 8, 20, 20)
+          doc.addImage(logoData, 'PNG', 14, 6, 14, 14) // Logo más pequeño y alineado verticalmente
         } catch (e) {
           console.log('Logo no disponible')
         }
         
         doc.setTextColor(0, 51, 160) // Texto azul (#0033A0)
         doc.setFontSize(16); doc.setFont(undefined, 'bold')
-        doc.text('SIGMO · Cotización de Combustibles', 40, 12)
+        doc.text('SIGMO · Cotización de Combustibles', 35, 12) // Ajustado para alineación con logo
         doc.setFontSize(10); doc.setFont(undefined, 'normal')
-        doc.text(`N° ${numero}  ·  ${fecha}`, 40, 20)
+        doc.text(`N° ${numero}  ·  ${fecha}`, 35, 20)
         
         // Información del cliente
         doc.setFontSize(10)
-        doc.text(`Cliente: ${cliente || '—'}`, W - 14, 17, { align: 'right' })
-        doc.text(`Percepción: ${aplicaPercepcion ? 'APLICADA (1%)' : 'NO aplicada'}`, W - 14, 22, { align: 'right' })
+        doc.text(`Cliente: ${cliente || '—'}`, W - 14, 12, { align: 'right' })
+        doc.text(`Percepción: ${aplicaPercepcion ? 'APLICADA (1%)' : 'NO aplicada'}`, W - 14, 17, { align: 'right' })
         
         doc.setTextColor(40, 40, 40)
       }
@@ -444,12 +444,12 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
           it.producto, 
           it.precioFinal.toFixed(4),
           it.cantidad > 0 ? it.cantidad.toLocaleString('es-PE') : '—',
-          'S/ ' + it.total.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + numeroALetras(it.total) + ')',
+          'S/ ' + it.total.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
         ]),
-        foot: [['', '', '', 'TOTAL', totales.galones > 0 ? totales.galones.toLocaleString('es-PE') : '—', 'S/ ' + totales.monto.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + numeroALetras(totales.monto) + ')']],
-        styles: { fontSize: 9, cellPadding: 3, textColor: [40, 40, 40], halign: 'center' },
+        foot: [['', '', '', 'TOTAL', totales.galones > 0 ? totales.galones.toLocaleString('es-PE') : '—', 'S/ ' + totales.monto.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })]],
+        styles: { fontSize: 10, cellPadding: 3, textColor: [40, 40, 40], halign: 'center' },
         headStyles: { fillColor: [0, 51, 160], textColor: 255, fontStyle: 'bold', fontSize: 10, halign: 'center' },
-        footStyles: { fillColor: [0, 174, 239], textColor: 255, fontStyle: 'bold', fontSize: 10, halign: 'center' },
+        footStyles: { fillColor: [0, 174, 239], textColor: 255, fontStyle: 'bold', fontSize: 11, halign: 'center' },
         alternateRowStyles: { fillColor: [245, 247, 250] },
         columnStyles: {
           0: { cellWidth: 12, halign: 'center', fontStyle: 'bold', textColor: [0, 51, 160] },
@@ -457,13 +457,22 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
           2: { halign: 'center' },
           3: { halign: 'center' },
           4: { halign: 'center' },
-          5: { halign: 'center', fontStyle: 'bold', textColor: [5, 150, 105], cellWidth: 70 },
+          5: { halign: 'right', fontStyle: 'bold', textColor: [5, 150, 105] },
         },
         didDrawPage: (d) => { if (d.pageNumber > 1) encabezado() },
       })
 
+      // MONTO TOTAL EN LETRAS (fuera de la tabla, arriba izquierda)
+      const yMontoLetras = (doc.lastAutoTable?.finalY || 40) + 8
+      doc.setFontSize(9); doc.setTextColor(40, 40, 40); doc.setFont(undefined, 'bold')
+      doc.text('MONTO TOTAL:', 14, yMontoLetras)
+      doc.setFont(undefined, 'normal')
+      const totalEnLetras = numeroALetras(totales.monto)
+      const lines = doc.splitTextToSize(totalEnLetras.toUpperCase(), W - 28)
+      doc.text(lines, 14, yMontoLetras + 5)
+
       // Condiciones comerciales
-      const yCondiciones = (doc.lastAutoTable?.finalY || 40) + 15
+      const yCondiciones = yMontoLetras + (lines.length * 5) + 15
       doc.setFontSize(9); doc.setTextColor(40, 40, 40); doc.setFont(undefined, 'bold')
       doc.text('CONDICIONES COMERCIALES:', 14, yCondiciones)
       doc.setFont(undefined, 'normal')
@@ -528,7 +537,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       <main style={{ padding: '30px 20px', maxWidth: '1400px', margin: '0 auto' }}>
         <Card style={{ padding: '15px 20px', marginBottom: '15px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', textAlign: 'left' }}>
           {cotCargandoDatos ? <p style={{ margin: 0, color: '#1e40af', fontWeight: 'bold' }}>⏳ Cargando archivos vigentes...</p>
-            : cotErrorDatos ? <div><p style={{ margin: '0 0 10px 0', color: '#991b1b', fontWeight: 'bold' }}>⚠️ {cotErrorDatos}</p><Boton variante="outline" tamano="sm" onClick={() => setCotKey(k => k + 1)}> Reintentar</Boton></div>
+            : cotErrorDatos ? <div><p style={{ margin: '0 0 10px 0', color: '#991b1b', fontWeight: 'bold' }}>⚠️ {cotErrorDatos}</p><Boton variante="outline" tamano="sm" onClick={() => setCotKey(k => k + 1)}>🔄 Reintentar</Boton></div>
             : cotDatos ? <p style={{ margin: 0, fontSize: '13px', color: '#1e40af' }}>📌 <strong>Fuentes:</strong> {cotDatos.precioNombre} | {cotDatos.topeNombre}</p> : null}
         </Card>
 
@@ -566,7 +575,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
                 <Boton variante="success" onClick={agregarItem} disabled={!!preview.error || cotCargandoDatos} style={{ flex: 1 }}>
-                  {editingIndex !== null ? '💾 Actualizar ítem' : ' Agregar a la cotización'}
+                  {editingIndex !== null ? '💾 Actualizar ítem' : '➕ Agregar a la cotización'}
                 </Boton>
                 {editingIndex !== null && (
                   <Boton variante="outline" onClick={() => { setEditingIndex(null); limpiarForm() }}>Cancelar</Boton>
@@ -586,7 +595,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
                 </div>
               ) : (
                 <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-light)' }}>
-                  {preview.error && (fPlanta || fProducto || fAlmacen) ? `⚠️ ${preview.error}` : 'Selecciona planta, producto y almacén para ver el desglose en vivo.'}
+                  {preview.error && (fPlanta || fProducto || fAlmacen) ? `️ ${preview.error}` : 'Selecciona planta, producto y almacén para ver el desglose en vivo.'}
                 </p>
               )}
             </Card>
