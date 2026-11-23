@@ -119,7 +119,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
           precioNombre: precioVigente.nombre_archivo, topeNombre: topeVigente.nombre_archivo,
           hojaUsada: sheetP, headers, idxPlanta, filas, plantas, productos,
           topeRows, colPlanta, colAlmacen, colArticulo, colTopes, colTopeAuto,
-          combinacionesValidas, // NUEVO: mapa de combinaciones válidas
+          combinacionesValidas,
         })
       } catch (e) {
         setCotErrorDatos(e.message); setCotDatos(null)
@@ -134,7 +134,6 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   // Lógica de sincronización automática
   // ----------------------------------------------------------
   
-  // Obtener almacenes disponibles para la planta seleccionada
   const almacenesDisponibles = useMemo(() => {
     if (!cotDatos || !fPlanta) return []
     
@@ -153,7 +152,6 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
     return [...almacenesSet].sort()
   }, [cotDatos, fPlanta])
 
-  // Obtener productos disponibles para la combinación planta + almacén
   const productosDisponibles = useMemo(() => {
     if (!cotDatos || !fPlanta || !fAlmacen) return []
     
@@ -174,10 +172,8 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
     return [...productosSet].sort()
   }, [cotDatos, fPlanta, fAlmacen])
 
-  // Efecto para sincronizar almacén cuando cambia planta
   useEffect(() => {
     if (fPlanta && almacenesDisponibles.length > 0) {
-      // Si el almacén actual no es válido para la nueva planta, seleccionar el primero disponible
       const almacenActualValido = almacenesDisponibles.includes(fAlmacen)
       if (!almacenActualValido) {
         setFAlmacen(almacenesDisponibles[0])
@@ -187,10 +183,8 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
     }
   }, [fPlanta, almacenesDisponibles])
 
-  // Efecto para sincronizar producto cuando cambia planta o almacén
   useEffect(() => {
     if (fPlanta && fAlmacen && productosDisponibles.length > 0) {
-      // Si el producto actual no es válido para la nueva combinación, seleccionar el primero disponible
       const productoActualValido = productosDisponibles.includes(fProducto)
       if (!productoActualValido) {
         setFProducto(productosDisponibles[0])
@@ -201,7 +195,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   }, [fPlanta, fAlmacen, productosDisponibles])
 
   // ----------------------------------------------------------
-  // Cálculo de un ítem (misma matemática de negocio)
+  // Cálculo de un ítem
   // ----------------------------------------------------------
   const calcularItem = (planta, producto, almacen, factorStr, cantidadStr) => {
     if (!cotDatos) return { error: 'Cargando fuentes vigentes...' }
@@ -285,7 +279,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   const eliminarItem = (i) => {
     setPapelera({ items: [...items], numero: numeroLote })
     setItems(prev => prev.filter((_, idx) => idx !== i))
-    if (editingIndex === i) { { setEditingIndex(null); limpiarForm() } }
+    if (editingIndex === i) { setEditingIndex(null); limpiarForm() }
     toast('Ítem eliminado. Puedes deshacer.', { icon: '🗑️' })
   }
 
@@ -347,7 +341,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   }
 
   // ----------------------------------------------------------
-  // PDF de toda la cotización (presentación limpia)
+  // PDF de toda la cotización (SIN columna Almacén)
   // ----------------------------------------------------------
   const generarPDFLote = () => {
     if (itemsDerivados.length === 0) return toast.error('Agrega al menos un ítem a la cotización.')
@@ -376,31 +370,33 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       }
       encabezado()
 
+      // TABLA SIN COLUMNA ALMACÉN
       autoTable(doc, {
         startY: 34,
         margin: { top: 32, left: 14, right: 14 },
-        head: [['#', 'Planta', 'Producto', 'Almacén', 'P. Final C/IGV', 'Cant (gal)', 'Total S/']],
+        head: [['#', 'Planta', 'Producto', 'P. Final C/IGV', 'Cant (gal)', 'Total S/']],
         body: itemsDerivados.map((it, i) => [
-          i + 1, it.planta, it.producto, it.almacen,
+          i + 1, 
+          it.planta, 
+          it.producto, 
           it.precioFinal.toFixed(4),
           it.cantidad > 0 ? it.cantidad.toLocaleString('es-PE') : '—',
           it.total > 0 ? it.total.toFixed(2) : '—',
         ]),
-        foot: [['', '', '', '', 'TOTAL', totales.galones > 0 ? totales.galones.toLocaleString('es-PE') : '—', totales.monto.toFixed(2)]],
+        foot: [['', '', '', 'TOTAL', totales.galones > 0 ? totales.galones.toLocaleString('es-PE') : '—', totales.monto.toFixed(2)]],
         styles: { fontSize: 10, cellPadding: 3, textColor: [40, 40, 40] },
         headStyles: { fillColor: [0, 51, 160], textColor: 255, fontStyle: 'bold', fontSize: 10 },
         footStyles: { fillColor: [0, 174, 239], textColor: 255, fontStyle: 'bold', fontSize: 11 },
         alternateRowStyles: { fillColor: [245, 247, 250] },
         columnStyles: {
           0: { cellWidth: 12, halign: 'center', fontStyle: 'bold', textColor: [0, 51, 160] },
+          3: { halign: 'right' },
           4: { halign: 'right' },
-          5: { halign: 'right' },
-          6: { halign: 'right', fontStyle: 'bold', textColor: [5, 150, 105] },
+          5: { halign: 'right', fontStyle: 'bold', textColor: [5, 150, 105] },
         },
         didDrawPage: (d) => { if (d.pageNumber > 1) encabezado() },
       })
 
-      // Nota al pie de la tabla
       const yNota = (doc.lastAutoTable?.finalY || 40) + 8
       doc.setFontSize(9); doc.setTextColor(110, 110, 110)
       doc.text(
@@ -446,7 +442,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       <main style={{ padding: '30px 20px', maxWidth: '1400px', margin: '0 auto' }}>
         <Card style={{ padding: '15px 20px', marginBottom: '15px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', textAlign: 'left' }}>
           {cotCargandoDatos ? <p style={{ margin: 0, color: '#1e40af', fontWeight: 'bold' }}>⏳ Cargando archivos vigentes...</p>
-            : cotErrorDatos ? <div><p style={{ margin: '0 0 10px 0', color: '#991b1b', fontWeight: 'bold' }}>⚠️ {cotErrorDatos}</p><Boton variante="outline" tamano="sm" onClick={() => setCotKey(k => k + 1)}>🔄 Reintentar</Boton></div>
+            : cotErrorDatos ? <div><p style={{ margin: '0 0 10px 0', color: '#991b1b', fontWeight: 'bold' }}>️ {cotErrorDatos}</p><Boton variante="outline" tamano="sm" onClick={() => setCotKey(k => k + 1)}>🔄 Reintentar</Boton></div>
             : cotDatos ? <p style={{ margin: 0, fontSize: '13px', color: '#1e40af' }}>📌 <strong>Fuentes:</strong> {cotDatos.precioNombre} | {cotDatos.topeNombre}</p> : null}
         </Card>
 
@@ -548,15 +544,15 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
                       {itemsDerivados.map((it, i) => (
                         <tr key={i} style={{ borderBottom: '1px solid #eee', backgroundColor: i % 2 === 0 ? 'white' : '#f9fafb' }}>
                           <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 'bold', color: AZUL }}>{i + 1}</td>
-                          <td style={{ padding: '8px 6px' }}>{it.planta}</td>
-                          <td style={{ padding: '8px 6px', fontWeight: 'bold' }}>{it.producto}</td>
-                          <td style={{ padding: '8px 6px' }}>{it.almacen}</td>
+                          <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{it.planta}</td>
+                          <td style={{ padding: '8px 6px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{it.producto}</td>
+                          <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{it.almacen}</td>
                           <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 'bold', color: AZUL }}>{it.precioFinal.toFixed(4)}</td>
-                          <td style={{ padding: '8px 6px', textAlign: 'right' }}>{it.cantidad > 0 ? it.cantidad.toLocaleString('es-PE') : '—'}</td>
-                          <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 'bold', color: it.total > 0 ? '#059669' : '#6b7280' }}>{it.total > 0 ? it.total.toFixed(2) : '—'}</td>
+                          <td style={{ padding: '8px 6px', textAlign: 'right', whiteSpace: 'nowrap' }}>{it.cantidad > 0 ? it.cantidad.toLocaleString('es-PE') : '—'}</td>
+                          <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 'bold', color: it.total > 0 ? '#059669' : '#6b7280', fontSize: '14px' }}>{it.total > 0 ? it.total.toFixed(2) : '—'}</td>
                           <td style={{ padding: '8px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                             <button onClick={() => editarItem(i)} title="Editar" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px' }}>✏️</button>
-                            <button onClick={() => eliminarItem(i)} title="Eliminar" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px' }}>🗑️</button>
+                            <button onClick={() => eliminarItem(i)} title="Eliminar" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px' }}>️</button>
                           </td>
                         </tr>
                       ))}
