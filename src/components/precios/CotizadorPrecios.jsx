@@ -34,12 +34,12 @@ const parseNum = (v) => {
 // Función para convertir números a letras en español
 const numeroALetras = (num) => {
   if (num === 0) return 'cero'
-  
+
   const unidades = ['', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve']
   const especiales = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve']
   const decenas = ['', 'diez', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa']
   const centenas = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos']
-  
+
   const convertirGrupo = (n) => {
     if (n === 0) return ''
     if (n < 10) return unidades[n]
@@ -70,16 +70,16 @@ const numeroALetras = (num) => {
     }
     return num.toString()
   }
-  
+
   const parteEntera = Math.floor(num)
   const parteDecimal = Math.round((num - parteEntera) * 100)
-  
+
   const enteroLetras = convertirGrupo(parteEntera)
-  
+
   if (parteDecimal === 0) {
     return `${enteroLetras} soles`
   }
-  
+
   return `${enteroLetras} con ${parteDecimal}/100 soles`
 }
 
@@ -149,13 +149,13 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         if (!colPlanta || !colAlmacen || !colArticulo) throw new Error('El archivo de Topes no tiene columnas PLANTA / ALMACEN / ARTICULO.')
         const colTopeAuto = colTopes[0] || 'TOPE S/IGV'
         setCotColTope(colTopeAuto)
-        
+
         const combinacionesValidas = new Map()
         topeRows.forEach(row => {
           const planta = String(row[colPlanta] || '').trim().toUpperCase()
           const almacen = String(row[colAlmacen] || '').trim().toUpperCase()
           const articulo = String(row[colArticulo] || '').trim().toUpperCase()
-          
+
           if (planta && almacen && articulo) {
             const key = `${planta}|${almacen}`
             if (!combinacionesValidas.has(key)) {
@@ -164,7 +164,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
             combinacionesValidas.get(key).add(articulo)
           }
         })
-        
+
         setCotDatos({
           precioNombre: precioVigente.nombre_archivo, topeNombre: topeVigente.nombre_archivo,
           hojaUsada: sheetP, headers, idxPlanta, filas, plantas, productos,
@@ -183,42 +183,42 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   // ----------------------------------------------------------
   // Lógica de sincronización automática
   // ----------------------------------------------------------
-  
+
   const almacenesDisponibles = useMemo(() => {
     if (!cotDatos || !fPlanta) return []
-    
+
     const plantaNormalizada = normalizarTexto(fPlanta)
     const almacenesSet = new Set()
-    
+
     cotDatos.topeRows.forEach(row => {
       const rowPlanta = normalizarTexto(row[cotDatos.colPlanta])
       const rowAlmacen = String(row[cotDatos.colAlmacen] || '').trim()
-      
+
       if (rowPlanta === plantaNormalizada && rowAlmacen) {
         almacenesSet.add(rowAlmacen)
       }
     })
-    
+
     return [...almacenesSet].sort()
   }, [cotDatos, fPlanta])
 
   const productosDisponibles = useMemo(() => {
     if (!cotDatos || !fPlanta || !fAlmacen) return []
-    
+
     const plantaNormalizada = normalizarTexto(fPlanta)
     const almacenNormalizado = normalizarTexto(fAlmacen)
     const productosSet = new Set()
-    
+
     cotDatos.topeRows.forEach(row => {
       const rowPlanta = normalizarTexto(row[cotDatos.colPlanta])
       const rowAlmacen = normalizarTexto(row[cotDatos.colAlmacen])
       const rowArticulo = String(row[cotDatos.colArticulo] || '').trim()
-      
+
       if (rowPlanta === plantaNormalizada && rowAlmacen === almacenNormalizado && rowArticulo) {
         productosSet.add(rowArticulo)
       }
     })
-    
+
     return [...productosSet].sort()
   }, [cotDatos, fPlanta, fAlmacen])
 
@@ -245,62 +245,69 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   }, [fPlanta, fAlmacen, productosDisponibles])
 
   // ----------------------------------------------------------
-  // CÁLCULO DE UN ÍTEM - NUEVA LÓGICA CORREGIDA
+  // CÁLCULO DE UN ÍTEM - LÓGICA CORREGIDA (decimales ocultos)
   // ----------------------------------------------------------
   const calcularItem = (planta, producto, almacen, factorStr, cantidadStr) => {
     if (!cotDatos) return { error: 'Cargando fuentes vigentes...' }
     if (!planta || !producto || !almacen) return { error: 'Selecciona planta, producto y almacén.' }
-    
+
     const factor = parseNum(factorStr)
     const galones = parseNum(cantidadStr)
     const d = cotDatos
-    
+
     // Paso 1: Obtener precio base SIN IGV de la hoja "Precios Planta sin IGV"
     const fila = d.filas.find(r => normalizarTexto(r[d.idxPlanta]) === normalizarTexto(planta))
     const idxProd = d.headers.findIndex(h => normalizarTexto(h) === normalizarTexto(producto))
     if (!fila || idxProd === -1) return { error: `No se encontró precio para ${producto} en planta ${planta}.` }
-    
-    // Precio base SIN IGV (4 decimales)
-    const precioBaseSinIGV = parseFloat(String(fila[idxProd]).replace(',', '.'))
-    if (isNaN(precioBaseSinIGV)) return { error: 'Precio base no válido.' }
-    
-    // Paso 2: Calcular Precio Base Total = Precio SIN IGV × Galones (CORRECCIÓN: usar toFixed para evitar errores de punto flotante)
-    const precioBaseTotal = Number((precioBaseSinIGV * galones).toFixed(2)) // corregido
-    
-    // Paso 3: Obtener TOPE S/IGV
+
+    // ✅ CORRECCIÓN CLAVE: El Excel puede contener más decimales de los visibles
+    // (ej: 20.99221 en vez de 20.9922). Si no se normaliza aquí, esos decimales
+    // ocultos se multiplican por los galones y generan centavos de error
+    // (20.99221 × 1,000 = 20,992.21 en vez de 20,992.20).
+    // Se redondea a 4 decimales ANTES de calcular, para que el valor usado
+    // sea EXACTAMENTE el mismo que se muestra en el PASO 1 del desglose.
+    const precioBaseRaw = parseFloat(String(fila[idxProd]).replace(',', '.'))
+    if (!Number.isFinite(precioBaseRaw)) return { error: 'Precio base no válido.' }
+    const precioBaseSinIGV = Number(precioBaseRaw.toFixed(4))
+
+    // Paso 2: Precio Base Total = Precio SIN IGV (4 dec) × Galones
+    const precioBaseTotal = Number((precioBaseSinIGV * galones).toFixed(2))
+
+    // Paso 3: Obtener TOPE S/IGV (también normalizado a 2 decimales)
     const t = d.topeRows.find(r =>
       normalizarTexto(r[d.colPlanta]) === normalizarTexto(planta) &&
       normalizarTexto(r[d.colArticulo]) === normalizarTexto(producto) &&
       normalizarTexto(r[d.colAlmacen]) === normalizarTexto(almacen)
     )
     if (!t) return { error: `No existe tope para ${producto} / ${planta} / ${almacen}.` }
-    
-    const topeSinIGV = Number(parseFloat(String(t[cotColTope]).replace(',', '.')).toFixed(2))
-    if (isNaN(topeSinIGV)) return { error: 'El valor de tope no es numérico.' }
-    
+
+    const topeRaw = parseFloat(String(t[cotColTope]).replace(',', '.'))
+    if (!Number.isFinite(topeRaw)) return { error: 'El valor de tope no es numérico.' }
+    const topeSinIGV = Number(topeRaw.toFixed(2))
+
     // Paso 4: Calcular Tope Total = TOPE × Galones
     const topeTotal = Number((topeSinIGV * galones).toFixed(2))
-    
+
     // Paso 5: Precio 1 = Precio Base Total - Tope Total
     const precio1 = Number((precioBaseTotal - topeTotal).toFixed(2))
-    
+
     // Paso 6: IGV = 18% × Precio 1
     const igv = Number((precio1 * TASA_IGV).toFixed(2))
-    
+
     // Paso 7: Precio con IGV = Precio 1 + IGV
     const precioConIGV = Number((precio1 + igv).toFixed(2))
-    
+
     // Paso 8: Percepción = 1% × Precio con IGV
     const percepcion = Number((precioConIGV * TASA_PERCEPCION).toFixed(2))
-    
+
     // Paso 9: Precio Final con Percepción = Precio con IGV + Percepción
     const precioFinalConPercepcion = Number((precioConIGV + percepcion).toFixed(2))
-    
+
     return {
-      data: { 
-        planta, 
-        producto, 
-        almacen, 
+      data: {
+        planta,
+        producto,
+        almacen,
         precioBaseSinIGV,
         precioBaseTotal,
         topeSinIGV,
@@ -310,8 +317,9 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         precioConIGV,
         percepcion,
         precioFinalConPercepcion,
-        galones, 
-        colTope: cotColTope 
+        precioFinalConPercepcion,
+        galones,
+        colTope: cotColTope
       },
     }
   }
@@ -454,7 +462,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         doc.rect(0, 0, W, 26, 'F')
         doc.setFillColor(0, 174, 239)
         doc.rect(0, 26, W, 1.5, 'F')
-        
+
         // Logo Petroamérica (si existe) - ALINEADO CON EL TEXTO
         try {
           const logoData = '/logo-p.png'
@@ -462,18 +470,18 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         } catch (e) {
           console.log('Logo no disponible')
         }
-        
+
         doc.setTextColor(0, 51, 160) // Texto azul (#0033A0)
         doc.setFontSize(16); doc.setFont(undefined, 'bold')
         doc.text('SIGMO · Cotización de Combustibles', 35, 12) // Ajustado para alineación con logo
         doc.setFontSize(10); doc.setFont(undefined, 'normal')
         doc.text(`N° ${numero}  ·  ${fecha}`, 35, 20)
-        
+
         // Información del cliente
         doc.setFontSize(10)
         doc.text(`Cliente: ${cliente || '—'}`, W - 14, 12, { align: 'right' })
         doc.text(`Percepción: ${aplicaPercepcion ? 'APLICADA (1%)' : 'NO aplicada'}`, W - 14, 17, { align: 'right' })
-        
+
         doc.setTextColor(40, 40, 40)
       }
       encabezado()
@@ -484,9 +492,9 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         margin: { top: 32, left: 14, right: 14 },
         head: [['#', 'Planta', 'Producto', 'P. Final C/IGV', 'Galones', 'Total S/']],
         body: itemsDerivados.map((it, i) => [
-          i + 1, 
-          it.planta, 
-          it.producto, 
+          i + 1,
+          it.planta,
+          it.producto,
           it.precioConIGV.toFixed(2),
           it.galones > 0 ? it.galones.toLocaleString('es-PE') : '—',
           'S/ ' + it.precioFinal.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
@@ -531,7 +539,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       doc.line(14, yFirma, 100, yFirma)
       doc.text('_________________________', 14, yFirma + 5)
       doc.text('Gerente Comercial', 14, yFirma + 10)
-      
+
       doc.line(W - 86, yFirma, W - 14, yFirma)
       doc.text('_________________________', W - 86, yFirma + 5)
       doc.text('Cliente', W - 86, yFirma + 10)
@@ -593,7 +601,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
               <h2 style={{ margin: '0 0 18px', fontSize: '20px', color: 'var(--text-dark)', textAlign: 'center' }}>
                 {editingIndex !== null ? `✏️ Editando ítem #${editingIndex + 1}` : ' Cotizar'}
               </h2>
-              
+
               <div style={{ display: 'none' }}>
                 <div>{HOJA_PRECIO_COTIZACION}</div>
                 <div>{cotColTope}</div>
