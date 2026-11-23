@@ -14,36 +14,54 @@ export default function ResetPassword({ setPantalla }) {
   const [error, setError] = useState('')
   const [exito, setExito] = useState(false)
   const [tokenValido, setTokenValido] = useState(false)
+  const [cargandoToken, setCargandoToken] = useState(true)
 
   useEffect(() => {
+    console.log(' Hash actual:', window.location.hash)
+    console.log('🔍 Search params:', window.location.search)
+
     // Verificar si hay token en la URL (viene del correo)
     const hash = window.location.hash
-    if (!hash || !hash.includes('access_token')) {
-      setError('Enlace inválido o expirado. Solicita un nuevo enlace de recuperación.')
-      return
-    }
-
-    // Extraer el access_token del hash
-    const params = new URLSearchParams(hash.substring(1))
-    const accessToken = params.get('access_token')
+    const searchParams = new URLSearchParams(window.location.search)
     
+    // Buscar access_token tanto en hash como en search params
+    let accessToken = null
+    
+    if (hash && hash.includes('access_token')) {
+      const params = new URLSearchParams(hash.substring(1))
+      accessToken = params.get('access_token')
+    } else if (searchParams.get('access_token')) {
+      accessToken = searchParams.get('access_token')
+    }
+    
+    console.log('🔑 Access token encontrado:', accessToken ? 'SÍ' : 'NO')
+
     if (!accessToken) {
-      setError('Enlace inválido. El token no fue encontrado.')
+      setError('Enlace inválido o expirado. Solicita un nuevo enlace de recuperación.')
+      setCargandoToken(false)
       return
     }
 
     // Establecer la sesión con el token
     supabase.auth.setSession({ access_token: accessToken, refresh_token: '' })
-      .then(({ error }) => {
+      .then(({ error, data }) => {
+        console.log(' Resultado setSession:', { error, data })
         if (error) {
           if (/expired|invalid/i.test(error.message)) {
             setError('Este enlace ha expirado. Por favor solicita uno nuevo.')
           } else {
             setError('Error al validar el enlace: ' + error.message)
           }
+          setCargandoToken(false)
         } else {
           setTokenValido(true)
+          setCargandoToken(false)
         }
+      })
+      .catch(err => {
+        console.error('❌ Error en setSession:', err)
+        setError('Error técnico al procesar el enlace.')
+        setCargandoToken(false)
       })
   }, [])
 
@@ -86,6 +104,18 @@ export default function ResetPassword({ setPantalla }) {
   }
 
   const inputStyle = { width: '100%', padding: '12px 14px', borderRadius: '8px', border: '1px solid #334155', backgroundColor: '#334155', color: '#fff', fontSize: '14px', boxSizing: 'border-box' }
+
+  if (cargandoToken) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--gray-bg, #eef1f5)', padding: '20px' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '40px', marginBottom: '16px' }}>⏳</div>
+          <h2 style={{ color: AZUL, margin: 0 }}>Validando enlace...</h2>
+          <p style={{ color: '#6b7280', margin: '8px 0 0' }}>Por favor espera unos segundos</p>
+        </div>
+      </div>
+    )
+  }
 
   if (exito) {
     return (
@@ -160,7 +190,7 @@ export default function ResetPassword({ setPantalla }) {
               title={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
               style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#9aa3af', padding: '4px' }}
             >
-              {verPassword ? '🙈' : '👁️'}
+              {verPassword ? '' : '👁️'}
             </button>
           </div>
 
@@ -191,7 +221,7 @@ export default function ResetPassword({ setPantalla }) {
             disabled={cargando}
             style={{ width: '100%', padding: '14px', borderRadius: '8px', border: 'none', backgroundColor: AZUL, color: '#fff', fontSize: '15px', fontWeight: 'bold', cursor: cargando ? 'not-allowed' : 'pointer', opacity: cargando ? 0.7 : 1 }}
           >
-            {cargando ? '⏳ Actualizando...' : ' Actualizar Contraseña'}
+            {cargando ? '⏳ Actualizando...' : '🔐 Actualizar Contraseña'}
           </button>
         </form>
 
