@@ -1,19 +1,9 @@
+// src/components/NavbarPrecintos.jsx
 import { Boton } from './ui'
 
 export default function NavbarPrecintos({ sesion, cerrarSesion, setPantalla }) {
   return (
-    <nav
-      style={{
-        backgroundColor: 'white',
-        borderBottom: '1px solid #e5e7eb',
-        padding: '15px 30px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '15px',
-      }}
-    >
+    <nav style={{ backgroundColor: 'white', borderBottom: '1px solid #e5e7eb', padding: '15px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
         <Boton variante="outline" onClick={() => setPantalla('precintos_menu')}>
           ← Volver al Menú
@@ -26,8 +16,9 @@ export default function NavbarPrecintos({ sesion, cerrarSesion, setPantalla }) {
         <span style={{ fontSize: '13px', color: '#4b5563', fontWeight: '500' }}>
           👤 {sesion.user.email}
         </span>
+        {/* ✅ Nombre claro: ahora el usuario sabe que es para cambiar contraseña */}
         <Boton variante="outline" onClick={() => setPantalla('cambiar-password')}>
-          Mi Perfil
+          🔐 Cambiar Contraseña
         </Boton>
         <Boton variante="outline" onClick={cerrarSesion}>
           Salir
