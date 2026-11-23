@@ -9,7 +9,7 @@ import toast from 'react-hot-toast'
 
 const TASA_IGV = 0.18
 const TASA_PERCEPCION = 0.01
-const HOJA_PRECIO_COTIZACION = 'Precios Planta Con IGV'
+const HOJA_PRECIO_COTIZACION = 'Precios Planta sin IGV' // NUEVA HOJA
 
 const normalizarTexto = (txt) => String(txt || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').replace(/N°/gi, 'N').trim().toUpperCase()
 const esPlantaValida = (nombre) => {
@@ -245,39 +245,80 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   }, [fPlanta, fAlmacen, productosDisponibles])
 
   // ----------------------------------------------------------
-  // Cálculo de un ítem
+  // CÁLCULO DE UN ÍTEM - NUEVA LÓGICA
   // ----------------------------------------------------------
   const calcularItem = (planta, producto, almacen, factorStr, cantidadStr) => {
     if (!cotDatos) return { error: 'Cargando fuentes vigentes...' }
     if (!planta || !producto || !almacen) return { error: 'Selecciona planta, producto y almacén.' }
+    
     const factor = parseNum(factorStr)
-    const cantidad = parseNum(cantidadStr)
+    const galones = parseNum(cantidadStr)
     const d = cotDatos
+    
+    // Paso 1: Obtener precio base SIN IGV de la hoja "Precios Planta sin IGV"
     const fila = d.filas.find(r => normalizarTexto(r[d.idxPlanta]) === normalizarTexto(planta))
     const idxProd = d.headers.findIndex(h => normalizarTexto(h) === normalizarTexto(producto))
     if (!fila || idxProd === -1) return { error: `No se encontró precio para ${producto} en planta ${planta}.` }
-    const precioBase = parseFloat(String(fila[idxProd]).replace(',', '.'))
-    if (isNaN(precioBase)) return { error: 'Precio base no válido.' }
+    
+    // Precio base SIN IGV (4 decimales)
+    const precioBaseSinIGV = parseFloat(String(fila[idxProd]).replace(',', '.'))
+    if (isNaN(precioBaseSinIGV)) return { error: 'Precio base no válido.' }
+    
+    // Paso 2: Calcular Precio Base Total = Precio SIN IGV × Galones (redondeado a 2 decimales)
+    const precioBaseTotal = Math.round(precioBaseSinIGV * galones * 100) / 100
+    
+    // Paso 3: Obtener TOPE S/IGV y redondear a 2 decimales
     const t = d.topeRows.find(r =>
       normalizarTexto(r[d.colPlanta]) === normalizarTexto(planta) &&
       normalizarTexto(r[d.colArticulo]) === normalizarTexto(producto) &&
       normalizarTexto(r[d.colAlmacen]) === normalizarTexto(almacen)
     )
     if (!t) return { error: `No existe tope para ${producto} / ${planta} / ${almacen}.` }
-    const tope = parseFloat(String(t[cotColTope]).replace(',', '.'))
-    if (isNaN(tope)) return { error: 'El valor de tope no es numérico.' }
-    const topeAjustado = tope - factor
-    const finalSinPercepcion = precioBase - (topeAjustado * (1 + TASA_IGV))
+    
+    const topeSinIGV = Math.round(parseFloat(String(t[cotColTope]).replace(',', '.')) * 100) / 100
+    if (isNaN(topeSinIGV)) return { error: 'El valor de tope no es numérico.' }
+    
+    // Paso 4: Calcular Tope Total = TOPE × Galones (redondeado a 2 decimales)
+    const topeTotal = Math.round(topeSinIGV * galones * 100) / 100
+    
+    // Paso 5: Precio 1 = Precio Base Total - Tope Total (redondeado a 2 decimales)
+    const precio1 = Math.round((precioBaseTotal - topeTotal) * 100) / 100
+    
+    // Paso 6: IGV = 18% × Precio 1 (redondeado a 2 decimales)
+    const igv = Math.round(precio1 * TASA_IGV * 100) / 100
+    
+    // Paso 7: Precio 2 (con IGV) = Precio 1 + IGV (redondeado a 2 decimales)
+    const precioConIGV = Math.round((precio1 + igv) * 100) / 100
+    
+    // Paso 8: Percepción = 1% × Precio 2 (redondeado a 2 decimales)
+    const percepcion = Math.round(precioConIGV * TASA_PERCEPCION * 100) / 100
+    
+    // Paso 9: Precio Final con Percepción = Precio 2 + Percepción (redondeado a 2 decimales)
+    const precioFinalConPercepcion = Math.round((precioConIGV + percepcion) * 100) / 100
+    
     return {
-      data: { planta, producto, almacen, precioBase, tope, factor, topeAjustado, finalSinPercepcion, cantidad, colTope: cotColTope },
+      data: { 
+        planta, 
+        producto, 
+        almacen, 
+        precioBaseSinIGV,
+        precioBaseTotal,
+        topeSinIGV,
+        topeTotal,
+        precio1,
+        igv,
+        precioConIGV,
+        percepcion,
+        precioFinalConPercepcion,
+        galones, 
+        colTope: cotColTope 
+      },
     }
   }
 
   const enriquecer = (it, aplica) => {
-    const finalConPercepcion = it.finalSinPercepcion * (1 + TASA_PERCEPCION)
-    const precioFinal = aplica ? finalConPercepcion : it.finalSinPercepcion
-    const total = it.cantidad > 0 ? precioFinal * it.cantidad : 0
-    return { ...it, finalConPercepcion, precioFinal, total, aplicaPercepcion: aplica }
+    const precioFinal = aplica ? it.precioFinalConPercepcion : it.precioConIGV
+    return { ...it, precioFinal, aplicaPercepcion: aplica }
   }
 
   const preview = useMemo(
@@ -289,8 +330,8 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   const itemsDerivados = useMemo(() => items.map(it => enriquecer(it, aplicaPercepcion)), [items, aplicaPercepcion])
   const totales = useMemo(() => ({
     count: itemsDerivados.length,
-    galones: itemsDerivados.reduce((s, it) => s + (it.cantidad || 0), 0),
-    monto: itemsDerivados.reduce((s, it) => s + (it.total || 0), 0),
+    galones: itemsDerivados.reduce((s, it) => s + (it.galones || 0), 0),
+    monto: itemsDerivados.reduce((s, it) => s + (it.precioFinal || 0), 0),
   }), [itemsDerivados])
 
   // ----------------------------------------------------------
@@ -322,7 +363,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   const editarItem = (i) => {
     const it = items[i]
     setFPlanta(it.planta); setFProducto(it.producto); setFAlmacen(it.almacen)
-    setFFactor(String(it.factor)); setFCantidad(it.cantidad ? String(it.cantidad) : '')
+    setFFactor(String(it.factor)); setFCantidad(it.galones ? String(it.galones) : '')
     setEditingIndex(i)
   }
 
@@ -365,15 +406,19 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         planta: it.planta,
         almacen: it.almacen,
         producto: it.producto,
-        precio_base: it.precioBase,
-        tope: it.tope,
-        factor: it.factor,
-        tope_ajustado: it.topeAjustado,
-        precio_final_sin_percepcion: it.finalSinPercepcion,
-        precio_final_con_percepcion: it.aplicaPercepcion ? it.finalConPercepcion : null,
+        precio_base_sin_igv: it.precioBaseSinIGV,
+        precio_base_total: it.precioBaseTotal,
+        tope_sin_igv: it.topeSinIGV,
+        tope_total: it.topeTotal,
+        precio_1: it.precio1,
+        igv: it.igv,
+        precio_con_igv: it.precioConIGV,
+        percepcion: it.percepcion,
+        precio_final_con_percepcion: it.precioFinalConPercepcion,
+        precio_final: it.precioFinal,
         aplica_percepcion: it.aplicaPercepcion,
-        cantidad: it.cantidad || 0,
-        total: it.total || 0,
+        galones: it.galones || 0,
+        total: it.precioFinal || 0,
         archivo_precios: cotDatos?.precioNombre || null,
         archivo_topes: cotDatos?.topeNombre || null,
         creado_por: user?.email || null,
@@ -437,14 +482,14 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       autoTable(doc, {
         startY: 34,
         margin: { top: 32, left: 14, right: 14 },
-        head: [['#', 'Planta', 'Producto', 'P. Final C/IGV', 'Cant (gal)', 'Total S/']],
+        head: [['#', 'Planta', 'Producto', 'P. Final C/IGV', 'Galones', 'Total S/']],
         body: itemsDerivados.map((it, i) => [
           i + 1, 
           it.planta, 
           it.producto, 
-          it.precioFinal.toFixed(4),
-          it.cantidad > 0 ? it.cantidad.toLocaleString('es-PE') : '—',
-          'S/ ' + it.total.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          it.precioConIGV.toFixed(2),
+          it.galones > 0 ? it.galones.toLocaleString('es-PE') : '—',
+          'S/ ' + it.precioFinal.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
         ]),
         foot: [['', '', '', 'TOTAL', totales.galones > 0 ? totales.galones.toLocaleString('es-PE') : '—', 'S/ ' + totales.monto.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })]],
         styles: { fontSize: 10, cellPadding: 3, textColor: [40, 40, 40], halign: 'center' },
@@ -495,8 +540,8 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       const yNota = yFirma - 10
       doc.setFontSize(8); doc.setTextColor(100, 100, 100)
       doc.text(aplicaPercepcion
-        ? 'Precios con IGV incluidos. Percepción del 1% aplicada sobre el precio final de cada ítem.'
-        : 'Precios con IGV incluidos. Sin percepción aplicada.',
+        ? 'Precios calculados según fórmula: (Precio SIN IGV × Galones - TOPE × Galones) + IGV (18%) + Percepción (1%).'
+        : 'Precios calculados según fórmula: (Precio SIN IGV × Galones - TOPE × Galones) + IGV (18%).',
         14, yNota
       )
       doc.text(`${totales.count} ítem(s) en esta cotización.`, 14, yNota + 4)
@@ -587,15 +632,21 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
               <h3 style={{ margin: '0 0 12px', color: AZUL, fontSize: '16px' }}>📊 Desglose de la cotización en curso</h3>
               {previewEnriquecido ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <Paso etiqueta={`PASO 1 — Precio Base C/IGV (${previewEnriquecido.producto} en ${previewEnriquecido.planta})`} valor={`S/ ${previewEnriquecido.precioBase.toFixed(4)}`} color={AZUL} />
-                  <Paso etiqueta={`PASO 2 — ${previewEnriquecido.colTope} (${previewEnriquecido.almacen}) − Factor (${previewEnriquecido.factor.toFixed(4)})`} valor={`S/ ${previewEnriquecido.tope.toFixed(4)} − ${previewEnriquecido.factor.toFixed(4)} = ${previewEnriquecido.topeAjustado.toFixed(4)}`} color="#b45309" />
-                  <Paso etiqueta="PASO 3 — P. Final = Base − (Tope Ajust. × 1.18)" valor={`S/ ${previewEnriquecido.finalSinPercepcion.toFixed(4)}`} color="#047857" />
-                  {aplicaPercepcion && <Paso etiqueta="P. Final + Percepción (× 1.01)" valor={`S/ ${previewEnriquecido.finalConPercepcion.toFixed(4)}`} color={AZUL} fuerte />}
-                  {previewEnriquecido.cantidad > 0 && <Paso etiqueta={`TOTAL: ${previewEnriquecido.cantidad.toLocaleString('es-PE')} gal × S/ ${previewEnriquecido.precioFinal.toFixed(4)}`} valor={`S/ ${previewEnriquecido.total.toFixed(2)}`} color="#10b981" fuerte />}
+                  <Paso etiqueta={`PASO 1 — Precio Base SIN IGV (${previewEnriquecido.producto} en ${previewEnriquecido.planta})`} valor={`S/ ${previewEnriquecido.precioBaseSinIGV.toFixed(4)}`} color={AZUL} />
+                  <Paso etiqueta={`PASO 2 — Precio Base Total (× ${previewEnriquecido.galones} gal)`} valor={`S/ ${previewEnriquecido.precioBaseTotal.toFixed(2)}`} color="#b45309" />
+                  <Paso etiqueta={`PASO 3 — TOPE SIN IGV (${previewEnriquecido.almacen})`} valor={`S/ ${previewEnriquecido.topeSinIGV.toFixed(2)}`} color="#047857" />
+                  <Paso etiqueta={`PASO 4 — Tope Total (× ${previewEnriquecido.galones} gal)`} valor={`S/ ${previewEnriquecido.topeTotal.toFixed(2)}`} color="#047857" />
+                  <Paso etiqueta="PASO 5 — Precio 1 = Base Total - Tope Total" valor={`S/ ${previewEnriquecido.precio1.toFixed(2)}`} color="#047857" />
+                  <Paso etiqueta="PASO 6 — IGV (18%)" valor={`S/ ${previewEnriquecido.igv.toFixed(2)}`} color="#047857" />
+                  <Paso etiqueta="PASO 7 — Precio con IGV" valor={`S/ ${previewEnriquecido.precioConIGV.toFixed(2)}`} color={AZUL} />
+                  {aplicaPercepcion && <Paso etiqueta="PASO 8 — Percepción (1%)" valor={`S/ ${previewEnriquecido.percepcion.toFixed(2)}`} color="#b45309" />}
+                  {aplicaPercepcion && <Paso etiqueta="PASO 9 — Precio Final (con Percepción)" valor={`S/ ${previewEnriquecido.precioFinalConPercepcion.toFixed(2)}`} color={AZUL} fuerte />}
+                  {!aplicaPercepcion && <Paso etiqueta="PRECIO FINAL (sin Percepción)" valor={`S/ ${previewEnriquecido.precioConIGV.toFixed(2)}`} color={AZUL} fuerte />}
+                  {previewEnriquecido.galones > 0 && <Paso etiqueta={`TOTAL: ${previewEnriquecido.galones.toLocaleString('es-PE')} gal`} valor={`S/ ${previewEnriquecido.precioFinal.toFixed(2)}`} color="#10b981" fuerte />}
                 </div>
               ) : (
                 <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-light)' }}>
-                  {preview.error && (fPlanta || fProducto || fAlmacen) ? `️ ${preview.error}` : 'Selecciona planta, producto y almacén para ver el desglose en vivo.'}
+                  {preview.error && (fPlanta || fProducto || fAlmacen) ? `⚠️ ${preview.error}` : 'Selecciona planta, producto y almacén para ver el desglose en vivo.'}
                 </p>
               )}
             </Card>
@@ -635,8 +686,8 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
                         <th style={{ padding: '10px 6px', textAlign: 'left' }}>Planta</th>
                         <th style={{ padding: '10px 6px', textAlign: 'left' }}>Producto</th>
                         <th style={{ padding: '10px 6px', textAlign: 'left' }}>Almacén</th>
-                        <th style={{ padding: '10px 6px', textAlign: 'right' }}>P. Final</th>
-                        <th style={{ padding: '10px 6px', textAlign: 'right' }}>Cant</th>
+                        <th style={{ padding: '10px 6px', textAlign: 'right' }}>P. Final C/IGV</th>
+                        <th style={{ padding: '10px 6px', textAlign: 'right' }}>Galones</th>
                         <th style={{ padding: '10px 6px', textAlign: 'right' }}>Total S/</th>
                         <th style={{ padding: '10px 6px' }}>Acc</th>
                       </tr>
@@ -648,9 +699,9 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
                           <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{it.planta}</td>
                           <td style={{ padding: '8px 6px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{it.producto}</td>
                           <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{it.almacen}</td>
-                          <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 'bold', color: AZUL }}>{it.precioFinal.toFixed(4)}</td>
-                          <td style={{ padding: '8px 6px', textAlign: 'right', whiteSpace: 'nowrap' }}>{it.cantidad > 0 ? it.cantidad.toLocaleString('es-PE') : '—'}</td>
-                          <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 'bold', color: it.total > 0 ? '#059669' : '#6b7280', fontSize: '14px' }}>{it.total > 0 ? it.total.toFixed(2) : '—'}</td>
+                          <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 'bold', color: AZUL }}>{it.precioConIGV.toFixed(2)}</td>
+                          <td style={{ padding: '8px 6px', textAlign: 'right', whiteSpace: 'nowrap' }}>{it.galones > 0 ? it.galones.toLocaleString('es-PE') : '—'}</td>
+                          <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 'bold', color: it.precioFinal > 0 ? '#059669' : '#6b7280', fontSize: '14px' }}>{it.precioFinal > 0 ? it.precioFinal.toFixed(2) : '—'}</td>
                           <td style={{ padding: '8px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                             <button onClick={() => editarItem(i)} title="Editar" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px' }}>✏️</button>
                             <button onClick={() => eliminarItem(i)} title="Eliminar" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px' }}>🗑️</button>
