@@ -9,7 +9,7 @@ import toast from 'react-hot-toast'
 
 const TASA_IGV = 0.18
 const TASA_PERCEPCION = 0.01
-const HOJA_PRECIO_COTIZACION = 'Precios Planta sin IGV' // NUEVA HOJA
+const HOJA_PRECIO_COTIZACION = 'Precios Planta sin IGV' // NUEVA HOJA DE REFERENCIA
 
 const normalizarTexto = (txt) => String(txt || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').replace(/N°/gi, 'N').trim().toUpperCase()
 const esPlantaValida = (nombre) => {
@@ -245,7 +245,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   }, [fPlanta, fAlmacen, productosDisponibles])
 
   // ----------------------------------------------------------
-  // CÁLCULO DE UN ÍTEM - NUEVA LÓGICA
+  // CÁLCULO DE UN ÍTEM - NUEVA LÓGICA CORREGIDA
   // ----------------------------------------------------------
   const calcularItem = (planta, producto, almacen, factorStr, cantidadStr) => {
     if (!cotDatos) return { error: 'Cargando fuentes vigentes...' }
@@ -264,10 +264,10 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
     const precioBaseSinIGV = parseFloat(String(fila[idxProd]).replace(',', '.'))
     if (isNaN(precioBaseSinIGV)) return { error: 'Precio base no válido.' }
     
-    // Paso 2: Calcular Precio Base Total = Precio SIN IGV × Galones (redondeado a 2 decimales)
-    const precioBaseTotal = Math.round(precioBaseSinIGV * galones * 100) / 100
+    // Paso 2: Calcular Precio Base Total = Precio SIN IGV × Galones (CORRECCIÓN: usar toFixed para evitar errores de punto flotante)
+    const precioBaseTotal = Number((precioBaseSinIGV * galones).toFixed(2))
     
-    // Paso 3: Obtener TOPE S/IGV y redondear a 2 decimales
+    // Paso 3: Obtener TOPE S/IGV
     const t = d.topeRows.find(r =>
       normalizarTexto(r[d.colPlanta]) === normalizarTexto(planta) &&
       normalizarTexto(r[d.colArticulo]) === normalizarTexto(producto) &&
@@ -275,26 +275,26 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
     )
     if (!t) return { error: `No existe tope para ${producto} / ${planta} / ${almacen}.` }
     
-    const topeSinIGV = Math.round(parseFloat(String(t[cotColTope]).replace(',', '.')) * 100) / 100
+    const topeSinIGV = Number(parseFloat(String(t[cotColTope]).replace(',', '.')).toFixed(2))
     if (isNaN(topeSinIGV)) return { error: 'El valor de tope no es numérico.' }
     
-    // Paso 4: Calcular Tope Total = TOPE × Galones (redondeado a 2 decimales)
-    const topeTotal = Math.round(topeSinIGV * galones * 100) / 100
+    // Paso 4: Calcular Tope Total = TOPE × Galones
+    const topeTotal = Number((topeSinIGV * galones).toFixed(2))
     
-    // Paso 5: Precio 1 = Precio Base Total - Tope Total (redondeado a 2 decimales)
-    const precio1 = Math.round((precioBaseTotal - topeTotal) * 100) / 100
+    // Paso 5: Precio 1 = Precio Base Total - Tope Total
+    const precio1 = Number((precioBaseTotal - topeTotal).toFixed(2))
     
-    // Paso 6: IGV = 18% × Precio 1 (redondeado a 2 decimales)
-    const igv = Math.round(precio1 * TASA_IGV * 100) / 100
+    // Paso 6: IGV = 18% × Precio 1
+    const igv = Number((precio1 * TASA_IGV).toFixed(2))
     
-    // Paso 7: Precio 2 (con IGV) = Precio 1 + IGV (redondeado a 2 decimales)
-    const precioConIGV = Math.round((precio1 + igv) * 100) / 100
+    // Paso 7: Precio con IGV = Precio 1 + IGV
+    const precioConIGV = Number((precio1 + igv).toFixed(2))
     
-    // Paso 8: Percepción = 1% × Precio 2 (redondeado a 2 decimales)
-    const percepcion = Math.round(precioConIGV * TASA_PERCEPCION * 100) / 100
+    // Paso 8: Percepción = 1% × Precio con IGV
+    const percepcion = Number((precioConIGV * TASA_PERCEPCION).toFixed(2))
     
-    // Paso 9: Precio Final con Percepción = Precio 2 + Percepción (redondeado a 2 decimales)
-    const precioFinalConPercepcion = Math.round((precioConIGV + percepcion) * 100) / 100
+    // Paso 9: Precio Final con Percepción = Precio con IGV + Percepción
+    const precioFinalConPercepcion = Number((precioConIGV + percepcion).toFixed(2))
     
     return {
       data: { 
@@ -633,16 +633,16 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
               {previewEnriquecido ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <Paso etiqueta={`PASO 1 — Precio Base SIN IGV (${previewEnriquecido.producto} en ${previewEnriquecido.planta})`} valor={`S/ ${previewEnriquecido.precioBaseSinIGV.toFixed(4)}`} color={AZUL} />
-                  <Paso etiqueta={`PASO 2 — Precio Base Total (× ${previewEnriquecido.galones} gal)`} valor={`S/ ${previewEnriquecido.precioBaseTotal.toFixed(2)}`} color="#b45309" />
-                  <Paso etiqueta={`PASO 3 — TOPE SIN IGV (${previewEnriquecido.almacen})`} valor={`S/ ${previewEnriquecido.topeSinIGV.toFixed(2)}`} color="#047857" />
-                  <Paso etiqueta={`PASO 4 — Tope Total (× ${previewEnriquecido.galones} gal)`} valor={`S/ ${previewEnriquecido.topeTotal.toFixed(2)}`} color="#047857" />
-                  <Paso etiqueta="PASO 5 — Precio 1 = Base Total - Tope Total" valor={`S/ ${previewEnriquecido.precio1.toFixed(2)}`} color="#047857" />
-                  <Paso etiqueta="PASO 6 — IGV (18%)" valor={`S/ ${previewEnriquecido.igv.toFixed(2)}`} color="#047857" />
-                  <Paso etiqueta="PASO 7 — Precio con IGV" valor={`S/ ${previewEnriquecido.precioConIGV.toFixed(2)}`} color={AZUL} />
-                  {aplicaPercepcion && <Paso etiqueta="PASO 8 — Percepción (1%)" valor={`S/ ${previewEnriquecido.percepcion.toFixed(2)}`} color="#b45309" />}
-                  {aplicaPercepcion && <Paso etiqueta="PASO 9 — Precio Final (con Percepción)" valor={`S/ ${previewEnriquecido.precioFinalConPercepcion.toFixed(2)}`} color={AZUL} fuerte />}
-                  {!aplicaPercepcion && <Paso etiqueta="PRECIO FINAL (sin Percepción)" valor={`S/ ${previewEnriquecido.precioConIGV.toFixed(2)}`} color={AZUL} fuerte />}
-                  {previewEnriquecido.galones > 0 && <Paso etiqueta={`TOTAL: ${previewEnriquecido.galones.toLocaleString('es-PE')} gal`} valor={`S/ ${previewEnriquecido.precioFinal.toFixed(2)}`} color="#10b981" fuerte />}
+                  <Paso etiqueta={`PASO 2 — Precio Base Total (× ${previewEnriquecido.galones.toLocaleString('es-PE')} gal)`} valor={`S/ ${previewEnriquecido.precioBaseTotal.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} color="#b45309" />
+                  <Paso etiqueta={`PASO 3 — TOPE SIN IGV (${previewEnriquecido.almacen})`} valor={`S/ ${previewEnriquecido.topeSinIGV.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} color="#047857" />
+                  <Paso etiqueta={`PASO 4 — Tope Total (× ${previewEnriquecido.galones.toLocaleString('es-PE')} gal)`} valor={`S/ ${previewEnriquecido.topeTotal.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} color="#047857" />
+                  <Paso etiqueta="PASO 5 — Precio 1 = Base Total - Tope Total" valor={`S/ ${previewEnriquecido.precio1.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} color="#047857" />
+                  <Paso etiqueta="PASO 6 — IGV (18%)" valor={`S/ ${previewEnriquecido.igv.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} color="#047857" />
+                  <Paso etiqueta="PASO 7 — Precio con IGV" valor={`S/ ${previewEnriquecido.precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} color={AZUL} />
+                  {aplicaPercepcion && <Paso etiqueta="PASO 8 — Percepción (1%)" valor={`S/ ${previewEnriquecido.percepcion.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} color="#b45309" />}
+                  {aplicaPercepcion && <Paso etiqueta="PASO 9 — Precio Final (con Percepción)" valor={`S/ ${previewEnriquecido.precioFinalConPercepcion.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} color={AZUL} fuerte />}
+                  {!aplicaPercepcion && <Paso etiqueta="PRECIO FINAL (sin Percepción)" valor={`S/ ${previewEnriquecido.precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} color={AZUL} fuerte />}
+                  {previewEnriquecido.galones > 0 && <Paso etiqueta={`TOTAL: ${previewEnriquecido.galones.toLocaleString('es-PE')} gal`} valor={`S/ ${previewEnriquecido.precioFinal.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} color="#10b981" fuerte />}
                 </div>
               ) : (
                 <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-light)' }}>
@@ -723,7 +723,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
 
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '18px' }}>
                 <Boton variante="success" onClick={guardarLote} disabled={guardando || itemsDerivados.length === 0}>{guardando ? '⏳ Guardando...' : `💾 Guardar Cotización en Historial (${totales.count})`}</Boton>
-                <Boton variante="primary" onClick={generarPDFLote} disabled={itemsDerivados.length === 0}>📄 Generar PDF Profesional</Boton>
+                <Boton variante="primary" onClick={generarPDFLote} disabled={itemsDerivados.length === 0}> Generar PDF Profesional</Boton>
                 <Boton variante="outline" onClick={vaciarLote} disabled={itemsDerivados.length === 0}>🧹 Vaciar</Boton>
                 {papelera && <Boton variante="outline" onClick={deshacer}>↩️ Deshacer</Boton>}
               </div>
