@@ -1,3 +1,4 @@
+// src/App.jsx
 import { useState, useEffect, useRef, useCallback, lazy, Suspense, Component } from 'react'
 import { supabase } from './supabase'
 import { Toaster } from 'react-hot-toast'
@@ -148,21 +149,20 @@ function App() {
     // Detectar recuperación por hash, search params o URL directa de verificación
     const hash = window.location.hash
     const searchParams = new URLSearchParams(window.location.search)
-    
+
     const isRecoveryHash = hash.includes('access_token') && hash.includes('type=recovery')
     const isRecoverySearch = searchParams.get('type') === 'recovery'
     const isVerifyUrl = window.location.pathname.includes('/auth/v1/verify')
-    
+
     if (isRecoveryHash || isRecoverySearch || isVerifyUrl) {
       setEsRecuperacion(true)
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSesion(session)
-      
+
       // Si hay sesión pero no estamos logueados normalmente, podría ser recuperación
       if (session && !pantalla) {
-        // Verificar si es una sesión de recuperación
         const lastHash = sessionStorage.getItem('last_hash')
         if (lastHash && lastHash.includes('type=recovery')) {
           setEsRecuperacion(true)
@@ -259,6 +259,16 @@ function App() {
   }, [])
 
   // ----------------------------------------------------------
+  // ✅ NUEVO: salida limpia del flujo de recuperación
+  // Limpia el hash #access_token=...&type=recovery de la URL para que
+  // un F5 no vuelva a disparar el modo recuperación.
+  // ----------------------------------------------------------
+  const finRecuperacion = useCallback(() => {
+    setEsRecuperacion(false)
+    window.history.replaceState(null, '', window.location.pathname + window.location.search)
+  }, [])
+
+  // ----------------------------------------------------------
   // Inactividad
   // ----------------------------------------------------------
   const reiniciarTemporizador = useCallback(() => {
@@ -297,22 +307,47 @@ function App() {
   }, [sesion, mostrarAviso, reiniciarTemporizador])
 
   // ----------------------------------------------------------
-  // --- VISTAS PÚBLICAS ---
+  // --- ✅ FLUJO DE RECUPERACIÓN (prioridad máxima) ---
+  // El enlace del correo crea una sesión de recuperación; por eso esta
+  // rama va ANTES de la comprobación de sesión: así el usuario ve el
+  // formulario de nueva contraseña en vez de entrar directo al Lobby.
+  // ----------------------------------------------------------
+  if (esRecuperacion) {
+    return (
+      <>
+        <Toaster position="top-right" toastOptions={{ duration: 4000, style: { fontWeight: 'bold' } }} />
+        <ErrorBoundary key="reset-password">
+          <ResetPassword setPantalla={setPantalla} onFinRecuperacion={finRecuperacion} />
+        </ErrorBoundary>
+      </>
+    )
+  }
+
+  // ----------------------------------------------------------
+  // --- VISTAS PÚBLICAS (sin sesión) ---
   // ----------------------------------------------------------
   if (!sesion) {
     return (
       <>
-        {/* ✅ FIX: El Toaster debe existir también en las vistas públicas para mostrar errores de login */}
+        {/* ✅ FIX: el Toaster también debe existir sin sesión para ver los toasts de Login/Forgot */}
         <Toaster position="top-right" toastOptions={{ duration: 4000, style: { fontWeight: 'bold' } }} />
-        
-        <ErrorBoundary key={esRecuperacion ? 'reset' : pantalla || 'login'}>
+        <ErrorBoundary key={pantalla || 'login'}>
           <Suspense fallback={<CargandoModulo texto="Cargando…" />}>
-            {esRecuperacion && <ResetPassword />}
-            {!esRecuperacion && pantalla === 'forgot' && <ForgotPassword setPantalla={setPantalla} />}
-            {!esRecuperacion && pantalla !== 'forgot' && <Login setPantalla={setPantalla} />}
+            {pantalla === 'forgot'
+              ? <ForgotPassword setPantalla={setPantalla} />
+              : <Login setPantalla={setPantalla} />}
           </Suspense>
         </ErrorBoundary>
       </>
+    )
+  }
+
+  // --- PANTALLA DE CARGA ---
+  if (cargandoRol) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f3f4f6' }}>
+        <h2 style={{ color: '#0B5FA5' }}>Cargando perfil...</h2>
+      </div>
     )
   }
 
