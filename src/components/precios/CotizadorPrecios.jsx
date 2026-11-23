@@ -53,7 +53,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   const [fCantidad, setFCantidad] = useState('')
   const [editingIndex, setEditingIndex] = useState(null)
 
-  // Lote (varias cotizaciones juntas)
+  // Cotización (varios ítems juntos)
   const [items, setItems] = useState([])
   const [numeroLote, setNumeroLote] = useState('')
   const [cliente, setCliente] = useState('')
@@ -167,7 +167,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   }), [itemsDerivados])
 
   // ----------------------------------------------------------
-  // Acciones del lote
+  // Acciones de la cotización
   // ----------------------------------------------------------
   const limpiarForm = () => { setFPlanta(''); setFProducto(''); setFAlmacen(''); setFFactor(''); setFCantidad('') }
 
@@ -222,7 +222,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   }
 
   // ----------------------------------------------------------
-  // Guardar TODO el lote en historial
+  // Guardar toda la cotización en historial
   // ----------------------------------------------------------
   const guardarLote = async () => {
     if (itemsDerivados.length === 0) return toast.error('Agrega al menos un ítem a la cotización.')
@@ -264,7 +264,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
   }
 
   // ----------------------------------------------------------
-  // PDF de TODO el lote
+  // PDF de toda la cotización (presentación limpia)
   // ----------------------------------------------------------
   const generarPDFLote = () => {
     if (itemsDerivados.length === 0) return toast.error('Agrega al menos un ítem a la cotización.')
@@ -272,72 +272,68 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
     try {
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
       const W = doc.internal.pageSize.getWidth()
+      const H = doc.internal.pageSize.getHeight()
       const numero = numeroLote || generarNumeroCotizacion()
       const fecha = new Date().toLocaleDateString('es-PE')
 
       const encabezado = () => {
         doc.setFillColor(0, 51, 160)
-        doc.rect(0, 0, W, 24, 'F')
+        doc.rect(0, 0, W, 26, 'F')
+        doc.setFillColor(0, 174, 239)
+        doc.rect(0, 26, W, 1.5, 'F')
         doc.setTextColor(255, 255, 255)
-        doc.setFontSize(15); doc.setFont(undefined, 'bold')
-        doc.text('SIGMO · Cotización de Combustibles', 14, 11)
+        doc.setFontSize(16); doc.setFont(undefined, 'bold')
+        doc.text('SIGMO · Cotización de Combustibles', 14, 12)
         doc.setFontSize(10); doc.setFont(undefined, 'normal')
-        doc.text(`N° ${numero}  ·  ${fecha}`, 14, 18)
+        doc.text(`N° ${numero}  ·  ${fecha}`, 14, 20)
         doc.setFontSize(10)
-        doc.text(`Cliente: ${cliente || '—'}`, W - 14, 11, { align: 'right' })
-        doc.text(`Percepción: ${aplicaPercepcion ? 'APLICADA (1%)' : 'NO aplicada'}`, W - 14, 18, { align: 'right' })
+        doc.text(`Cliente: ${cliente || '—'}`, W - 14, 12, { align: 'right' })
+        doc.text(`Percepción: ${aplicaPercepcion ? 'APLICADA (1%)' : 'NO aplicada'}`, W - 14, 20, { align: 'right' })
         doc.setTextColor(40, 40, 40)
       }
       encabezado()
 
-      doc.setFontSize(9)
-      doc.text(`Fuentes: ${cotDatos?.precioNombre || '—'}  |  ${cotDatos?.topeNombre || '—'}  ·  Hoja: ${HOJA_PRECIO_COTIZACION}  ·  Columna tope: ${cotColTope}`, 14, 30)
-
       autoTable(doc, {
         startY: 34,
-        margin: { top: 30 },
-        head: [['#', 'Planta', 'Producto', 'Almacén', 'P. Base C/IGV', 'Tope', 'Factor', 'Tope Ajust.', 'P. Final C/IGV', 'Cant (gal)', 'Total S/']],
+        margin: { top: 32, left: 14, right: 14 },
+        head: [['#', 'Planta', 'Producto', 'Almacén', 'P. Final C/IGV', 'Cant (gal)', 'Total S/']],
         body: itemsDerivados.map((it, i) => [
           i + 1, it.planta, it.producto, it.almacen,
-          it.precioBase.toFixed(4), it.tope.toFixed(4), it.factor.toFixed(4), it.topeAjustado.toFixed(4),
           it.precioFinal.toFixed(4),
           it.cantidad > 0 ? it.cantidad.toLocaleString('es-PE') : '—',
           it.total > 0 ? it.total.toFixed(2) : '—',
         ]),
-        foot: [[ '', '', '', '', '', '', '', '', 'TOTAL', totales.galones > 0 ? totales.galones.toLocaleString('es-PE') : '—', totales.monto.toFixed(2) ]],
-        styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fillColor: [0, 51, 160], textColor: 255, fontStyle: 'bold' },
-        footStyles: { fillColor: [0, 174, 239], textColor: 255, fontStyle: 'bold' },
+        foot: [['', '', '', '', 'TOTAL', totales.galones > 0 ? totales.galones.toLocaleString('es-PE') : '—', totales.monto.toFixed(2)]],
+        styles: { fontSize: 10, cellPadding: 3, textColor: [40, 40, 40] },
+        headStyles: { fillColor: [0, 51, 160], textColor: 255, fontStyle: 'bold', fontSize: 10 },
+        footStyles: { fillColor: [0, 174, 239], textColor: 255, fontStyle: 'bold', fontSize: 11 },
         alternateRowStyles: { fillColor: [245, 247, 250] },
+        columnStyles: {
+          0: { cellWidth: 12, halign: 'center', fontStyle: 'bold', textColor: [0, 51, 160] },
+          4: { halign: 'right' },
+          5: { halign: 'right' },
+          6: { halign: 'right', fontStyle: 'bold', textColor: [5, 150, 105] },
+        },
         didDrawPage: (d) => { if (d.pageNumber > 1) encabezado() },
       })
 
-      // Desglose detallado por ítem
-      const desglose = []
-      itemsDerivados.forEach((it, i) => {
-        desglose.push([`${i + 1} · ${it.producto} / ${it.planta}`, 'Paso 1 — Precio Base C/IGV', it.precioBase.toFixed(4)])
-        desglose.push(['', `Paso 2 — ${it.colTope} (${it.almacen}) − Factor (${it.factor.toFixed(4)})`, it.topeAjustado.toFixed(4)])
-        desglose.push(['', 'Paso 3 — P. Final = Base − (Tope Ajust. × 1.18)', it.finalSinPercepcion.toFixed(4)])
-        if (it.aplicaPercepcion) desglose.push(['', 'P. Final + Percepción (× 1.01)', it.finalConPercepcion.toFixed(4)])
-        desglose.push(['', `Total (${it.cantidad > 0 ? it.cantidad.toLocaleString('es-PE') + ' gal' : 'sin cantidad'})`, it.total > 0 ? it.total.toFixed(2) : '—'])
-      })
-      autoTable(doc, {
-        startY: (doc.lastAutoTable?.finalY || 40) + 8,
-        margin: { top: 30 },
-        head: [['Ítem', 'Concepto', 'Valor S/']],
-        body: desglose,
-        styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fillColor: [30, 41, 59], textColor: 255 },
-        columnStyles: { 0: { cellWidth: 70, fontStyle: 'bold' }, 2: { cellWidth: 30, halign: 'right' } },
-        didDrawPage: (d) => { if (d.pageNumber > 1) encabezado() },
-      })
+      // Nota al pie de la tabla
+      const yNota = (doc.lastAutoTable?.finalY || 40) + 8
+      doc.setFontSize(9); doc.setTextColor(110, 110, 110)
+      doc.text(
+        aplicaPercepcion
+          ? 'Precios con IGV incluidos. Percepción del 1% aplicada sobre el precio final de cada ítem.'
+          : 'Precios con IGV incluidos. Sin percepción aplicada.',
+        14, yNota
+      )
+      doc.text(`${totales.count} ítem(s) en esta cotización.`, 14, yNota + 5)
 
       const pageCount = doc.getNumberOfPages()
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i)
-        doc.setFontSize(8); doc.setTextColor(120, 120, 120)
-        doc.text(`Página ${i} de ${pageCount}`, W - 14, doc.internal.pageSize.getHeight() - 8, { align: 'right' })
-        doc.text('Documento generado por SIGMO · Precios, Topes & Cotización', 14, doc.internal.pageSize.getHeight() - 8)
+        doc.setFontSize(8); doc.setTextColor(130, 130, 130)
+        doc.text(`Página ${i} de ${pageCount}`, W - 14, H - 8, { align: 'right' })
+        doc.text('Documento generado por SIGMO · Precios, Topes & Cotización', 14, H - 8)
       }
 
       doc.save(`Cotizacion_${numero}.pdf`)
@@ -459,8 +455,6 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
                         <th style={{ padding: '10px 6px', textAlign: 'left' }}>Planta</th>
                         <th style={{ padding: '10px 6px', textAlign: 'left' }}>Producto</th>
                         <th style={{ padding: '10px 6px', textAlign: 'left' }}>Almacén</th>
-                        <th style={{ padding: '10px 6px', textAlign: 'right' }}>P. Base</th>
-                        <th style={{ padding: '10px 6px', textAlign: 'right' }}>Tope Ajust.</th>
                         <th style={{ padding: '10px 6px', textAlign: 'right' }}>P. Final</th>
                         <th style={{ padding: '10px 6px', textAlign: 'right' }}>Cant</th>
                         <th style={{ padding: '10px 6px', textAlign: 'right' }}>Total S/</th>
@@ -474,8 +468,6 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
                           <td style={{ padding: '8px 6px' }}>{it.planta}</td>
                           <td style={{ padding: '8px 6px', fontWeight: 'bold' }}>{it.producto}</td>
                           <td style={{ padding: '8px 6px' }}>{it.almacen}</td>
-                          <td style={{ padding: '8px 6px', textAlign: 'right' }}>{it.precioBase.toFixed(4)}</td>
-                          <td style={{ padding: '8px 6px', textAlign: 'right' }}>{it.topeAjustado.toFixed(4)}</td>
                           <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 'bold', color: AZUL }}>{it.precioFinal.toFixed(4)}</td>
                           <td style={{ padding: '8px 6px', textAlign: 'right' }}>{it.cantidad > 0 ? it.cantidad.toLocaleString('es-PE') : '—'}</td>
                           <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 'bold', color: it.total > 0 ? '#059669' : '#6b7280' }}>{it.total > 0 ? it.total.toFixed(2) : '—'}</td>
@@ -488,7 +480,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
                     </tbody>
                     <tfoot>
                       <tr style={{ backgroundColor: '#eff6ff', fontWeight: 'bold' }}>
-                        <td colSpan={7} style={{ padding: '10px 6px', textAlign: 'right', color: '#1e40af' }}>TOTALES ({totales.count} ítems)</td>
+                        <td colSpan={5} style={{ padding: '10px 6px', textAlign: 'right', color: '#1e40af' }}>TOTALES ({totales.count} ítems)</td>
                         <td style={{ padding: '10px 6px', textAlign: 'right', color: '#1e40af' }}>{totales.galones > 0 ? totales.galones.toLocaleString('es-PE') : '—'}</td>
                         <td style={{ padding: '10px 6px', textAlign: 'right', color: '#059669', fontSize: '14px' }}>S/ {totales.monto.toFixed(2)}</td>
                         <td></td>
