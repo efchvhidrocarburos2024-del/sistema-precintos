@@ -17,24 +17,35 @@ export default function ForgotPassword({ setPantalla }) {
   const enviarEnlace = async (e) => {
     e.preventDefault()
     setError('')
-    if (!validarEmail(email)) { setError('Ingresa un correo electrónico válido.'); return }
+    if (!validarEmail(email)) { 
+      setError('Ingresa un correo electrónico válido.')
+      return 
+    }
+    
     setCargando(true)
     try {
+      // Con flowType: 'implicit' en supabase.js, Supabase adjuntará 
+      // #access_token=...&type=recovery a esta URL de redirección.
+      // App.jsx ya está configurado para detectar ese hash y mostrar ResetPassword.
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: `${window.location.origin}/`,
       })
+      
       if (error) throw error
+      
       setEnviado(true)
       toast.success('Enlace de recuperación enviado')
     } catch (err) {
       let msg = err?.message || 'No se pudo enviar el enlace.'
+      
       if (/rate limit/i.test(msg)) {
-        msg = 'Demasiados intentos seguidos (límite del servicio de correo). Espera unos minutos y vuelve a intentar.'
+        msg = 'Demasiados intentos seguidos. Espera unos minutos y vuelve a intentar.'
       } else if (/redirect/i.test(msg)) {
         msg = `Dominio no autorizado. Agrega ${window.location.origin} en Supabase → Authentication → URL Configuration → Redirect URLs.`
       } else if (/unable to validate email|format/i.test(msg)) {
         msg = 'El formato del correo no es válido.'
       }
+      
       setError(msg)
       toast.error(msg)
     } finally {
@@ -42,7 +53,16 @@ export default function ForgotPassword({ setPantalla }) {
     }
   }
 
-  const inputStyle = { width: '100%', padding: '12px 14px', borderRadius: '8px', border: '1px solid #334155', backgroundColor: '#334155', color: '#fff', fontSize: '14px', boxSizing: 'border-box' }
+  const inputStyle = { 
+    width: '100%', 
+    padding: '12px 14px', 
+    borderRadius: '8px', 
+    border: '1px solid #334155', 
+    backgroundColor: '#334155', 
+    color: '#fff', 
+    fontSize: '14px', 
+    boxSizing: 'border-box' 
+  }
 
   if (enviado) {
     return (
