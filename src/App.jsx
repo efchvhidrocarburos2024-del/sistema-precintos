@@ -431,7 +431,7 @@ function App() {
       {/* VISTAS CON NAVBAR INTERNA */}
       {mostrarNavbar && (
         <div style={{ minHeight: '100vh' }}>
-          <NavbarPrecintos sesion={sesion} cerrarSesion={cerrarSesion} setPantalla={setPantalla} />
+          <NavbarPrecintos sesion={sesion} cerrarSesion={cerrarSesion} setPantalla={setPantalla} pantalla={pantallaAccesible} />
           <div style={{ paddingTop: '20px', paddingBottom: '40px' }}>
             <ErrorBoundary key={pantallaAccesible}>
               <Suspense fallback={<CargandoModulo />}>
