@@ -154,10 +154,11 @@ export default function GestionCatalogos({ setPantalla }) {
 
   const renderHeader = () => (
     <header style={{ 
+      width: '100%',
       padding: '20px 40px', 
       display: 'flex', 
-      justifyContent: 'space-between', 
       alignItems: 'center', 
+      gap: '15px',
       background: `linear-gradient(118deg, ${AZUL_PROFUNDO} 0%, ${AZUL_CORPORATIVO} 45%, ${AZUL_MEDIO} 78%, ${CYAN} 100%)`,
       borderBottom: `3px solid ${CYAN}`,
       boxShadow: '0 6px 18px rgba(0,27,94,0.25)',
@@ -169,8 +170,25 @@ export default function GestionCatalogos({ setPantalla }) {
         ) : (
           <button onClick={() => setVista('menu')} style={btnHeaderStyle}>← Volver al Menú</button>
         )}
+        
+        {/* ✅ CAMBIO 1: Icono ⚙️ al lado izquierdo del título */}
+        <div style={{ 
+          width: '52px', 
+          height: '52px', 
+          display: 'grid', 
+          placeItems: 'center', 
+          fontSize: '26px',
+          borderRadius: '14px',
+          background: `linear-gradient(145deg, ${CYAN}, ${AZUL_MEDIO})`,
+          border: '1px solid rgba(255,255,255,0.4)',
+          boxShadow: '0 8px 20px rgba(0,27,94,0.45), inset 0 1px 0 rgba(255,255,255,0.45)',
+        }}>
+          ⚙️
+        </div>
+        
+        {/* ✅ CAMBIO 2: "Administración de Catálogos" → "Catálogos Maestros" */}
         <h1 style={{ margin: 0, color: BLANCO, fontSize: '28px', fontWeight: '900' }}>
-          Administración de Catálogos
+          Catálogos Maestros
         </h1>
       </div>
     </header>
