@@ -79,7 +79,7 @@ export default function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol })
           <span style={{ padding: '9px 18px', borderRadius: '999px', backgroundColor: '#eff6ff', color: '#1e40af', fontWeight: 'bold', fontSize: '14px' }}>
             {sesion?.user?.email} ({String(rol || '').toUpperCase()})
           </span>
-          {/* ✅ NUEVO: Acceso a cambiar contraseña desde el Lobby */}
+          {/* ✅ Acceso a cambiar contraseña también desde el Lobby */}
           <button
             onClick={() => setPantalla('cambiar-password')}
             className="lobby-btn"

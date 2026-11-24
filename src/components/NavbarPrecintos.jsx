@@ -2,13 +2,12 @@
 import { Boton } from './ui'
 
 export default function NavbarPrecintos({ sesion, cerrarSesion, setPantalla, pantalla }) {
-  // ✅ Navegación inteligente: decidir a dónde volver según la pantalla actual
+  // Navegación inteligente: desde cambiar-password vuelve al Lobby;
+  // desde un módulo de precintos vuelve al menú de precintos.
   const volverAtras = () => {
     if (pantalla === 'cambiar-password') {
-      // Si estamos en cambiar contraseña, volver al Lobby principal
       setPantalla('')
     } else {
-      // Si estamos en un módulo de precintos, volver al menú de precintos
       setPantalla('precintos_menu')
     }
   }

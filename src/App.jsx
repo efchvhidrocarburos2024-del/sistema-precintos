@@ -17,10 +17,8 @@ import ResetPassword from './components/ResetPassword'
 // ============================================================
 // MÓDULOS — carga perezosa (cada uno genera su propio chunk)
 // ============================================================
-// Autenticación secundaria
 const ForgotPassword = lazy(() => import('./components/ForgotPassword'))
 
-// Módulos operativos de precintos
 const RegistroLotes = lazy(() => import('./components/RegistroLotes'))
 const RegistroViajes = lazy(() => import('./components/RegistroViajes'))
 const Excepciones = lazy(() => import('./components/Excepciones'))
@@ -34,13 +32,11 @@ const CambiarPassword = lazy(() => import('./components/CambiarPassword'))
 const GestionPlantas = lazy(() => import('./components/GestionPlantas'))
 const PanelRespaldos = lazy(() => import('./components/PanelRespaldos'))
 
-// Módulos administrativos
 const GestionUsuarios = lazy(() => import('./components/GestionUsuarios'))
 const GestionCatalogos = lazy(() => import('./components/GestionCatalogos'))
 const RepositorioDocumental = lazy(() => import('./components/RepositorioDocumental'))
 
 // OJO: vive en la subcarpeta precios/ y tiene export default propio.
-// NO importar desde './components/precios' (el barrel index.js NO lo exporta).
 const GestionPrecios = lazy(() => import('./components/precios/GestionPrecios'))
 
 // --- Utilidades centralizadas ---
@@ -88,7 +84,6 @@ class ErrorBoundary extends Component {
     const { error } = this.state
     if (!error) return this.props.children
 
-    // Error típico tras un deploy nuevo: el chunk viejo ya no existe en el servidor
     const esErrorDeCarga = /dynamically imported module|Loading chunk|Importing a module script failed/i.test(
       String(error?.message || error)
     )
@@ -126,11 +121,8 @@ function App() {
   const [permisos, setPermisos] = useState([])
   const [cargandoRol, setCargandoRol] = useState(true)
 
-  // ----------------------------------------------------------
-  // ✅ DETECCIÓN SINCRÓNICA de recuperación (en el primer render).
-  // Antes vivía dentro de un useEffect y llegaba tarde: supabase-js
-  // limpia el hash de la URL apenas procesa el token del enlace.
-  // ----------------------------------------------------------
+  // ✅ DETECCIÓN SINCRÓNICA de recuperación (primer render): gana la carrera
+  // contra la limpieza del hash que hace supabase-js al procesar el token.
   const [recInicial] = useState(() => {
     const hash = window.location.hash
     const sp = new URLSearchParams(window.location.search)
@@ -163,8 +155,7 @@ function App() {
   }, [pantalla])
 
   // ----------------------------------------------------------
-  // ✅ Si el enlace de recuperación llegó con error (token expirado
-  // o ya usado), lo comunicamos al usuario y limpiamos la URL.
+  // ✅ Aviso si el enlace de recuperación llegó con error (expirado/usado)
   // ----------------------------------------------------------
   useEffect(() => {
     if (!recInicial.errRaw) return
@@ -184,8 +175,6 @@ function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSesion(session)
-
-      // Si hay sesión pero no estamos logueados normalmente, podría ser recuperación
       if (session && !pantalla) {
         const lastHash = sessionStorage.getItem('last_hash')
         if (lastHash && lastHash.includes('type=recovery')) {
@@ -258,7 +247,7 @@ function App() {
   }, [sesion])
 
   // ----------------------------------------------------------
-  // Validación: si la pantalla persistida ya no es accesible, volver al lobby
+  // Validación: pantalla persistida inaccesible → lobby
   // ----------------------------------------------------------
   useEffect(() => {
     if (cargandoRol || !sesion || !rol) return
@@ -283,9 +272,7 @@ function App() {
   }, [])
 
   // ----------------------------------------------------------
-  // ✅ Salida limpia del flujo de recuperación: baja la bandera y
-  // limpia el hash #access_token=...&type=recovery de la URL para
-  // que un F5 no vuelva a disparar el modo recuperación.
+  // ✅ Salida limpia del flujo de recuperación (limpia el hash de la URL)
   // ----------------------------------------------------------
   const finRecuperacion = useCallback(() => {
     setEsRecuperacion(false)
@@ -314,7 +301,6 @@ function App() {
   useEffect(() => {
     if (!sesion) return
 
-    // Throttle → el handler corre máximo 1×/seg
     const manejarActividad = throttle(() => {
       if (!mostrarAviso) reiniciarTemporizador()
     }, 1000)
@@ -331,10 +317,7 @@ function App() {
   }, [sesion, mostrarAviso, reiniciarTemporizador])
 
   // ----------------------------------------------------------
-  // --- ✅ FLUJO DE RECUPERACIÓN (prioridad máxima) ---
-  // El enlace del correo crea una sesión de recuperación; por eso
-  // esta rama va ANTES de la comprobación de sesión: así el usuario
-  // ve el formulario de nueva contraseña en vez del Lobby/Login.
+  // --- ✅ FLUJO DE RECUPERACIÓN (prioridad máxima, con o sin sesión) ---
   // ----------------------------------------------------------
   if (esRecuperacion) {
     return (
@@ -353,7 +336,7 @@ function App() {
   if (!sesion) {
     return (
       <>
-        {/* ✅ El Toaster también existe sin sesión para ver toasts de Login/Forgot */}
+        {/* ✅ Toaster también sin sesión: toasts de Login/Forgot visibles */}
         <Toaster position="top-right" toastOptions={{ duration: 4000, style: { fontWeight: 'bold' } }} />
         <ErrorBoundary key={pantalla || 'login'}>
           <Suspense fallback={<CargandoModulo texto="Cargando…" />}>
@@ -376,7 +359,7 @@ function App() {
   }
 
   // ----------------------------------------------------------
-  // Cálculo de pantalla efectiva (evita "flash" no autorizado)
+  // Pantalla efectiva (evita "flash" no autorizado)
   // ----------------------------------------------------------
   const pantallaAccesible =
     pantalla && puedeAccederPantalla(pantalla, rol, permisos) ? pantalla : ''
@@ -431,6 +414,7 @@ function App() {
       {/* VISTAS CON NAVBAR INTERNA */}
       {mostrarNavbar && (
         <div style={{ minHeight: '100vh' }}>
+          {/* ✅ pantalla prop: la navbar decide a dónde volver */}
           <NavbarPrecintos sesion={sesion} cerrarSesion={cerrarSesion} setPantalla={setPantalla} pantalla={pantallaAccesible} />
           <div style={{ paddingTop: '20px', paddingBottom: '40px' }}>
             <ErrorBoundary key={pantallaAccesible}>

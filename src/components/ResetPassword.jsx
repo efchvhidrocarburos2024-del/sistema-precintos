@@ -17,10 +17,7 @@ export default function ResetPassword({ setPantalla, onFinRecuperacion }) {
   const [esperaAgotada, setEsperaAgotada] = useState(false)
   const saliendoRef = useRef(false)
 
-  // ----------------------------------------------------------
-  // Verificar sesión de recuperación (puede tardar unos ms en
-  // establecerse tras abrir el enlace del correo)
-  // ----------------------------------------------------------
+  // Verificar sesión de recuperación (puede tardar unos ms tras abrir el enlace)
   useEffect(() => {
     let activo = true
 
@@ -53,10 +50,7 @@ export default function ResetPassword({ setPantalla, onFinRecuperacion }) {
     }
   }, [])
 
-  // ----------------------------------------------------------
-  // ✅ Si en 4 segundos el enlace no logró establecer sesión,
-  // ofrecemos pedir uno nuevo en vez de dejar al usuario atrapado.
-  // ----------------------------------------------------------
+  // Si en 4 s el enlace no estableció sesión, ofrecer pedir uno nuevo
   useEffect(() => {
     if (haySesion) { setEsperaAgotada(false); return }
     const t = setTimeout(() => setEsperaAgotada(true), 4000)
@@ -71,10 +65,7 @@ export default function ResetPassword({ setPantalla, onFinRecuperacion }) {
     return null
   }
 
-  // ----------------------------------------------------------
-  // ✅ Salida limpia: cierra la sesión de recuperación, avisa a App
-  // para limpiar el hash de la URL y vuelve al Login
-  // ----------------------------------------------------------
+  // Salida limpia: cierra sesión de recuperación, limpia hash y vuelve al Login
   const salirAlLogin = async () => {
     if (saliendoRef.current) return
     saliendoRef.current = true
@@ -100,9 +91,6 @@ export default function ResetPassword({ setPantalla, onFinRecuperacion }) {
 
       setExito(true)
       toast.success('Contraseña actualizada correctamente')
-
-      // Mostramos la confirmación 3 segundos y luego cerramos la sesión
-      // de recuperación para obligar al login con la nueva contraseña
       setTimeout(() => salirAlLogin(), 3000)
     } catch (err) {
       setError(err.message || 'No se pudo actualizar la contraseña.')
@@ -112,7 +100,6 @@ export default function ResetPassword({ setPantalla, onFinRecuperacion }) {
     }
   }
 
-  // ESTILOS UNIFICADOS con el Login (fondo blanco, texto negro)
   const inputStyle = {
     width: '100%',
     padding: '12px 14px',
@@ -125,9 +112,6 @@ export default function ResetPassword({ setPantalla, onFinRecuperacion }) {
     transition: 'border-color 0.2s, box-shadow 0.2s'
   }
 
-  // ----------------------------------------------------------
-  // PANTALLA DE ÉXITO
-  // ----------------------------------------------------------
   if (exito) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--gray-bg, #eef1f5)', padding: '20px' }}>
@@ -148,9 +132,6 @@ export default function ResetPassword({ setPantalla, onFinRecuperacion }) {
     )
   }
 
-  // ----------------------------------------------------------
-  // FORMULARIO DE NUEVA CONTRASEÑA
-  // ----------------------------------------------------------
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--gray-bg, #eef1f5)', padding: '20px' }}>
       <style>{`
@@ -241,7 +222,6 @@ export default function ResetPassword({ setPantalla, onFinRecuperacion }) {
           </button>
         </form>
 
-        {/* ✅ Botón de rescate: si el enlace no estableció sesión en 4s */}
         {!haySesion && esperaAgotada && (
           <button
             type="button"
