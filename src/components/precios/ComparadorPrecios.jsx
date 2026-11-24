@@ -20,7 +20,7 @@ const esPlantaValida = (nombre) => {
 // Detecta la fecha en el nombre: YYYY-MM-DD, DD-MM-YYYY (y con _ o . como separador)
 const extraerFecha = (nombre) => {
   if (!nombre) return null
-  const m = String(nombre).match(/(\d{4})[-_.](\d{2})[-_.](\d{2})|(\d{2})[-_.](\d{2})[-_.](\d{4})/)
+  const m = String(nombre).match(/(\d{4})-_.-_.|(\d{2})-_.-_./)
   if (!m) return null
   const y = m[1] || m[6]
   const mo = m[2] || m[5]
@@ -65,6 +65,39 @@ const campoFijoStyle = {
   fontSize: '13px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold',
   boxSizing: 'border-box', minHeight: ALTO_CONTROL, display: 'flex', alignItems: 'center', gap: '8px',
   lineHeight: 1.3, wordBreak: 'break-word', cursor: 'default',
+}
+
+// ============================================================
+// ✅ MEJORA 3: Detección resiliente de hojas de Excel
+// Busca por palabras clave en lugar de coincidencias exactas,
+// para no fallar si el proveedor renombra la hoja (ej. "Precios
+// Planta Sin IGV" -> "Lista Precios Sin IGV ").
+// ============================================================
+const encontrarHojaPrecios = (sheetNames, tipoBusqueda) => {
+  const lowerNames = sheetNames.map(n => n.toLowerCase())
+  const buscarPor = (claves) => {
+    const idx = lowerNames.findIndex(n => claves.some(c => n.includes(c)))
+    return idx !== -1 ? sheetNames[idx] : null
+  }
+
+  // Hoja "Sin IGV" / "Precio Base"
+  if (tipoBusqueda === 'Precios Planta Sin IGV' || tipoBusqueda === 'Precio Base') {
+    const sinIgv = buscarPor(['sin igv', 'precio base', 'base sin'])
+    if (sinIgv) return sinIgv
+  }
+
+  // Hoja "Con IGV" / "Precio Final"
+  if (tipoBusqueda === 'Precios Planta Con IGV') {
+    const conIgv = buscarPor(['con igv', 'precio final', 'final con'])
+    if (conIgv) return conIgv
+  }
+
+  // Fallback inteligente: cualquier hoja que mencione precio/planta
+  const generic = buscarPor(['precio', 'planta'])
+  if (generic) return generic
+
+  // Último recurso: primera hoja
+  return sheetNames[0]
 }
 
 // ============================================================
@@ -116,6 +149,7 @@ export default function ComparadorPrecios({ archivos, archivosTopes, onVolver })
   // ----------------------------------------------------------
   // AUTOSELECCIÓN FIJA: Actual = más reciente, Previa = la anterior,
   // según la fecha del NOMBRE del archivo (Precios y Topes).
+  // (Regla de negocio: NO se permite selección manual.)
   // ----------------------------------------------------------
   useEffect(() => {
     const ord = ordenarPorFecha(tipo === 'precios' ? archivos : archivosTopes)
@@ -132,14 +166,14 @@ export default function ComparadorPrecios({ archivos, archivosTopes, onVolver })
     return XLSX.read(await res.arrayBuffer(), { type: 'array' })
   }
 
+  // ✅ MEJORA 3: se usa encontrarHojaPrecios en lugar de la coincidencia exacta
   const parsePrecios = async (url, hoja) => {
     const wb = await descargar(url)
-    const term = hoja.toLowerCase().replace('precios planta ', '').replace('precio ', '')
-    const sheetName = wb.SheetNames.find(n => n.toLowerCase().includes(term)) || wb.SheetNames[0]
+    const sheetName = encontrarHojaPrecios(wb.SheetNames, hoja)
     const data = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: '' })
     let hIdx = data.findIndex(r => r.some(c => normalizarTexto(c).includes('PLANTA')))
     if (hIdx === -1) hIdx = 0
-    return { headers: data[hIdx], rows: data.slice(hIdx + 1) }
+    return { headers: data[hIdx], rows: data.slice(hIdx + 1), sheetName }
   }
 
   const parseTopes = async (url) => {

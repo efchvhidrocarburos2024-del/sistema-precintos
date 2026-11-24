@@ -1,10 +1,8 @@
-// src/components/precios/GestionPrecios.jsx
 import { useState, useEffect } from 'react'
 import { supabase } from '../../supabase'
 import toast from 'react-hot-toast'
 import { Card } from '../ui'
 
-// Import directo (export default) — NO usar el barrel ./index.js
 import VisualizadorPrecios from './VisualizadorPrecios'
 import CargadorPrecios from './CargadorPrecios'
 import ComparadorPrecios from './ComparadorPrecios'
@@ -12,11 +10,10 @@ import CotizadorPrecios from './CotizadorPrecios'
 import HistorialCotizaciones from './HistorialCotizaciones'
 import TendenciasPrecios from './TendenciasPrecios'
 
-// ══ PALETA CORPORATIVA PETROAMÉRICA — BANNER ══
 const AZUL_PROFUNDO = '#001B5E'
-const AZUL_CORPORATIVO = '#0033A0'   // ← color principal del logo
+const AZUL_CORPORATIVO = '#0033A0'
 const AZUL_MEDIO = '#0057D8'
-const CYAN = '#00AEEF'               // ← acento / línea inferior
+const CYAN = '#00AEEF'
 const BLANCO = '#FFFFFF'
 
 const cardStyle = {
@@ -24,7 +21,7 @@ const cardStyle = {
   boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '2px solid transparent', cursor: 'pointer',
   transition: 'all 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
 }
-// ✅ Estilo del botón para el banner corporativo
+
 const btnHeaderStyle = { 
   background: 'rgba(255,255,255,0.14)', 
   border: '1px solid rgba(255,255,255,0.6)', 
@@ -38,7 +35,6 @@ const btnHeaderStyle = {
 
 const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }
 
-// Extrae la fecha del nombre del archivo (YYYY-MM-DD o DD-MM-YYYY, con - o _)
 const extraerFecha = (nombre) => {
   if (!nombre) return '1900-01-01'
   const match = String(nombre).match(/(\d{4}[-_]\d{2}[-_]\d{2})|(\d{2}[-_]\d{2}[-_]\d{4})/)
@@ -51,47 +47,48 @@ const extraerFecha = (nombre) => {
   return fechaStr
 }
 
-export default function GestionPrecios({ setPantalla, rol }) {
+// ✅ MEJORA: Se recibe 'permisos' como prop para evaluación dinámica
+export default function GestionPrecios({ setPantalla, rol, permisos = [] }) {
   const [vista, setVista] = useState('menu')
-
-  // ✅ MODIFICACIÓN 2: tarjeta resaltada al pasar el mouse (borde azul corporativo + levanta)
   const [hoverCard, setHoverCard] = useState(null)
+  
   const propsTarjeta = (id) => ({
     onMouseEnter: () => setHoverCard(id),
     onMouseLeave: () => setHoverCard(null),
     style: {
       ...cardStyle,
       borderColor: hoverCard === id ? AZUL_CORPORATIVO : 'transparent',
-      boxShadow: hoverCard === id
-        ? '0 0 0 3px rgba(0,51,160,0.15), 0 10px 24px rgba(0,51,160,0.18)'
-        : cardStyle.boxShadow,
+      boxShadow: hoverCard === id ? '0 0 0 3px rgba(0,51,160,0.15), 0 10px 24px rgba(0,51,160,0.18)' : cardStyle.boxShadow,
       transform: hoverCard === id ? 'translateY(-4px)' : 'translateY(0)',
     },
   })
 
-  // Datos compartidos con los sub-componentes
   const [archivos, setArchivos] = useState([])
   const [archivosTopes, setArchivosTopes] = useState([])
   const [auditoria, setAuditoria] = useState([])
-
-  // Filtros del módulo Tendencias (versión nueva basada en BD / historial)
+  
   const hoy = new Date().toISOString().split('T')[0]
   const inicioAnio = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0]
+  
   const [catalogos, setCatalogos] = useState({ plantas: [], productos: [] })
   const [cargandoCatalogos, setCargandoCatalogos] = useState(false)
-  const [filtrosTendencias, setFiltrosTendencias] = useState({
-    fechaDesde: inicioAnio, fechaHasta: hoy, productoSeleccionado: '', plantaSeleccionada: ''
+  const [filtrosTendencias, setFiltrosTendencias] = useState({ 
+    fechaDesde: inicioAnio, 
+    fechaHasta: hoy, 
+    productoSeleccionado: '', 
+    plantaSeleccionada: '' 
   })
 
-  // Permisos (códigos de rol históricos del módulo; agrega los que necesites)
-  const puedeCargar = ['admin_sistema', 'analista_comercial', 'jefe_pricing'].includes(rol)
-  const puedeGestionar = ['admin_sistema', 'jefe_pricing'].includes(rol)
+  // ✅ MEJORA: Permisos evaluados a nivel de la tabla 'permisos' de Supabase.
+  // Nota: Ajusta los strings 'cargar_precios' y 'gestionar_precios' a los códigos exactos de tu tabla si son diferentes.
+  const puedeCargar = permisos.includes('cargar_precios') || permisos.includes('admin_sistema') || permisos.includes('jefe_pricing')
+  const puedeGestionar = permisos.includes('gestionar_precios') || permisos.includes('admin_sistema') || permisos.includes('jefe_pricing')
 
-  // ----------------------------------------------------------
-  // Cargas según la vista
-  // ----------------------------------------------------------
   useEffect(() => {
-    if (vista === 'visualizar' || vista === 'comparar') { fetchArchivos(); fetchArchivosTopes() }
+    if (vista === 'visualizar' || vista === 'comparar') { 
+      fetchArchivos()
+      fetchArchivosTopes() 
+    }
     if (vista === 'auditoria') fetchAuditoria()
     if (vista === 'tendencias') cargarCatalogos()
   }, [vista])
@@ -148,32 +145,28 @@ export default function GestionPrecios({ setPantalla, rol }) {
     } catch (e) { console.error('Error registrando auditoría:', e) }
   }
 
-  // ----------------------------------------------------------
-  // Subida real de archivos (la usa CargadorPrecios)
-  // ----------------------------------------------------------
   async function subirArchivo(file, esTope) {
     const tabla = esTope ? 'topes_archivos' : 'precios_archivos'
     const carpeta = esTope ? 'topes' : 'listas_precios'
     try {
       const { data: existentes } = await supabase.from(tabla).select('id').eq('nombre_archivo', file.name).limit(1)
-      if (existentes && existentes.length > 0) {
-        throw new Error(`Ya existe un archivo llamado "${file.name}". Elimínalo o renómbralo antes de subirlo.`)
-      }
-
+      if (existentes && existentes.length > 0) throw new Error(`Ya existe un archivo llamado "${file.name}". Elimínalo o renómbralo antes de subirlo.`)
+      
       const ruta = `${carpeta}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`
       const { error: errUp } = await supabase.storage.from('documentos_sigmo').upload(ruta, file)
       if (errUp) throw errUp
-
+      
       const { data: { publicUrl } } = supabase.storage.from('documentos_sigmo').getPublicUrl(ruta)
       const { data: { user } } = await supabase.auth.getUser()
-
+      
       await supabase.from(tabla).update({ es_vigente: false }).eq('es_vigente', true)
       const { data, error: errIns } = await supabase.from(tabla)
         .insert({ nombre_archivo: file.name, url_archivo: publicUrl, subido_por: user?.email || null, es_vigente: true })
         .select()
+        
       if (errIns) throw errIns
       if (!data || data.length === 0) throw new Error('Insert bloqueado por RLS (revisa las políticas de la tabla)')
-
+      
       await registrarAuditoria(data[0].id, file.name, 'SUBIDA', esTope ? 'topes' : 'precios')
       toast.success(esTope ? 'Topes subidos y marcados como vigentes' : 'Lista subida y marcada como vigente')
       if (esTope) fetchArchivosTopes(); else fetchArchivos()
@@ -209,7 +202,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
   const actualizarFiltros = (cambios) => setFiltrosTendencias(prev => ({ ...prev, ...cambios }))
 
-  // ✅ MODIFICACIÓN 1: banner con el color del logo (azul #0033A0 → cyan #00AEEF) + icono 💰
   const Header = ({ titulo, onVolver, textoVolver = '← Volver al Menú' }) => (
     <header style={{ 
       width: '100%',
@@ -219,11 +211,9 @@ export default function GestionPrecios({ setPantalla, rol }) {
       gap: '15px',
       background: `linear-gradient(118deg, ${AZUL_PROFUNDO} 0%, ${AZUL_CORPORATIVO} 45%, ${AZUL_MEDIO} 78%, ${CYAN} 100%)`,
       borderBottom: `3px solid ${CYAN}`,
-      boxShadow: '0 6px 18px rgba(0,27,94,0.25)',
+      boxShadow: '0 6px 18px rgba(0,27,94,0.25)'
     }}>
       <button onClick={onVolver} style={btnHeaderStyle}>{textoVolver}</button>
-      
-      {/* ✅ Icono 💰 al lado izquierdo del título */}
       <div style={{ 
         width: '52px', 
         height: '52px', 
@@ -233,52 +223,50 @@ export default function GestionPrecios({ setPantalla, rol }) {
         borderRadius: '14px',
         background: `linear-gradient(145deg, ${CYAN}, ${AZUL_MEDIO})`,
         border: '1px solid rgba(255,255,255,0.4)',
-        boxShadow: '0 8px 20px rgba(0,27,94,0.45), inset 0 1px 0 rgba(255,255,255,0.45)',
-      }}>
-        💰
-      </div>
-      
+        boxShadow: '0 8px 20px rgba(0,27,94,0.45), inset 0 1px 0 rgba(255,255,255,0.45)'
+      }}>💰</div>
       <h1 style={{ margin: 0, color: BLANCO, fontSize: '28px', fontWeight: '900' }}>{titulo}</h1>
     </header>
   )
 
-  // ----------------------------------------------------------
-  // MENÚ PRINCIPAL
-  // ----------------------------------------------------------
   if (vista === 'menu') {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
         <Header titulo="Precios, Topes & Cotización" onVolver={() => setPantalla('')} textoVolver="← SIGMO" />
         <main style={{ padding: '40px 20px', maxWidth: '1000px', margin: '0 auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
-            {/* ✅ MODIFICACIÓN 2: cada tarjeta usa propsTarjeta(id) para el borde azul al hover + levanta */}
             <div onClick={() => setVista('visualizar')} {...propsTarjeta('visualizar')}>
-              <div style={{ fontSize: '50px', marginBottom: '15px' }}>️</div>
+              <div style={{ fontSize: '50px', marginBottom: '15px' }}>📄</div>
               <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Visualizar Listas & Topes</h3>
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Ver, comparar y descargar archivos Excel.</p>
             </div>
+            
             {puedeCargar && (
               <div onClick={() => setVista('cargar')} {...propsTarjeta('cargar')}>
-                <div style={{ fontSize: '50px', marginBottom: '15px' }}></div>
+                <div style={{ fontSize: '50px', marginBottom: '15px' }}>📤</div>
                 <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Cargar Nueva Lista & Topes</h3>
                 <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Sube y previsualiza archivos Excel.</p>
               </div>
             )}
+            
             <div onClick={() => setVista('tendencias')} {...propsTarjeta('tendencias')}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>📈</div>
               <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Gráfico de Tendencias</h3>
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Evolución histórica desde la base de datos.</p>
             </div>
+            
             <div onClick={() => setVista('cotizar')} {...propsTarjeta('cotizar')}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>🧾</div>
               <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Cotizar</h3>
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Genera cotizaciones con precios y topes vigentes.</p>
             </div>
+            
             <div onClick={() => setVista('historial')} {...propsTarjeta('historial')}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>📚</div>
               <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Historial de Cotizaciones</h3>
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Consulta y elimina cotizaciones guardadas.</p>
             </div>
+            
             <div onClick={() => setVista('auditoria')} {...propsTarjeta('auditoria')}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>📋</div>
               <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Auditoría General</h3>
@@ -290,9 +278,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
-  // ----------------------------------------------------------
-  // DELEGACIÓN A SUB-COMPONENTES
-  // ----------------------------------------------------------
   if (vista === 'visualizar') {
     return (
       <VisualizadorPrecios
@@ -306,22 +291,23 @@ export default function GestionPrecios({ setPantalla, rol }) {
       />
     )
   }
+  
   if (vista === 'cargar') {
     return <CargadorPrecios puedeCargar={puedeCargar} onVolver={() => setVista('menu')} onSubirExitoso={subirArchivo} />
   }
+  
   if (vista === 'comparar') {
     return <ComparadorPrecios archivos={archivos} archivosTopes={archivosTopes} onVolver={() => setVista('visualizar')} />
   }
+  
   if (vista === 'cotizar') {
     return <CotizadorPrecios archivos={archivos} archivosTopes={archivosTopes} onVolver={() => setVista('menu')} onCotizacionGuardada={() => {}} />
   }
+  
   if (vista === 'historial') {
     return <HistorialCotizaciones onVolver={() => setVista('menu')} />
   }
 
-  // ----------------------------------------------------------
-  // TENDENCIAS (filtros propios + módulo de gráfico)
-  // ----------------------------------------------------------
   if (vista === 'tendencias') {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
@@ -359,13 +345,13 @@ export default function GestionPrecios({ setPantalla, rol }) {
               <p style={{ color: 'var(--primary-blue)', fontWeight: 'bold' }}>Cargando catálogos...</p>
             </Card>
           ) : (
-            <TendenciasPrecios
-              filtros={{
-                fechaDesde: filtrosTendencias.fechaDesde,
-                fechaHasta: filtrosTendencias.fechaHasta,
-                productos: filtrosTendencias.productoSeleccionado ? [filtrosTendencias.productoSeleccionado] : [],
-                planta: filtrosTendencias.plantaSeleccionada || null,
-              }}
+            <TendenciasPrecios 
+              filtros={{ 
+                fechaDesde: filtrosTendencias.fechaDesde, 
+                fechaHasta: filtrosTendencias.fechaHasta, 
+                productos: filtrosTendencias.productoSeleccionado ? [filtrosTendencias.productoSeleccionado] : [], 
+                planta: filtrosTendencias.plantaSeleccionada || null 
+              }} 
             />
           )}
         </main>
@@ -373,9 +359,6 @@ export default function GestionPrecios({ setPantalla, rol }) {
     )
   }
 
-  // ----------------------------------------------------------
-  // AUDITORÍA
-  // ----------------------------------------------------------
   if (vista === 'auditoria') {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
@@ -384,7 +367,12 @@ export default function GestionPrecios({ setPantalla, rol }) {
           <Card>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white' }}>
-                <tr><th style={{ padding: '12px' }}>FECHA</th><th style={{ padding: '12px' }}>MÓDULO</th><th style={{ padding: '12px' }}>ACCIÓN</th><th style={{ padding: '12px' }}>ARCHIVO</th></tr>
+                <tr>
+                  <th style={{ padding: '12px' }}>FECHA</th>
+                  <th style={{ padding: '12px' }}>MÓDULO</th>
+                  <th style={{ padding: '12px' }}>ACCIÓN</th>
+                  <th style={{ padding: '12px' }}>ARCHIVO</th>
+                </tr>
               </thead>
               <tbody>
                 {(auditoria || []).map(log => (
