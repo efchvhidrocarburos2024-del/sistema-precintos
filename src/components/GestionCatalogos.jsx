@@ -1,14 +1,32 @@
+// src/components/GestionCatalogos.jsx
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
 import { Card, Input, Boton } from './ui'
+
+// ══ PALETA CORPORATIVA PETROAMÉRICA — BANNER ══
+const AZUL_PROFUNDO = '#001B5E'
+const AZUL_CORPORATIVO = '#0033A0'   // ← color principal del logo
+const AZUL_MEDIO = '#0057D8'
+const CYAN = '#00AEEF'               // ← acento / línea inferior
+const BLANCO = '#FFFFFF'
 
 const cardStyle = {
   backgroundColor: 'white', borderRadius: '12px', padding: '30px 20px', textAlign: 'center',
   boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '2px solid transparent', cursor: 'pointer',
   transition: 'all 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
 }
-const btnHeaderStyle = { background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }
+// ✅ Estilo del botón para el banner corporativo
+const btnHeaderStyle = { 
+  background: 'rgba(255,255,255,0.14)', 
+  border: '1px solid rgba(255,255,255,0.6)', 
+  color: BLANCO, 
+  padding: '6px 12px', 
+  borderRadius: '6px', 
+  cursor: 'pointer', 
+  fontSize: '13px', 
+  fontWeight: 'bold' 
+}
 
 export default function GestionCatalogos({ setPantalla }) {
   const [vista, setVista] = useState('menu') // 'menu', 'proveedores', 'productos', 'plantas'
@@ -135,14 +153,23 @@ export default function GestionCatalogos({ setPantalla }) {
   }
 
   const renderHeader = () => (
-    <header style={{ padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+    <header style={{ 
+      padding: '20px 40px', 
+      display: 'flex', 
+      justifyContent: 'space-between', 
+      alignItems: 'center', 
+      background: `linear-gradient(118deg, ${AZUL_PROFUNDO} 0%, ${AZUL_CORPORATIVO} 45%, ${AZUL_MEDIO} 78%, ${CYAN} 100%)`,
+      borderBottom: `3px solid ${CYAN}`,
+      boxShadow: '0 6px 18px rgba(0,27,94,0.25)',
+      marginBottom: '30px',
+    }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
         {vista === 'menu' ? (
           <button onClick={() => setPantalla('')} style={btnHeaderStyle}>← SIGMO</button>
         ) : (
           <button onClick={() => setVista('menu')} style={btnHeaderStyle}>← Volver al Menú</button>
         )}
-        <h1 style={{ margin: 0, color: 'var(--primary-blue)', fontSize: '28px', fontWeight: '900' }}>
+        <h1 style={{ margin: 0, color: BLANCO, fontSize: '28px', fontWeight: '900' }}>
           Administración de Catálogos
         </h1>
       </div>
@@ -160,27 +187,59 @@ export default function GestionCatalogos({ setPantalla }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
             
-            <div onClick={() => setVista('proveedores')} style={cardStyle} onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary-blue)'} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}>
+            <div onClick={() => setVista('proveedores')} style={cardStyle} 
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = AZUL_CORPORATIVO
+                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0,51,160,0.15), 0 10px 24px rgba(0,51,160,0.18)'
+              }} 
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'transparent'
+                e.currentTarget.style.boxShadow = ''
+              }}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>🏢</div>
-              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Proveedores</h3>
+              <h3 style={{ color: AZUL_CORPORATIVO, marginBottom: '10px', fontSize: '18px' }}>Proveedores</h3>
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Gestión de empresas proveedoras.</p>
             </div>
 
-            <div onClick={() => setVista('productos')} style={cardStyle} onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary-blue)'} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}>
+            <div onClick={() => setVista('productos')} style={cardStyle} 
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = AZUL_CORPORATIVO
+                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0,51,160,0.15), 0 10px 24px rgba(0,51,160,0.18)'
+              }} 
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'transparent'
+                e.currentTarget.style.boxShadow = ''
+              }}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>🛢️</div>
-              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Productos</h3>
+              <h3 style={{ color: AZUL_CORPORATIVO, marginBottom: '10px', fontSize: '18px' }}>Productos</h3>
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Listado de combustibles y derivados.</p>
             </div>
 
-            <div onClick={() => setVista('plantas')} style={cardStyle} onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary-blue)'} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}>
+            <div onClick={() => setVista('plantas')} style={cardStyle} 
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = AZUL_CORPORATIVO
+                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0,51,160,0.15), 0 10px 24px rgba(0,51,160,0.18)'
+              }} 
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'transparent'
+                e.currentTarget.style.boxShadow = ''
+              }}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>🏭</div>
-              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Plantas / Terminales</h3>
+              <h3 style={{ color: AZUL_CORPORATIVO, marginBottom: '10px', fontSize: '18px' }}>Plantas / Terminales</h3>
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Administración de terminales de despacho.</p>
             </div>
 
-            <div onClick={() => setPantalla('usuarios')} style={cardStyle} onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--primary-blue)'} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}>
+            <div onClick={() => setPantalla('usuarios')} style={cardStyle} 
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = AZUL_CORPORATIVO
+                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0,51,160,0.15), 0 10px 24px rgba(0,51,160,0.18)'
+              }} 
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'transparent'
+                e.currentTarget.style.boxShadow = ''
+              }}>
               <div style={{ fontSize: '50px', marginBottom: '15px' }}>👥</div>
-              <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Administrar Usuarios</h3>
+              <h3 style={{ color: AZUL_CORPORATIVO, marginBottom: '10px', fontSize: '18px' }}>Administrar Usuarios</h3>
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Gestión de accesos y roles del sistema.</p>
             </div>
 
@@ -212,7 +271,7 @@ export default function GestionCatalogos({ setPantalla }) {
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                <thead style={{ backgroundColor: 'var(--primary-blue)', color: 'white' }}>
+                <thead style={{ backgroundColor: AZUL_CORPORATIVO, color: 'white' }}>
                   <tr style={{ textAlign: 'left' }}>
                     <th style={{ padding: '15px' }}>CÓDIGO</th>
                     <th style={{ padding: '15px' }}>NOMBRE</th>
