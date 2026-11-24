@@ -1,10 +1,6 @@
 // ============================================================================
 //  SIGMO · MÓDULO 2 · REPOSITORIO DOCUMENTAL — Orquestador
-//  Misma ruta, mismo export, mismas props que el monolito anterior:
-//  App.jsx no necesita ningún cambio.
-//
-//  Seguridad: si App.jsx no pasa `rol` ni `user`, ambos se resuelven desde la
-//  sesión real de Supabase y la tabla usuarios→roles. Nunca desde un valor fijo.
+//  Adaptado con paleta corporativa Petroamérica
 // ============================================================================
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
@@ -16,12 +12,19 @@ import {
 } from './documental'
 import { PALETA, CAPACIDAD_BYTES, mezclarHex, formatearBytes, iniciales, permisosDocumental } from './documental/constantes'
 
+// ══ PALETA CORPORATIVA PETROAMÉRICA — BANNER ══
+const AZUL_PROFUNDO = '#001B5E'
+const AZUL_CORPORATIVO = '#0033A0'   // ← color principal del logo
+const AZUL_MEDIO = '#0057D8'
+const CYAN = '#00AEEF'               // ← acento / línea inferior
+const BLANCO = '#FFFFFF'
+
 const NAV = [
   { id: 'biblioteca', icono: '🗂️', label: 'Biblioteca' },
   { id: 'carga', icono: '📤', label: 'Publicar' },
   { id: 'categorias', icono: '🏷️', label: 'Categorías' },
   { id: 'estadisticas', icono: '📊', label: 'Métricas' },
-  { id: 'papelera', icono: '🗑️', label: 'Papelera' },
+  { id: 'papelera', icono: '️', label: 'Papelera' },
   { id: 'auditoria', icono: '🧭', label: 'Bitácora' },
 ]
 
@@ -101,17 +104,29 @@ const puedeEliminar = perm.eliminar
       <Fondo />
 
       {/* ------------------------------------------------------- cabecera -- */}
-      <header className="rd-top">
+      <header className="rd-top" style={{
+        background: `linear-gradient(118deg, ${AZUL_PROFUNDO} 0%, ${AZUL_CORPORATIVO} 45%, ${AZUL_MEDIO} 78%, ${CYAN} 100%)`,
+        borderBottom: `3px solid ${CYAN}`,
+        boxShadow: '0 6px 18px rgba(0,27,94,0.25)',
+      }}>
         <div className="rd-top-in">
-          <button className="rd-volver" onClick={volver}>← SIGMO</button>
+          <button className="rd-volver" onClick={volver} style={{
+            background: 'rgba(255,255,255,0.14)',
+            border: '1px solid rgba(255,255,255,0.6)',
+            color: BLANCO,
+          }}>← SIGMO</button>
 
           <div className="rd-marca">
-            <div className="rd-sello">📁</div>
+            <div className="rd-sello" style={{
+              background: `linear-gradient(145deg, ${CYAN}, ${AZUL_MEDIO})`,
+              border: '1px solid rgba(255,255,255,0.4)',
+              boxShadow: '0 8px 20px rgba(0,27,94,0.45), inset 0 1px 0 rgba(255,255,255,0.45)',
+            }}>📁</div>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 10, letterSpacing: 1.6, textTransform: 'uppercase', color: '#9FE3F5', fontWeight: 800 }}>
                 Módulo 2 · Acervo controlado
               </div>
-              <h1 style={{ margin: '1px 0 0', fontSize: 20, fontWeight: 900, color: '#fff', letterSpacing: -.4, lineHeight: 1.15 }}>
+              <h1 style={{ margin: '1px 0 0', fontSize: 20, fontWeight: 900, color: BLANCO, letterSpacing: -.4, lineHeight: 1.15 }}>
                 Repositorio Documental
               </h1>
             </div>
@@ -126,16 +141,20 @@ const puedeEliminar = perm.eliminar
             <div className="rd-medidor">
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: '#BFE2F0', fontWeight: 700 }}>
                 <span>Almacenamiento</span>
-                <span style={{ color: '#fff' }}>{formatearBytes(bytes)} / 512 MB</span>
+                <span style={{ color: BLANCO }}>{formatearBytes(bytes)} / 512 MB</span>
               </div>
               <div className="rd-medidor-bar">
-                <div className="rd-medidor-fill" style={{ width: `${Math.max(2, usoPct)}%` }} />
+                <div className="rd-medidor-fill" style={{ 
+                  width: `${Math.max(2, usoPct)}%`,
+                  background: `linear-gradient(90deg, ${CYAN}, #7FD8FF)`,
+                  boxShadow: '0 0 10px rgba(0,174,239,0.8)',
+                }} />
               </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 11px 5px 6px', borderRadius: 99, background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)' }}
               title={`${usuario} · rol ${rolEfectivo}`}>
-              <span style={{ width: 28, height: 28, borderRadius: '50%', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 900, color: PALETA.tinta, background: `linear-gradient(135deg,${PALETA.lima},${PALETA.cyan})`, flex: 'none' }}>
+              <span style={{ width: 28, height: 28, borderRadius: '50%', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 900, color: AZUL_PROFUNDO, background: `linear-gradient(135deg,#7FD8FF,${CYAN})`, flex: 'none' }}>
                 {iniciales(usuario)}
               </span>
               <span style={{ fontSize: 11.5, color: '#EAF4FA', fontWeight: 700, maxWidth: 168, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -144,11 +163,22 @@ const puedeEliminar = perm.eliminar
             </div>
 
             <Boton tamano="sm" variante="gh" icono="⟳" title="Recargar datos"
-              onClick={() => { repo.recargar(); toast.success('Repositorio sincronizado') }}>Sincronizar</Boton>
+              onClick={() => { repo.recargar(); toast.success('Repositorio sincronizado') }}
+              style={{
+                background: BLANCO,
+                color: AZUL_CORPORATIVO,
+                border: '1px solid rgba(255,255,255,0.7)',
+                boxShadow: '0 4px 14px rgba(0,27,94,0.3)',
+              }}>Sincronizar</Boton>
 
             {puedeCargar && vista !== 'carga' && (
               <Boton tamano="sm" icono="📤" onClick={() => setVista('carga')}
-                style={{ background: `linear-gradient(100deg,${PALETA.ambar},#D97706)`, color: '#fff' }}>Publicar</Boton>
+                style={{ 
+                  background: `linear-gradient(100deg,#FBBF24,#D97706)`, 
+                  color: '#3B2405',
+                  border: '1px solid rgba(255,255,255,0.5)',
+                  boxShadow: '0 4px 14px rgba(245,158,11,0.45)',
+                }}>Publicar</Boton>
             )}
           </div>
         </div>
