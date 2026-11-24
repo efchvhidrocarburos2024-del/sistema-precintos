@@ -1,191 +1,251 @@
 // src/components/precios/CotizadorPrecios.jsx
 import { useState, useEffect, useMemo } from 'react'
-import { supabase } from '../../supabase'
 import * as XLSX from 'xlsx'
-import { jsPDF } from 'jspdf'
-import { autoTable } from 'jspdf-autotable'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import { supabase } from '../../supabase'
 import { Card, Boton } from '../ui'
 import toast from 'react-hot-toast'
 
 const TASA_IGV = 0.18
 const TASA_PERCEPCION = 0.01
+const HOJA_PRECIO_COTIZACION = 'Precios Planta sin IGV' // NUEVA HOJA DE REFERENCIA
 
-// ============================================================
-// UTILIDADES
-// ============================================================
 const normalizarTexto = (txt) => String(txt || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').replace(/N°/gi, 'N').trim().toUpperCase()
-const parseNum = (v) => parseFloat(String(v).replace(',', '.'))
+const esPlantaValida = (nombre) => {
+  const n = normalizarTexto(nombre)
+  if (!n || n.length < 3 || n.includes('*') || !isNaN(Number(n))) return false
+  if (n.includes('TOTAL') || n.includes('IGV') || n.includes('ISC') || n.includes('RODAJE') || n.includes('INCREMENTO') || n.includes('INCLUSION') || n.includes('DISMINUCION') || n.includes('SISE') || n.includes('INGRESO')) return false
+  return true
+}
+const generarNumeroCotizacion = () => {
+  const hoy = new Date()
+  const yyyy = hoy.getFullYear()
+  const mm = String(hoy.getMonth() + 1).padStart(2, '0')
+  const dd = String(hoy.getDate()).padStart(2, '0')
+  const random = String(Math.floor(Math.random() * 900) + 100)
+  return `COT-${yyyy}${mm}${dd}-${random}`
+}
+const parseNum = (v) => {
+  const n = parseFloat(String(v ?? '').replace(',', '.'))
+  return Number.isFinite(n) ? n : 0
+}
 
+// Función para convertir números a letras en español
 const numeroALetras = (num) => {
-  if (!num || isNaN(num)) return 'CERO'
-  const unidades = ['', 'UNO', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE']
-  const decenas = ['', 'DIEZ', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA']
-  const centenas = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS', 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS']
-  let n = Math.floor(num)
-  if (n === 0) return 'CERO'
-  let res = ''
-  if (n >= 1000) {
-    const miles = Math.floor(n / 1000)
-    res += (miles === 1 ? 'MIL ' : numeroALetras(miles) + ' MIL ')
-    n %= 1000
+  if (num === 0) return 'cero'
+
+  const unidades = ['', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve']
+  const especiales = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve']
+  const decenas = ['', 'diez', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa']
+  const centenas = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos']
+
+  const convertirGrupo = (n) => {
+    if (n === 0) return ''
+    if (n < 10) return unidades[n]
+    if (n < 20) return especiales[n - 10]
+    if (n < 100) {
+      const decena = Math.floor(n / 10)
+      const unidad = n % 10
+      if (unidad === 0) return decenas[decena]
+      if (decena === 2) return `veinti${unidades[unidad]}`
+      return `${decenas[decena]} y ${unidades[unidad]}`
+    }
+    if (n < 1000) {
+      const centena = Math.floor(n / 100)
+      const resto = n % 100
+      if (centena === 1 && resto === 0) return 'cien'
+      if (resto === 0) return centenas[centena]
+      return `${centenas[centena]} ${convertirGrupo(resto)}`
+    }
+    if (n < 1000000) {
+      const millar = Math.floor(n / 1000)
+      const resto = n % 1000
+      if (millar === 1) {
+        if (resto === 0) return 'mil'
+        return `mil ${convertirGrupo(resto)}`
+      }
+      if (resto === 0) return `${convertirGrupo(millar)} mil`
+      return `${convertirGrupo(millar)} mil ${convertirGrupo(resto)}`
+    }
+    return num.toString()
   }
-  if (n >= 100) {
-    res += (n === 100 ? 'CIEN ' : centenas[Math.floor(n / 100)] + ' ')
-    n %= 100
+
+  const parteEntera = Math.floor(num)
+  const parteDecimal = Math.round((num - parteEntera) * 100)
+
+  const enteroLetras = convertirGrupo(parteEntera)
+
+  if (parteDecimal === 0) {
+    return `${enteroLetras} soles`
   }
-  if (n >= 20) {
-    res += decenas[Math.floor(n / 10)]
-    if (n % 10 > 0) res += ' Y ' + unidades[n % 10] + ' '
-    else res += ' '
-  } else if (n >= 10) {
-    const especiales = ['DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISEIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE']
-    res += especiales[n - 10] + ' '
-  } else if (n > 0) {
-    res += unidades[n] + ' '
-  }
-  return res.trim()
+
+  return `${enteroLetras} con ${parteDecimal}/100 soles`
 }
 
-const generarNumeroCotizacion = () => `COT-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`
+const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }
+const selectStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #334155', fontSize: '14px', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold', boxSizing: 'border-box' }
+const labelStyle = { display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '13px' }
+const AZUL = '#0033A0' // Color azul del logo
 
-// ============================================================
-// ✅ MEJORA 3: Detección resiliente de hojas de Excel
-// Busca por palabras clave en lugar de coincidencias exactas,
-// para no fallar si el proveedor renombra la hoja.
-// ============================================================
-const encontrarHojaPrecios = (sheetNames) => {
-  const lowerNames = sheetNames.map(n => n.toLowerCase())
-  const buscarPor = (claves) => {
-    const idx = lowerNames.findIndex(n => claves.some(c => n.includes(c)))
-    return idx !== -1 ? sheetNames[idx] : null
-  }
-
-  // Prioridad 1: hoja "Sin IGV" / "Precio Base"
-  const sinIgv = buscarPor(['sin igv', 'precio base', 'base sin'])
-  if (sinIgv) return sinIgv
-
-  // Prioridad 2: cualquier hoja con "precio" o "planta"
-  const generic = buscarPor(['precio', 'planta'])
-  if (generic) return generic
-
-  // Último recurso: primera hoja
-  return sheetNames[0]
-}
-
-// ============================================================
-// COMPONENTE PRINCIPAL
-// ============================================================
 export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, onCotizacionGuardada }) {
-  const [cotKey, setCotKey] = useState(0)
-  const [cotCargandoDatos, setCotCargandoDatos] = useState(true)
-  const [cotErrorDatos, setCotErrorDatos] = useState('')
+  // Fuentes vigentes
   const [cotDatos, setCotDatos] = useState(null)
-  const [cotColTope, setCotColTope] = useState('')
-  
+  const [cotCargandoDatos, setCotCargandoDatos] = useState(false)
+  const [cotErrorDatos, setCotErrorDatos] = useState('')
+  const [cotColTope, setCotColTope] = useState('TOPE S/IGV')
+  const [cotKey, setCotKey] = useState(0)
+
+  // Formulario del ítem en curso
   const [fPlanta, setFPlanta] = useState('')
   const [fProducto, setFProducto] = useState('')
   const [fAlmacen, setFAlmacen] = useState('')
   const [fFactor, setFFactor] = useState('')
   const [fCantidad, setFCantidad] = useState('')
-  
+  const [editingIndex, setEditingIndex] = useState(null)
+
+  // Cotización (varios ítems juntos)
   const [items, setItems] = useState([])
   const [numeroLote, setNumeroLote] = useState('')
   const [cliente, setCliente] = useState('')
-  const [aplicaPercepcion, setAplicaPercepcion] = useState(false)
-  const [editingIndex, setEditingIndex] = useState(null)
+  const [aplicaPercepcion, setAplicaPercepcion] = useState(true)
   const [papelera, setPapelera] = useState(null)
   const [guardando, setGuardando] = useState(false)
 
   // ----------------------------------------------------------
-  // Cargar fuentes vigentes (precios + topes)
+  // Carga de archivos vigentes
   // ----------------------------------------------------------
   useEffect(() => {
-    let mounted = true
-    async function cargarFuentes() {
-      setCotCargandoDatos(true)
-      setCotErrorDatos('')
+    const cargarDatosCotizador = async () => {
+      setCotCargandoDatos(true); setCotErrorDatos('')
       try {
-        const precioVigente = archivos.find(a => a.es_vigente)
-        const topeVigente = archivosTopes.find(a => a.es_vigente)
-        if (!precioVigente || !topeVigente) {
-          setCotErrorDatos('No hay archivos de precios o topes marcados como vigentes.')
-          setCotCargandoDatos(false)
-          return
-        }
+        const { data: precioVigente } = await supabase.from('precios_archivos').select('*').eq('es_vigente', true).maybeSingle()
+        const { data: topeVigente } = await supabase.from('topes_archivos').select('*').eq('es_vigente', true).maybeSingle()
+        if (!precioVigente) throw new Error('No hay lista de Precios VIGENTE.')
+        if (!topeVigente) throw new Error('No hay archivo de Topes VIGENTE.')
 
-        const descargar = async (url) => {
-          const res = await fetch(url)
-          if (!res.ok) throw new Error('No se pudo descargar el archivo.')
-          return XLSX.read(await res.arrayBuffer(), { type: 'array' })
-        }
+        const resP = await fetch(precioVigente.url_archivo)
+        const wbP = XLSX.read(await resP.arrayBuffer(), { type: 'array' })
+        const sheetP = wbP.SheetNames.find(n => n.toLowerCase() === HOJA_PRECIO_COTIZACION.toLowerCase())
+        if (!sheetP) throw new Error(`No se encontró la hoja "${HOJA_PRECIO_COTIZACION}".`)
+        const gridP = XLSX.utils.sheet_to_json(wbP.Sheets[sheetP], { header: 1, defval: '' })
+        const hIdx = gridP.findIndex(r => r.some(c => normalizarTexto(c).includes('PLANTA')))
+        if (hIdx === -1) throw new Error('No se encontró la tabla de precios.')
+        const headers = gridP[hIdx].map(h => String(h).trim())
+        const idxPlanta = headers.findIndex(h => normalizarTexto(h).includes('PLANTA'))
+        const filas = gridP.slice(hIdx + 1).filter(r => esPlantaValida(r[idxPlanta]))
+        const plantas = [...new Set(filas.map(r => String(r[idxPlanta]).trim()))].sort()
+        const productos = headers.filter(h => h && !normalizarTexto(h).includes('PLANTA') && !normalizarTexto(h).includes('CODIGO') && !normalizarTexto(h).includes('USO INTERNO'))
 
-        const [resPrecio, resTope] = await Promise.all([descargar(precioVigente.url_archivo), descargar(topeVigente.url_archivo)])
-
-        // ✅ MEJORA 3: Uso de la función de detección inteligente
-        const sheetNombre = encontrarHojaPrecios(resPrecio.SheetNames)
-        const datosPrecio = XLSX.utils.sheet_to_json(resPrecio.Sheets[sheetNombre], { header: 1, defval: '' })
-        let hIdx = datosPrecio.findIndex(r => r.some(c => normalizarTexto(c).includes('PLANTA')))
-        if (hIdx === -1) hIdx = 0
-        const headers = datosPrecio[hIdx]
-        const rows = datosPrecio.slice(hIdx + 1).filter(r => r.some(c => c !== ''))
-
-        const datosTope = XLSX.utils.sheet_to_json(resTope.Sheets[resTope.SheetNames[0]], { defval: '' })
-        const cols = datosTope.length ? Object.keys(datosTope[0]) : []
-        const colPlanta = cols.find(c => normalizarTexto(c).includes('PLANTA'))
+        const resT = await fetch(topeVigente.url_archivo)
+        const wbT = XLSX.read(await resT.arrayBuffer(), { type: 'array' })
+        const sheetT = wbT.SheetNames.find(n => n.toLowerCase().includes('tope')) || wbT.SheetNames[0]
+        const topeRows = XLSX.utils.sheet_to_json(wbT.Sheets[sheetT], { defval: '' })
+        const cols = topeRows.length ? Object.keys(topeRows[0]) : []
+        const colPlanta = cols.find(c => normalizarTexto(c) === 'PLANTA') || cols.find(c => normalizarTexto(c).includes('PLANTA'))
         const colAlmacen = cols.find(c => normalizarTexto(c).includes('ALMACEN'))
         const colArticulo = cols.find(c => normalizarTexto(c).includes('ARTICULO'))
-        const colTope = cols.find(c => normalizarTexto(c) === 'TOPE S/IGV') || cols.find(c => normalizarTexto(c).includes('TOPE'))
+        const colTopes = cols.filter(c => normalizarTexto(c).includes('TOPE'))
+        if (!colPlanta || !colAlmacen || !colArticulo) throw new Error('El archivo de Topes no tiene columnas PLANTA / ALMACEN / ARTICULO.')
+        const colTopeAuto = colTopes[0] || 'TOPE S/IGV'
+        setCotColTope(colTopeAuto)
 
-        if (!colPlanta || !colAlmacen || !colArticulo || !colTope) throw new Error('El archivo de topes no tiene las columnas requeridas (PLANTA, ALMACEN, ARTICULO, TOPE).')
+        const combinacionesValidas = new Map()
+        topeRows.forEach(row => {
+          const planta = String(row[colPlanta] || '').trim().toUpperCase()
+          const almacen = String(row[colAlmacen] || '').trim().toUpperCase()
+          const articulo = String(row[colArticulo] || '').trim().toUpperCase()
 
-        if (mounted) {
-          setCotDatos({
-            precioNombre: precioVigente.nombre_archivo,
-            topeNombre: topeVigente.nombre_archivo,
-            headers, rows,
-            topeRows: datosTope,
-            colPlanta, colAlmacen, colArticulo,
-            plantas: [...new Set(rows.map(r => r[headers.findIndex(c => normalizarTexto(c).includes('PLANTA'))]).filter(Boolean))].sort(),
-          })
-          setCotColTope(colTope)
-        }
-      } catch (err) {
-        if (mounted) setCotErrorDatos(err.message || 'Error al cargar fuentes de datos.')
+          if (planta && almacen && articulo) {
+            const key = `${planta}|${almacen}`
+            if (!combinacionesValidas.has(key)) {
+              combinacionesValidas.set(key, new Set())
+            }
+            combinacionesValidas.get(key).add(articulo)
+          }
+        })
+
+        setCotDatos({
+          precioNombre: precioVigente.nombre_archivo, topeNombre: topeVigente.nombre_archivo,
+          hojaUsada: sheetP, headers, idxPlanta, filas, plantas, productos,
+          topeRows, colPlanta, colAlmacen, colArticulo, colTopes, colTopeAuto,
+          combinacionesValidas,
+        })
+      } catch (e) {
+        setCotErrorDatos(e.message); setCotDatos(null)
       } finally {
-        if (mounted) setCotCargandoDatos(false)
+        setCotCargandoDatos(false)
       }
     }
-    cargarFuentes()
-    return () => { mounted = false }
-  }, [archivos, archivosTopes, cotKey])
+    cargarDatosCotizador()
+  }, [cotKey])
 
   // ----------------------------------------------------------
-  // Catálogos en cascada (planta → almacén → producto)
+  // Lógica de sincronización automática
   // ----------------------------------------------------------
+
   const almacenesDisponibles = useMemo(() => {
     if (!cotDatos || !fPlanta) return []
-    return [...new Set(cotDatos.topeRows.filter(r => normalizarTexto(r[cotDatos.colPlanta]) === normalizarTexto(fPlanta)).map(r => r[cotDatos.colAlmacen]).filter(Boolean))].sort()
+
+    const plantaNormalizada = normalizarTexto(fPlanta)
+    const almacenesSet = new Set()
+
+    cotDatos.topeRows.forEach(row => {
+      const rowPlanta = normalizarTexto(row[cotDatos.colPlanta])
+      const rowAlmacen = String(row[cotDatos.colAlmacen] || '').trim()
+
+      if (rowPlanta === plantaNormalizada && rowAlmacen) {
+        almacenesSet.add(rowAlmacen)
+      }
+    })
+
+    return [...almacenesSet].sort()
   }, [cotDatos, fPlanta])
 
   const productosDisponibles = useMemo(() => {
     if (!cotDatos || !fPlanta || !fAlmacen) return []
-    return [...new Set(cotDatos.topeRows.filter(r => normalizarTexto(r[cotDatos.colPlanta]) === normalizarTexto(fPlanta) && normalizarTexto(r[cotDatos.colAlmacen]) === normalizarTexto(fAlmacen)).map(r => r[cotDatos.colArticulo]).filter(Boolean))].sort()
+
+    const plantaNormalizada = normalizarTexto(fPlanta)
+    const almacenNormalizado = normalizarTexto(fAlmacen)
+    const productosSet = new Set()
+
+    cotDatos.topeRows.forEach(row => {
+      const rowPlanta = normalizarTexto(row[cotDatos.colPlanta])
+      const rowAlmacen = normalizarTexto(row[cotDatos.colAlmacen])
+      const rowArticulo = String(row[cotDatos.colArticulo] || '').trim()
+
+      if (rowPlanta === plantaNormalizada && rowAlmacen === almacenNormalizado && rowArticulo) {
+        productosSet.add(rowArticulo)
+      }
+    })
+
+    return [...productosSet].sort()
   }, [cotDatos, fPlanta, fAlmacen])
 
   useEffect(() => {
     if (fPlanta && almacenesDisponibles.length > 0) {
-      if (!almacenesDisponibles.includes(fAlmacen)) setFAlmacen(almacenesDisponibles[0])
-    } else { setFAlmacen('') }
+      const almacenActualValido = almacenesDisponibles.includes(fAlmacen)
+      if (!almacenActualValido) {
+        setFAlmacen(almacenesDisponibles[0])
+      }
+    } else {
+      setFAlmacen('')
+    }
   }, [fPlanta, almacenesDisponibles])
 
   useEffect(() => {
     if (fPlanta && fAlmacen && productosDisponibles.length > 0) {
-      if (!productosDisponibles.includes(fProducto)) setFProducto(productosDisponibles[0])
-    } else { setFProducto('') }
+      const productoActualValido = productosDisponibles.includes(fProducto)
+      if (!productoActualValido) {
+        setFProducto(productosDisponibles[0])
+      }
+    } else {
+      setFProducto('')
+    }
   }, [fPlanta, fAlmacen, productosDisponibles])
 
   // ----------------------------------------------------------
-  // ✅ LÓGICA DE CÁLCULO (decimales ocultos normalizados)
+  // CÁLCULO DE UN ÍTEM - LÓGICA CORREGIDA (decimales ocultos)
   // ----------------------------------------------------------
   const calcularItem = (planta, producto, almacen, factorStr, cantidadStr) => {
     if (!cotDatos) return { error: 'Cargando fuentes vigentes...' }
@@ -195,13 +255,17 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
     const galones = parseNum(cantidadStr)
     const d = cotDatos
 
-    // Paso 1: Obtener precio base SIN IGV de la hoja detectada
-    const idxPlanta = d.headers.findIndex(c => normalizarTexto(c).includes('PLANTA'))
-    const fila = d.rows.find(r => normalizarTexto(r[idxPlanta]) === normalizarTexto(planta))
+    // Paso 1: Obtener precio base SIN IGV de la hoja "Precios Planta sin IGV"
+    const fila = d.filas.find(r => normalizarTexto(r[d.idxPlanta]) === normalizarTexto(planta))
     const idxProd = d.headers.findIndex(h => normalizarTexto(h) === normalizarTexto(producto))
     if (!fila || idxProd === -1) return { error: `No se encontró precio para ${producto} en planta ${planta}.` }
 
     // ✅ CORRECCIÓN CLAVE: El Excel puede contener más decimales de los visibles
+    // (ej: 20.99221 en vez de 20.9922). Si no se normaliza aquí, esos decimales
+    // ocultos se multiplican por los galones y generan centavos de error
+    // (20.99221 × 1,000 = 20,992.21 en vez de 20,992.20).
+    // Se redondea a 4 decimales ANTES de calcular, para que el valor usado
+    // sea EXACTAMENTE el mismo que se muestra en el PASO 1 del desglose.
     const precioBaseRaw = parseFloat(String(fila[idxProd]).replace(',', '.'))
     if (!Number.isFinite(precioBaseRaw)) return { error: 'Precio base no válido.' }
     const precioBaseSinIGV = Number(precioBaseRaw.toFixed(4))
@@ -209,7 +273,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
     // Paso 2: Precio Base Total = Precio SIN IGV (4 dec) × Galones
     const precioBaseTotal = Number((precioBaseSinIGV * galones).toFixed(2))
 
-    // Paso 3: Obtener TOPE S/IGV
+    // Paso 3: Obtener TOPE S/IGV (también normalizado a 2 decimales)
     const t = d.topeRows.find(r =>
       normalizarTexto(r[d.colPlanta]) === normalizarTexto(planta) &&
       normalizarTexto(r[d.colArticulo]) === normalizarTexto(producto) &&
@@ -241,9 +305,21 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
 
     return {
       data: {
-        planta, producto, almacen, factor, galones,
-        precioBaseSinIGV, precioBaseTotal, topeSinIGV, topeTotal,
-        precio1, igv, precioConIGV, percepcion, precioFinalConPercepcion,
+        planta,
+        producto,
+        almacen,
+        precioBaseSinIGV,
+        precioBaseTotal,
+        topeSinIGV,
+        topeTotal,
+        precio1,
+        igv,
+        precioConIGV,
+        percepcion,
+        precioFinalConPercepcion,
+        precioFinalConPercepcion,
+        galones,
+        colTope: cotColTope
       },
     }
   }
@@ -258,6 +334,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
     [fPlanta, fProducto, fAlmacen, fFactor, fCantidad, cotDatos, cotColTope]
   )
   const previewEnriquecido = preview.data ? enriquecer(preview.data, aplicaPercepcion) : null
+
   const itemsDerivados = useMemo(() => items.map(it => enriquecer(it, aplicaPercepcion)), [items, aplicaPercepcion])
   const totales = useMemo(() => ({
     count: itemsDerivados.length,
@@ -272,13 +349,6 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
 
   const agregarItem = () => {
     if (preview.error) return toast.error(preview.error)
-
-    // ✅ MEJORA 1: Validación estricta de galones
-    const galones = parseFloat(fCantidad)
-    if (!galones || isNaN(galones) || galones <= 0) {
-      return toast.error('La cantidad de galones debe ser un número mayor a 0.')
-    }
-
     if (editingIndex !== null) {
       setItems(prev => prev.map((it, i) => (i === editingIndex ? preview.data : it)))
       setEditingIndex(null)
@@ -387,24 +457,27 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       const fecha = new Date().toLocaleDateString('es-PE')
 
       const encabezado = () => {
-        doc.setFillColor(255, 255, 255)
+        // Header BLANCO con texto AZUL
+        doc.setFillColor(255, 255, 255) // Fondo blanco
         doc.rect(0, 0, W, 26, 'F')
         doc.setFillColor(0, 174, 239)
         doc.rect(0, 26, W, 1.5, 'F')
 
+        // Logo Petroamérica (si existe) - ALINEADO CON EL TEXTO
         try {
           const logoData = '/logo-p.png'
-          doc.addImage(logoData, 'PNG', 14, 6, 14, 14)
+          doc.addImage(logoData, 'PNG', 14, 6, 14, 14) // Logo más pequeño y alineado verticalmente
         } catch (e) {
           console.log('Logo no disponible')
         }
 
-        doc.setTextColor(0, 51, 160)
+        doc.setTextColor(0, 51, 160) // Texto azul (#0033A0)
         doc.setFontSize(16); doc.setFont(undefined, 'bold')
-        doc.text('SIGMO · Cotización de Combustibles', 35, 12)
+        doc.text('SIGMO · Cotización de Combustibles', 35, 12) // Ajustado para alineación con logo
         doc.setFontSize(10); doc.setFont(undefined, 'normal')
         doc.text(`N° ${numero}  ·  ${fecha}`, 35, 20)
 
+        // Información del cliente
         doc.setFontSize(10)
         doc.text(`Cliente: ${cliente || '—'}`, W - 14, 12, { align: 'right' })
         doc.text(`Percepción: ${aplicaPercepcion ? 'APLICADA (1%)' : 'NO aplicada'}`, W - 14, 17, { align: 'right' })
@@ -413,6 +486,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       }
       encabezado()
 
+      // TABLA SIN COLUMNA ALMACÉN - DATOS CENTRADOS
       autoTable(doc, {
         startY: 34,
         margin: { top: 32, left: 14, right: 14 },
@@ -441,6 +515,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
         didDrawPage: (d) => { if (d.pageNumber > 1) encabezado() },
       })
 
+      // MONTO TOTAL EN LETRAS (fuera de la tabla, arriba izquierda)
       const yMontoLetras = (doc.lastAutoTable?.finalY || 40) + 8
       doc.setFontSize(9); doc.setTextColor(40, 40, 40); doc.setFont(undefined, 'bold')
       doc.text('MONTO TOTAL:', 14, yMontoLetras)
@@ -449,6 +524,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       const lines = doc.splitTextToSize(totalEnLetras.toUpperCase(), W - 28)
       doc.text(lines, 14, yMontoLetras + 5)
 
+      // Condiciones comerciales
       const yCondiciones = yMontoLetras + (lines.length * 5) + 15
       doc.setFontSize(9); doc.setTextColor(40, 40, 40); doc.setFont(undefined, 'bold')
       doc.text('CONDICIONES COMERCIALES:', 14, yCondiciones)
@@ -458,6 +534,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       doc.text('• Precios sujetos a variación sin previo aviso', 14, yCondiciones + 15)
       doc.text('• Entrega según disponibilidad de stock', 14, yCondiciones + 20)
 
+      // Espacio para firma
       const yFirma = H - 45
       doc.line(14, yFirma, 100, yFirma)
       doc.text('_________________________', 14, yFirma + 5)
@@ -467,6 +544,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       doc.text('_________________________', W - 86, yFirma + 5)
       doc.text('Cliente', W - 86, yFirma + 10)
 
+      // Nota al pie
       const yNota = yFirma - 10
       doc.setFontSize(8); doc.setTextColor(100, 100, 100)
       doc.text(aplicaPercepcion
@@ -476,6 +554,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
       )
       doc.text(`${totales.count} ítem(s) en esta cotización.`, 14, yNota + 4)
 
+      // Footer corporativo con dirección actualizada
       const pageCount = doc.getNumberOfPages()
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i)
@@ -501,11 +580,6 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
     </div>
   )
 
-  const AZUL = 'var(--primary-blue, #0B5FA5)'
-  const inputStyle = { width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }
-  const selectStyle = { width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: 'white', boxSizing: 'border-box' }
-  const labelStyle = { display: 'block', marginBottom: '6px', fontWeight: 'bold', fontSize: '13px', color: '#374151' }
-
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg)' }}>
       <header style={{ padding: '20px 40px', display: 'flex', alignItems: 'center', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
@@ -528,6 +602,11 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
                 {editingIndex !== null ? `✏️ Editando ítem #${editingIndex + 1}` : ' Cotizar'}
               </h2>
 
+              <div style={{ display: 'none' }}>
+                <div>{HOJA_PRECIO_COTIZACION}</div>
+                <div>{cotColTope}</div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div><label style={labelStyle}>Planta</label>
                   <select value={fPlanta} onChange={e => setFPlanta(e.target.value)} style={selectStyle} disabled={!cotDatos}>
@@ -545,7 +624,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
                   </select>
                 </div>
                 <div><label style={labelStyle}>FACTOR (numérico)</label><input type="number" min="0" step="0.0001" value={fFactor} onChange={e => setFFactor(e.target.value)} placeholder="0.00" style={inputStyle} /></div>
-                <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Cantidad (Galones)</label><input type="number" min="0" step="0.01" value={fCantidad} onChange={e => setFCantidad(e.target.value)} placeholder="0.00" style={inputStyle} /></div>
+                <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Cantidad (Galones) — opcional</label><input type="number" min="0" step="0.01" value={fCantidad} onChange={e => setFCantidad(e.target.value)} placeholder="0.00" style={inputStyle} /></div>
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
                 <Boton variante="success" onClick={agregarItem} disabled={!!preview.error || cotCargandoDatos} style={{ flex: 1 }}>
@@ -652,7 +731,7 @@ export default function CotizadorPrecios({ archivos, archivosTopes, onVolver, on
 
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '18px' }}>
                 <Boton variante="success" onClick={guardarLote} disabled={guardando || itemsDerivados.length === 0}>{guardando ? '⏳ Guardando...' : `💾 Guardar Cotización en Historial (${totales.count})`}</Boton>
-                <Boton variante="primary" onClick={generarPDFLote} disabled={itemsDerivados.length === 0}>📄 Generar PDF Profesional</Boton>
+                <Boton variante="primary" onClick={generarPDFLote} disabled={itemsDerivados.length === 0}> Generar PDF Profesional</Boton>
                 <Boton variante="outline" onClick={vaciarLote} disabled={itemsDerivados.length === 0}>🧹 Vaciar</Boton>
                 {papelera && <Boton variante="outline" onClick={deshacer}>↩️ Deshacer</Boton>}
               </div>
