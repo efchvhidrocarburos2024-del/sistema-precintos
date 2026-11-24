@@ -14,10 +14,10 @@ export default function MenuPrecintos({ setPantalla, rol, permisos }) {
     { id: 'lotes',        titulo: 'Registro de Lotes',       icono: '📝', desc: 'Ingreso de nuevos lotes de precintos.',   roles: PERMISOS_PRECINTOS.LOTES,        permiso: 'lotes' },
     { id: 'admin',        titulo: 'Registrar Viajes (SCOP)', icono: '🚚', desc: 'Asignación de precintos a viajes.',       roles: PERMISOS_PRECINTOS.VIAJES,       permiso: 'viajes' },
     { id: 'excepciones',  titulo: 'Excepciones',             icono: '⚠️', desc: 'Gestión de casos especiales.',            roles: PERMISOS_PRECINTOS.EXCEPCIONES,  permiso: 'viajes' },
-    { id: 'precintos',    titulo: 'Listado de Precintos',    icono: '🔖', desc: 'Inventario y estado de precintos.',       roles: PERMISOS_PRECINTOS.PRECINTOS,    permiso: 'precintos' },
+    { id: 'precintos',    titulo: 'Listado de Precintos',    icono: '', desc: 'Inventario y estado de precintos.',       roles: PERMISOS_PRECINTOS.PRECINTOS,    permiso: 'precintos' },
     { id: 'dashboard',    titulo: 'Dashboard',               icono: '📊', desc: 'Métricas y panel de control.',            roles: PERMISOS_PRECINTOS.DASHBOARD,    permiso: 'dashboard' },
     { id: 'reportes',     titulo: 'Reportes',                icono: '', desc: 'Exportación de datos a Excel y PDF.',     roles: PERMISOS_PRECINTOS.REPORTES,     permiso: 'dashboard' },
-    { id: 'conciliacion', titulo: 'Conciliación',            icono: '🤝', desc: 'Cruce de información de viajes.',         roles: PERMISOS_PRECINTOS.CONCILIACION, permiso: 'conciliacion' },
+    { id: 'conciliacion', titulo: 'Conciliación',            icono: '', desc: 'Cruce de información de viajes.',         roles: PERMISOS_PRECINTOS.CONCILIACION, permiso: 'conciliacion' },
     { id: 'proyeccion',   titulo: 'Proyección Demanda',      icono: '🔮', desc: 'Estimación de uso futuro.',               roles: PERMISOS_PRECINTOS.PROYECCION,   permiso: 'proyeccion' },
     { id: 'bitacora',     titulo: 'Bitácora',                icono: '', desc: 'Historial de acciones del sistema.',      roles: PERMISOS_PRECINTOS.BITACORA,     permiso: 'bitacora' },
     { id: 'plantas',      titulo: 'Config. Plantas',         icono: '🏭', desc: 'Administración de terminales.',           roles: PERMISOS_PRECINTOS.PLANTAS,      permiso: 'plantas' },
@@ -26,14 +26,13 @@ export default function MenuPrecintos({ setPantalla, rol, permisos }) {
 
   return (
     <div className="page-container" style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 20px' }}>
-      {/* ✅ BANNER CORPORATIVO CON DEGRADADO PETROAMÉRICA */}
+      {/* ✅ CAMBIO 1: Banner con icono 📦 al lado izquierdo del título */}
+      {/* ✅ CAMBIO 2: Eliminado botón "Cambiar Contraseña" */}
       <header
         style={{
           padding: '20px 40px',
           display: 'flex',
-          justifyContent: 'space-between',
           alignItems: 'center',
-          flexWrap: 'wrap',
           gap: '15px',
           background: `linear-gradient(118deg, ${AZUL_PROFUNDO} 0%, ${AZUL_CORPORATIVO} 45%, ${AZUL_MEDIO} 78%, ${CYAN} 100%)`,
           borderBottom: `3px solid ${CYAN}`,
@@ -41,30 +40,9 @@ export default function MenuPrecintos({ setPantalla, rol, permisos }) {
           marginBottom: '30px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <Boton 
-            variante="outline" 
-            onClick={() => setPantalla('')}
-            style={{
-              background: 'rgba(255,255,255,0.14)',
-              border: '1px solid rgba(255,255,255,0.6)',
-              color: BLANCO,
-              padding: '6px 12px',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: 'bold',
-            }}
-          >
-            ← SIGMO
-          </Boton>
-          <h1 style={{ margin: 0, color: BLANCO, fontSize: '28px', fontWeight: '900' }}>
-            Módulo de Precintos
-          </h1>
-        </div>
         <Boton 
           variante="outline" 
-          onClick={() => setPantalla('cambiar-password')}
+          onClick={() => setPantalla('')}
           style={{
             background: 'rgba(255,255,255,0.14)',
             border: '1px solid rgba(255,255,255,0.6)',
@@ -76,8 +54,27 @@ export default function MenuPrecintos({ setPantalla, rol, permisos }) {
             fontWeight: 'bold',
           }}
         >
-           Cambiar Contraseña
+          ← SIGMO
         </Boton>
+        
+        {/* ✅ Icono 📦 al lado izquierdo del título */}
+        <div style={{ 
+          width: '52px', 
+          height: '52px', 
+          display: 'grid', 
+          placeItems: 'center', 
+          fontSize: '26px',
+          borderRadius: '14px',
+          background: `linear-gradient(145deg, ${CYAN}, ${AZUL_MEDIO})`,
+          border: '1px solid rgba(255,255,255,0.4)',
+          boxShadow: '0 8px 20px rgba(0,27,94,0.45), inset 0 1px 0 rgba(255,255,255,0.45)',
+        }}>
+          📦
+        </div>
+        
+        <h1 style={{ margin: 0, color: BLANCO, fontSize: '28px', fontWeight: '900' }}>
+          Gestión de Precintos
+        </h1>
       </header>
 
       <PageHeader
