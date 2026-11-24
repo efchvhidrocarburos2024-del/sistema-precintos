@@ -157,8 +157,8 @@ export default function GestionCatalogos({ setPantalla }) {
       width: '100%',
       padding: '20px 40px', 
       display: 'flex', 
-      justifyContent: 'space-between', 
       alignItems: 'center', 
+      gap: '15px',
       background: `linear-gradient(118deg, ${AZUL_PROFUNDO} 0%, ${AZUL_CORPORATIVO} 45%, ${AZUL_MEDIO} 78%, ${CYAN} 100%)`,
       borderBottom: `3px solid ${CYAN}`,
       boxShadow: '0 6px 18px rgba(0,27,94,0.25)',
@@ -187,7 +187,7 @@ export default function GestionCatalogos({ setPantalla }) {
         </div>
         
         <h1 style={{ margin: 0, color: BLANCO, fontSize: '28px', fontWeight: '900' }}>
-          Administración de Catálogos
+          Catálogos Maestros
         </h1>
       </div>
     </header>
@@ -204,7 +204,7 @@ export default function GestionCatalogos({ setPantalla }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
             
-            {/* ✅ CAMBIO: Efecto hover completo con levante de 4px */}
+            {/* ✅ Tarjeta Proveedores con icono 🏢 y efecto hover completo */}
             <div onClick={() => setVista('proveedores')} style={cardStyle} 
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = AZUL_CORPORATIVO
@@ -216,7 +216,7 @@ export default function GestionCatalogos({ setPantalla }) {
                 e.currentTarget.style.boxShadow = ''
                 e.currentTarget.style.transform = 'translateY(0)'
               }}>
-              <div style={{ fontSize: '50px', marginBottom: '15px' }}></div>
+              <div style={{ fontSize: '50px', marginBottom: '15px' }}>🏢</div>
               <h3 style={{ color: AZUL_CORPORATIVO, marginBottom: '10px', fontSize: '18px' }}>Proveedores</h3>
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Gestión de empresas proveedoras.</p>
             </div>
