@@ -123,10 +123,8 @@ const puedeEliminar = perm.eliminar
               boxShadow: '0 8px 20px rgba(0,27,94,0.45), inset 0 1px 0 rgba(255,255,255,0.45)',
             }}>📁</div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 10, letterSpacing: 1.6, textTransform: 'uppercase', color: '#9FE3F5', fontWeight: 800 }}>
-                Módulo 2 · Acervo controlado
-              </div>
-              <h1 style={{ margin: '1px 0 0', fontSize: 20, fontWeight: 900, color: BLANCO, letterSpacing: -.4, lineHeight: 1.15 }}>
+              {/* ✅ CAMBIO 1: Eliminado "Módulo 2 · Acervo controlado", solo queda el título principal */}
+              <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: BLANCO, letterSpacing: -.4, lineHeight: 1.15 }}>
                 Repositorio Documental
               </h1>
             </div>
@@ -171,15 +169,7 @@ const puedeEliminar = perm.eliminar
                 boxShadow: '0 4px 14px rgba(0,27,94,0.3)',
               }}>Sincronizar</Boton>
 
-            {puedeCargar && vista !== 'carga' && (
-              <Boton tamano="sm" icono="📤" onClick={() => setVista('carga')}
-                style={{ 
-                  background: `linear-gradient(100deg,#FBBF24,#D97706)`, 
-                  color: '#3B2405',
-                  border: '1px solid rgba(255,255,255,0.5)',
-                  boxShadow: '0 4px 14px rgba(245,158,11,0.45)',
-                }}>Publicar</Boton>
-            )}
+            {/* ✅ CAMBIO 2: Omitido el botón "📤 Publicar" del header */}
           </div>
         </div>
       </header>
@@ -196,7 +186,8 @@ const puedeEliminar = perm.eliminar
           ))}
 
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${PALETA.borde}` }}>
-            <div className="rd-lab" style={{ padding: '0 4px 7px' }}>Estado del acervo</div>
+            {/* ✅ CAMBIO 3: "Estado del acervo" → "Estado de documentos" */}
+            <div className="rd-lab" style={{ padding: '0 4px 7px' }}>Estado de documentos</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '0 4px' }}>
               <Linea etiqueta="Vigentes" valor={activos.filter(d => d.vigente).length} color={PALETA.exito} />
               <Linea etiqueta="Obsoletos" valor={activos.filter(d => !d.vigente).length} color={PALETA.suave} />
