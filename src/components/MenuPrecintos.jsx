@@ -28,8 +28,10 @@ export default function MenuPrecintos({ setPantalla, rol, permisos }) {
     <div className="page-container" style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 20px' }}>
       {/* ✅ CAMBIO 1: Banner con icono 📦 al lado izquierdo del título */}
       {/* ✅ CAMBIO 2: Eliminado botón "Cambiar Contraseña" */}
+      {/* ✅ CORRECCIÓN: width: '100%' para llenar todo el ancho */}
       <header
         style={{
+          width: '100%',
           padding: '20px 40px',
           display: 'flex',
           alignItems: 'center',
@@ -73,7 +75,7 @@ export default function MenuPrecintos({ setPantalla, rol, permisos }) {
         </div>
         
         <h1 style={{ margin: 0, color: BLANCO, fontSize: '28px', fontWeight: '900' }}>
-          Gestión de Precintos
+          Módulo de Precintos
         </h1>
       </header>
 
