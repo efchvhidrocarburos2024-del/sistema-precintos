@@ -1,5 +1,6 @@
 // src/App.jsx
 import { useState, useEffect, useRef, useCallback, lazy, Suspense, Component } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from './supabase'
 import { Toaster } from 'react-hot-toast'
 import toast from 'react-hot-toast'
@@ -49,6 +50,7 @@ import { throttle } from './utils/throttle'
 const TIEMPO_INACTIVIDAD_TOTAL = 60 * 60 * 1000
 const TIEMPO_DE_AVISO = TIEMPO_INACTIVIDAD_TOTAL - 2 * 60 * 1000
 const STORAGE_KEY_PANTALLA = 'sigmo_pantalla'
+const RUTA_RECUPERACION = '/reset-password'
 
 // ============================================================
 // FALLBACK DE CARGA (Suspense)
@@ -113,6 +115,9 @@ class ErrorBoundary extends Component {
 // COMPONENTE PRINCIPAL
 // ============================================================
 function App() {
+  const location = useLocation()
+  const navigate = useNavigate()
+
   const [sesion, setSesion] = useState(null)
   const [pantalla, setPantalla] = useState(
     () => sessionStorage.getItem(STORAGE_KEY_PANTALLA) || ''
@@ -121,13 +126,14 @@ function App() {
   const [permisos, setPermisos] = useState([])
   const [cargandoRol, setCargandoRol] = useState(true)
 
-  // ✅ DETECCIÓN SINCRÓNICA de recuperación (primer render): gana la carrera
-  // contra la limpieza del hash que hace supabase-js al procesar el token.
+  // ✅ Detección sincrónica: ruta dedicada /reset-password (inmune a la limpieza
+  // del hash) + fallback por hash para enlaces antiguos con redirectTo en la raíz.
   const [recInicial] = useState(() => {
     const hash = window.location.hash
     const sp = new URLSearchParams(window.location.search)
     const hp = new URLSearchParams(hash.replace(/^#/, ''))
     const esRec =
+      window.location.pathname === RUTA_RECUPERACION ||
       (hash.includes('access_token') && (hash.includes('type=recovery') || hp.get('type') === 'recovery')) ||
       sp.get('type') === 'recovery' ||
       hp.get('type') === 'recovery' ||
@@ -155,7 +161,16 @@ function App() {
   }, [pantalla])
 
   // ----------------------------------------------------------
-  // ✅ Aviso si el enlace de recuperación llegó con error (expirado/usado)
+  // ✅ La ruta dedicada siempre activa el modo recuperación
+  // ----------------------------------------------------------
+  useEffect(() => {
+    if (location.pathname === RUTA_RECUPERACION) {
+      setEsRecuperacion(true)
+    }
+  }, [location.pathname])
+
+  // ----------------------------------------------------------
+  // ✅ Aviso si el enlace llegó con error (expirado / ya usado)
   // ----------------------------------------------------------
   useEffect(() => {
     if (!recInicial.errRaw) return
@@ -269,15 +284,17 @@ function App() {
     sessionStorage.removeItem('sigmo_rol')
     sessionStorage.removeItem('sigmo_permisos')
     sessionStorage.removeItem(STORAGE_KEY_PANTALLA)
-  }, [])
+    navigate('/', { replace: true })
+  }, [navigate])
 
   // ----------------------------------------------------------
-  // ✅ Salida limpia del flujo de recuperación (limpia el hash de la URL)
+  // ✅ Salida limpia del flujo de recuperación: baja la bandera y
+  // navega a la raíz (elimina path /reset-password y cualquier hash)
   // ----------------------------------------------------------
   const finRecuperacion = useCallback(() => {
     setEsRecuperacion(false)
-    window.history.replaceState(null, '', window.location.pathname + window.location.search)
-  }, [])
+    navigate('/', { replace: true })
+  }, [navigate])
 
   // ----------------------------------------------------------
   // Inactividad
@@ -336,7 +353,6 @@ function App() {
   if (!sesion) {
     return (
       <>
-        {/* ✅ Toaster también sin sesión: toasts de Login/Forgot visibles */}
         <Toaster position="top-right" toastOptions={{ duration: 4000, style: { fontWeight: 'bold' } }} />
         <ErrorBoundary key={pantalla || 'login'}>
           <Suspense fallback={<CargandoModulo texto="Cargando…" />}>
@@ -414,7 +430,6 @@ function App() {
       {/* VISTAS CON NAVBAR INTERNA */}
       {mostrarNavbar && (
         <div style={{ minHeight: '100vh' }}>
-          {/* ✅ pantalla prop: la navbar decide a dónde volver */}
           <NavbarPrecintos sesion={sesion} cerrarSesion={cerrarSesion} setPantalla={setPantalla} pantalla={pantallaAccesible} />
           <div style={{ paddingTop: '20px', paddingBottom: '40px' }}>
             <ErrorBoundary key={pantallaAccesible}>
