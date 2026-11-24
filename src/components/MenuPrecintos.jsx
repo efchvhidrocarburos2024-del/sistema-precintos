@@ -13,7 +13,7 @@ export default function MenuPrecintos({ setPantalla, rol, permisos }) {
   const opciones = [
     { id: 'lotes',        titulo: 'Registro de Lotes',       icono: '📝', desc: 'Ingreso de nuevos lotes de precintos.',   roles: PERMISOS_PRECINTOS.LOTES,        permiso: 'lotes' },
     { id: 'admin',        titulo: 'Registrar Viajes (SCOP)', icono: '🚚', desc: 'Asignación de precintos a viajes.',       roles: PERMISOS_PRECINTOS.VIAJES,       permiso: 'viajes' },
-    { id: 'excepciones',  titulo: 'Excepciones',             icono: '⚠️', desc: 'Gestión de casos especiales.',            roles: PERMISOS_PRECINTOS.EXCEPCIONES,  permiso: 'viajes' },
+    { id: 'excepciones',  titulo: 'Excepciones',             icono: '️', desc: 'Gestión de casos especiales.',            roles: PERMISOS_PRECINTOS.EXCEPCIONES,  permiso: 'viajes' },
     { id: 'precintos',    titulo: 'Listado de Precintos',    icono: '', desc: 'Inventario y estado de precintos.',       roles: PERMISOS_PRECINTOS.PRECINTOS,    permiso: 'precintos' },
     { id: 'dashboard',    titulo: 'Dashboard',               icono: '📊', desc: 'Métricas y panel de control.',            roles: PERMISOS_PRECINTOS.DASHBOARD,    permiso: 'dashboard' },
     { id: 'reportes',     titulo: 'Reportes',                icono: '', desc: 'Exportación de datos a Excel y PDF.',     roles: PERMISOS_PRECINTOS.REPORTES,     permiso: 'dashboard' },
@@ -25,10 +25,8 @@ export default function MenuPrecintos({ setPantalla, rol, permisos }) {
   ]
 
   return (
-    <div className="page-container" style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 20px' }}>
-      {/* ✅ CAMBIO 1: Banner con icono 📦 al lado izquierdo del título */}
-      {/* ✅ CAMBIO 2: Eliminado botón "Cambiar Contraseña" */}
-      {/* ✅ CORRECCIÓN: width: '100%' para llenar todo el ancho */}
+    <>
+      {/* ✅ Banner fuera del contenedor limitado para ocupar TODO el ancho */}
       <header
         style={{
           width: '100%',
@@ -39,7 +37,6 @@ export default function MenuPrecintos({ setPantalla, rol, permisos }) {
           background: `linear-gradient(118deg, ${AZUL_PROFUNDO} 0%, ${AZUL_CORPORATIVO} 45%, ${AZUL_MEDIO} 78%, ${CYAN} 100%)`,
           borderBottom: `3px solid ${CYAN}`,
           boxShadow: '0 6px 18px rgba(0,27,94,0.25)',
-          marginBottom: '30px',
         }}
       >
         <Boton 
@@ -59,7 +56,7 @@ export default function MenuPrecintos({ setPantalla, rol, permisos }) {
           ← SIGMO
         </Boton>
         
-        {/* ✅ Icono 📦 al lado izquierdo del título */}
+        {/* ✅ Icono  al lado izquierdo del título */}
         <div style={{ 
           width: '52px', 
           height: '52px', 
@@ -75,54 +72,57 @@ export default function MenuPrecintos({ setPantalla, rol, permisos }) {
         </div>
         
         <h1 style={{ margin: 0, color: BLANCO, fontSize: '28px', fontWeight: '900' }}>
-          Módulo de Precintos
+          Gestión de Precintos
         </h1>
       </header>
 
-      <PageHeader
-        titulo="¿Qué deseas hacer hoy?"
-        subtitulo="Selecciona una opción para comenzar"
-      />
+      {/* ✅ Contenedor principal SIN maxWidth para evitar espacios laterales */}
+      <div className="page-container" style={{ padding: '0 20px' }}>
+        <PageHeader
+          titulo="¿Qué deseas hacer hoy?"
+          subtitulo="Selecciona una opción para comenzar"
+        />
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          gap: '20px',
-          marginTop: '30px',
-        }}
-      >
-        {opciones.map(
-          (opc) =>
-            tienePermiso(rol, permisos, opc.roles, opc.permiso) && (
-              <Card
-                key={opc.id}
-                onClick={() => setPantalla(opc.id)}
-                style={{
-                  textAlign: 'center',
-                  padding: '25px 20px',
-                  cursor: 'pointer',
-                  border: '2px solid transparent',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = AZUL_CORPORATIVO
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0,51,160,0.15), 0 10px 24px rgba(0,51,160,0.18)'
-                  e.currentTarget.style.transform = 'translateY(-2px)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'transparent'
-                  e.currentTarget.style.boxShadow = ''
-                  e.currentTarget.style.transform = 'translateY(0)'
-                }}
-              >
-                <div style={{ fontSize: '40px', marginBottom: '15px' }}>{opc.icono}</div>
-                <h3 style={{ color: AZUL_CORPORATIVO, marginBottom: '10px', fontSize: '18px' }}>{opc.titulo}</h3>
-                <p style={{ color: 'var(--text-light)', fontSize: '13px', margin: 0, lineHeight: '1.4' }}>{opc.desc}</p>
-              </Card>
-            )
-        )}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: '20px',
+            marginTop: '30px',
+          }}
+        >
+          {opciones.map(
+            (opc) =>
+              tienePermiso(rol, permisos, opc.roles, opc.permiso) && (
+                <Card
+                  key={opc.id}
+                  onClick={() => setPantalla(opc.id)}
+                  style={{
+                    textAlign: 'center',
+                    padding: '25px 20px',
+                    cursor: 'pointer',
+                    border: '2px solid transparent',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = AZUL_CORPORATIVO
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0,51,160,0.15), 0 10px 24px rgba(0,51,160,0.18)'
+                    e.currentTarget.style.transform = 'translateY(-2px)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'transparent'
+                    e.currentTarget.style.boxShadow = ''
+                    e.currentTarget.style.transform = 'translateY(0)'
+                  }}
+                >
+                  <div style={{ fontSize: '40px', marginBottom: '15px' }}>{opc.icono}</div>
+                  <h3 style={{ color: AZUL_CORPORATIVO, marginBottom: '10px', fontSize: '18px' }}>{opc.titulo}</h3>
+                  <p style={{ color: 'var(--text-light)', fontSize: '13px', margin: 0, lineHeight: '1.4' }}>{opc.desc}</p>
+                </Card>
+              )
+          )}
+        </div>
       </div>
-    </div>
+    </>
   )
 }
