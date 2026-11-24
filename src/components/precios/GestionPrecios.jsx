@@ -12,17 +12,30 @@ import CotizadorPrecios from './CotizadorPrecios'
 import HistorialCotizaciones from './HistorialCotizaciones'
 import TendenciasPrecios from './TendenciasPrecios'
 
-// ✅ MODIFICACIÓN 1: colores corporativos del logo Petroamérica
-const AZUL = '#0033A0'
-const CYAN = '#00AEEF'
+// ══ PALETA CORPORATIVA PETROAMÉRICA — BANNER ══
+const AZUL_PROFUNDO = '#001B5E'
+const AZUL_CORPORATIVO = '#0033A0'   // ← color principal del logo
+const AZUL_MEDIO = '#0057D8'
+const CYAN = '#00AEEF'               // ← acento / línea inferior
+const BLANCO = '#FFFFFF'
 
 const cardStyle = {
   backgroundColor: 'white', borderRadius: '12px', padding: '30px 20px', textAlign: 'center',
   boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '2px solid transparent', cursor: 'pointer',
   transition: 'all 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
 }
-// ✅ MODIFICACIÓN 1: botón del banner en versión clara sobre fondo corporativo
-const btnHeaderStyle = { background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.6)', color: '#fff', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }
+// ✅ Estilo del botón para el banner corporativo
+const btnHeaderStyle = { 
+  background: 'rgba(255,255,255,0.14)', 
+  border: '1px solid rgba(255,255,255,0.6)', 
+  color: BLANCO, 
+  padding: '6px 12px', 
+  borderRadius: '6px', 
+  cursor: 'pointer', 
+  fontSize: '13px', 
+  fontWeight: 'bold' 
+}
+
 const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }
 
 // Extrae la fecha del nombre del archivo (YYYY-MM-DD o DD-MM-YYYY, con - o _)
@@ -41,17 +54,18 @@ const extraerFecha = (nombre) => {
 export default function GestionPrecios({ setPantalla, rol }) {
   const [vista, setVista] = useState('menu')
 
-  // ✅ MODIFICACIÓN 2: tarjeta resaltada al pasar el mouse (borde azul corporativo)
+  // ✅ MODIFICACIÓN 2: tarjeta resaltada al pasar el mouse (borde azul corporativo + levanta)
   const [hoverCard, setHoverCard] = useState(null)
   const propsTarjeta = (id) => ({
     onMouseEnter: () => setHoverCard(id),
     onMouseLeave: () => setHoverCard(null),
     style: {
       ...cardStyle,
-      borderColor: hoverCard === id ? AZUL : 'transparent',
+      borderColor: hoverCard === id ? AZUL_CORPORATIVO : 'transparent',
       boxShadow: hoverCard === id
         ? '0 0 0 3px rgba(0,51,160,0.15), 0 10px 24px rgba(0,51,160,0.18)'
         : cardStyle.boxShadow,
+      transform: hoverCard === id ? 'translateY(-4px)' : 'translateY(0)',
     },
   })
 
@@ -195,11 +209,36 @@ export default function GestionPrecios({ setPantalla, rol }) {
 
   const actualizarFiltros = (cambios) => setFiltrosTendencias(prev => ({ ...prev, ...cambios }))
 
-  // ✅ MODIFICACIÓN 1: banner con el color del logo (azul #0033A0 → cyan #00AEEF)
+  // ✅ MODIFICACIÓN 1: banner con el color del logo (azul #0033A0 → cyan #00AEEF) + icono 💰
   const Header = ({ titulo, onVolver, textoVolver = '← Volver al Menú' }) => (
-    <header style={{ padding: '20px 40px', display: 'flex', alignItems: 'center', background: `linear-gradient(118deg, #001B5E 0%, ${AZUL} 45%, #0057D8 78%, ${CYAN} 100%)`, borderBottom: `3px solid ${CYAN}`, boxShadow: '0 6px 18px rgba(0,27,94,0.25)' }}>
+    <header style={{ 
+      width: '100%',
+      padding: '20px 40px', 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: '15px',
+      background: `linear-gradient(118deg, ${AZUL_PROFUNDO} 0%, ${AZUL_CORPORATIVO} 45%, ${AZUL_MEDIO} 78%, ${CYAN} 100%)`,
+      borderBottom: `3px solid ${CYAN}`,
+      boxShadow: '0 6px 18px rgba(0,27,94,0.25)',
+    }}>
       <button onClick={onVolver} style={btnHeaderStyle}>{textoVolver}</button>
-      <h1 style={{ margin: '0 0 0 15px', color: '#fff', fontSize: '28px', fontWeight: '900' }}>{titulo}</h1>
+      
+      {/* ✅ Icono 💰 al lado izquierdo del título */}
+      <div style={{ 
+        width: '52px', 
+        height: '52px', 
+        display: 'grid', 
+        placeItems: 'center', 
+        fontSize: '26px',
+        borderRadius: '14px',
+        background: `linear-gradient(145deg, ${CYAN}, ${AZUL_MEDIO})`,
+        border: '1px solid rgba(255,255,255,0.4)',
+        boxShadow: '0 8px 20px rgba(0,27,94,0.45), inset 0 1px 0 rgba(255,255,255,0.45)',
+      }}>
+        💰
+      </div>
+      
+      <h1 style={{ margin: 0, color: BLANCO, fontSize: '28px', fontWeight: '900' }}>{titulo}</h1>
     </header>
   )
 
@@ -212,15 +251,15 @@ export default function GestionPrecios({ setPantalla, rol }) {
         <Header titulo="Precios, Topes & Cotización" onVolver={() => setPantalla('')} textoVolver="← SIGMO" />
         <main style={{ padding: '40px 20px', maxWidth: '1000px', margin: '0 auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
-            {/* ✅ MODIFICACIÓN 2: cada tarjeta usa propsTarjeta(id) para el borde azul al hover */}
+            {/* ✅ MODIFICACIÓN 2: cada tarjeta usa propsTarjeta(id) para el borde azul al hover + levanta */}
             <div onClick={() => setVista('visualizar')} {...propsTarjeta('visualizar')}>
-              <div style={{ fontSize: '50px', marginBottom: '15px' }}>👁️</div>
+              <div style={{ fontSize: '50px', marginBottom: '15px' }}>️</div>
               <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Visualizar Listas & Topes</h3>
               <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Ver, comparar y descargar archivos Excel.</p>
             </div>
             {puedeCargar && (
               <div onClick={() => setVista('cargar')} {...propsTarjeta('cargar')}>
-                <div style={{ fontSize: '50px', marginBottom: '15px' }}>📤</div>
+                <div style={{ fontSize: '50px', marginBottom: '15px' }}></div>
                 <h3 style={{ color: 'var(--primary-blue)', marginBottom: '10px', fontSize: '18px' }}>Cargar Nueva Lista & Topes</h3>
                 <p style={{ color: 'var(--text-light)', fontSize: '13px' }}>Sube y previsualiza archivos Excel.</p>
               </div>
