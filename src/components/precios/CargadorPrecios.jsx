@@ -102,7 +102,7 @@ export default function CargadorPrecios({ puedeCargar, onVolver, onSubirExitoso 
         <Card style={{ padding: '30px' }}>
           {subVista === 'precios' ? (
             <>
-              <h2 style={{ color: '#000000' }}>Subir Lista de Precios</h2>
+              <h2 style={{ color: 'var(--text-dark)' }}>Subir Lista de Precios</h2>
               <input type="file" accept=".xlsx" onChange={handleFileChange} style={{ marginTop: '15px' }} />
               {hojasPreview.length > 0 && (
                 <div style={{ marginTop: '30px' }}>
@@ -144,7 +144,7 @@ export default function CargadorPrecios({ puedeCargar, onVolver, onSubirExitoso 
             </>
           ) : (
             <>
-              <h2 style={{ color: '#000000' }}>Subir Archivo de Topes</h2>
+              <h2 style={{ color: 'var(--text-dark)' }}>Subir Archivo de Topes</h2>
               <input type="file" accept=".xlsx" onChange={handleFileChangeTope} style={{ marginTop: '15px' }} />
               {previewDataTope.length > 0 && (
                 <div style={{ marginTop: '30px' }}>
