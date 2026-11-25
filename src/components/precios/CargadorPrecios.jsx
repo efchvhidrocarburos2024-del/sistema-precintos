@@ -148,10 +148,10 @@ export default function CargadorPrecios({ puedeCargar, onVolver, onSubirExitoso 
               <input type="file" accept=".xlsx" onChange={handleFileChangeTope} style={{ marginTop: '15px' }} />
               {previewDataTope.length > 0 && (
                 <div style={{ marginTop: '30px' }}>
-                  <h3 style={{ color: '#059669', marginBottom: '15px', fontSize: '18px' }}>📋 Vista Previa: {archivoExcelTope.name}</h3>
+                  <h3 style={{ color: '#1b0596', marginBottom: '15px', fontSize: '18px' }}>📋 Vista Previa: {archivoExcelTope.name}</h3>
                   <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '20px' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                      <thead style={{ backgroundColor: '#059669', color: 'white' }}>
+                      <thead style={{ backgroundColor: '#051196', color: 'white' }}>
                         <tr>{previewHeadersTope.map((h, i) => <th key={i} style={{ padding: '10px 8px', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '2px solid #059669' }}>{String(h).trim()}</th>)}</tr>
                       </thead>
                       <tbody>
