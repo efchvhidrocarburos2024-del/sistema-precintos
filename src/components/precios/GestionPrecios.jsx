@@ -79,10 +79,9 @@ export default function GestionPrecios({ setPantalla, rol, permisos = [] }) {
     plantaSeleccionada: '' 
   })
 
-  // ✅ MEJORA: Permisos evaluados a nivel de la tabla 'permisos' de Supabase.
-  // Nota: Ajusta los strings 'cargar_precios' y 'gestionar_precios' a los códigos exactos de tu tabla si son diferentes.
-  const puedeCargar = permisos.includes('cargar_precios') || permisos.includes('admin_sistema') || permisos.includes('jefe_pricing')
-  const puedeGestionar = permisos.includes('gestionar_precios') || permisos.includes('admin_sistema') || permisos.includes('jefe_pricing')
+  // ✅ CORREGIDO: Evaluamos si tiene el permiso específico O si su rol es admin_sistema o jefe_pricing
+const puedeCargar = permisos.includes('cargar_precios') || rol === 'admin_sistema' || rol === 'jefe_pricing'
+const puedeGestionar = permisos.includes('gestionar_precios') || rol === 'admin_sistema' || rol === 'jefe_pricing'
 
   useEffect(() => {
     if (vista === 'visualizar' || vista === 'comparar') { 
