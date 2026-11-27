@@ -99,26 +99,19 @@ export default function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol })
         borderBottom: '1px solid #E5E7EB',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          {/* Logo original restaurado */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              background: 'linear-gradient(135deg, #0033A0 0%, #00AEEF 100%)',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '24px',
-              fontWeight: '900',
-              color: 'white',
-            }}>
-              P
-            </div>
-            <div>
-              <h1 style={{ margin: 0, fontSize: '22px', color: AZUL_CORPORATIVO, fontWeight: '900' }}>SIGMO</h1>
-              <p style={{ margin: 0, fontSize: '12px', color: '#6B7280' }}>Sistema de Gestión Modular</p>
-            </div>
+          {/* Logo real SIGMO */}
+          <img 
+            src="/logo-p.png" 
+            alt="SIGMO Logo" 
+            style={{ 
+              height: '50px', 
+              width: 'auto',
+              objectFit: 'contain'
+            }} 
+          />
+          <div>
+            <h1 style={{ margin: 0, fontSize: '22px', color: AZUL_CORPORATIVO, fontWeight: '900' }}>SIGMO</h1>
+            <p style={{ margin: 0, fontSize: '12px', color: '#6B7280' }}>Sistema de Gestión Modular</p>
           </div>
         </div>
 
