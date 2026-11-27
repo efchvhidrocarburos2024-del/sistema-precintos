@@ -33,6 +33,7 @@ const GestionUsuarios = lazy(() => import('./components/GestionUsuarios'))
 const GestionCatalogos = lazy(() => import('./components/GestionCatalogos'))
 const RepositorioDocumental = lazy(() => import('./components/RepositorioDocumental'))
 const GestionPrecios = lazy(() => import('./components/precios/GestionPrecios'))
+const GestionStock = lazy(() => import('./components/stock/GestionStock'))
 
 import { puedeAccederPantalla, PANTALLAS_CON_NAVBAR } from './utils/permisos'
 import { throttle } from './utils/throttle'
@@ -234,8 +235,8 @@ function App() {
           {pantallaAccesible === 'repositorio' && <RepositorioDocumental setPantalla={setPantalla} rol={rol} />}
           {pantallaAccesible === 'catalogos' && <GestionCatalogos setPantalla={setPantalla} />}
           {pantallaAccesible === 'usuarios' && <GestionUsuarios setPantalla={setPantalla} />}
-          {/* ✅ MEJORA 2: Se pasa la prop 'permisos' para evaluación dinámica */}
           {pantallaAccesible === 'precios_menu' && <GestionPrecios setPantalla={setPantalla} rol={rol} permisos={permisos} />}
+          {pantallaAccesible === 'stock_menu' && <GestionStock setPantalla={setPantalla} rol={rol} permisos={permisos} />}
         </Suspense>
       </ErrorBoundary>
 

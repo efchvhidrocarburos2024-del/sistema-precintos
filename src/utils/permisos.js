@@ -8,8 +8,10 @@ export const ROLES = {
   JEFE_OPERACIONES: 'jefe_operaciones',
   ANALISTA_OPERACIONES: 'analista_operaciones',
   ASESOR_COMERCIAL: 'asesor_comercial',
+  ANALISTA_COMERCIAL: 'analista_comercial',
   AUDITOR: 'auditor',
   JEFE_PROYECTO: 'jefe_proyecto',
+  JEFE_PRICING: 'jefe_pricing',
 };
 
 // Acceso a los módulos del Lobby principal
@@ -23,6 +25,16 @@ export const ACCESO_LOBBY = {
     ROLES.ANALISTA_OPERACIONES, ROLES.ASESOR_COMERCIAL, ROLES.AUDITOR,
   ],
   CATALOGOS: [ROLES.ADMIN_SISTEMA],
+  PRECIOS: [
+    ROLES.ADMIN_SISTEMA, ROLES.ADMIN_PLANTA, ROLES.JEFE_OPERACIONES,
+    ROLES.ANALISTA_OPERACIONES, ROLES.ANALISTA_COMERCIAL, ROLES.JEFE_PRICING,
+    ROLES.ASESOR_COMERCIAL, ROLES.AUDITOR,
+  ],
+  STOCK: [
+    ROLES.ADMIN_SISTEMA, ROLES.ADMIN_PLANTA, ROLES.JEFE_OPERACIONES,
+    ROLES.ANALISTA_OPERACIONES, ROLES.ASESOR_COMERCIAL, ROLES.ANALISTA_COMERCIAL,
+    ROLES.JEFE_PRICING, ROLES.AUDITOR,
+  ],
 };
 
 // Acceso interno al módulo de precintos
@@ -46,8 +58,9 @@ const PANTALLAS_ACCESO = {
   repositorio:        { roles: ACCESO_LOBBY.REPOSITORIO },
   catalogos:          { roles: ACCESO_LOBBY.CATALOGOS },
   usuarios:           { roles: ACCESO_LOBBY.CATALOGOS },
-  precios_menu:       { roles: [] },                       // todos los logueados
-  'cambiar-password': { roles: [] },                       // todos los logueados
+  precios_menu:       { roles: ACCESO_LOBBY.PRECIOS },
+  stock_menu:         { roles: ACCESO_LOBBY.STOCK },
+  'cambiar-password': { roles: [] },
   lotes:              { roles: PERMISOS_PRECINTOS.LOTES,        permiso: 'lotes' },
   admin:              { roles: PERMISOS_PRECINTOS.VIAJES,       permiso: 'viajes' },
   excepciones:        { roles: PERMISOS_PRECINTOS.EXCEPCIONES,  permiso: 'viajes' },
