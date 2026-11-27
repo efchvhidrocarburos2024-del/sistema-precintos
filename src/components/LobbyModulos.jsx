@@ -1,7 +1,37 @@
-// src/components/LobbyModulos.jsx
 import { ACCESO_LOBBY } from '../utils/permisos'
 
-const AZUL = '#0033A0'
+const AZUL_CORPORATIVO = '#0033A0'
+const GRIS_INACTIVO = '#9CA3AF'
+
+const cardStyle = (activo) => ({
+  backgroundColor: 'white',
+  borderRadius: '12px',
+  padding: '30px 20px',
+  textAlign: 'center',
+  boxShadow: activo ? '0 4px 6px rgba(0,0,0,0.08)' : 'none',
+  border: activo ? '2px solid transparent' : '2px solid #e5e7eb',
+  cursor: activo ? 'pointer' : 'default',
+  transition: 'all 0.2s',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  minHeight: '220px',
+  opacity: activo ? 1 : 0.6,
+})
+
+const btnStyle = (activo) => ({
+  width: '100%',
+  padding: '12px',
+  borderRadius: '8px',
+  border: 'none',
+  cursor: activo ? 'pointer' : 'not-allowed',
+  fontWeight: 'bold',
+  fontSize: '14px',
+  backgroundColor: activo ? AZUL_CORPORATIVO : '#E5E7EB',
+  color: activo ? 'white' : GRIS_INACTIVO,
+  transition: 'all 0.2s',
+})
 
 export default function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol }) {
   const modulos = [
@@ -31,104 +61,142 @@ export default function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol })
       icono: '💰',
       titulo: 'Precios, Topes & Cotización',
       desc: 'Consulta y gestión de listas de precios, topes y cotizaciones.',
-      visible: true,
+      visible: ACCESO_LOBBY.PRECIOS.includes(rol),
     },
     {
-      id: null,
-      icono: '🚚',
+      id: 'stock_menu',
+      icono: '📊',
+      titulo: 'Control de Stock',
+      desc: 'Registra, reasigna y gestiona cuotas de galonaje.',
+      visible: ACCESO_LOBBY.STOCK.includes(rol),
+    },
+    {
+      id: 'flota',
+      icono: '🚛',
       titulo: 'Gestión de Flota',
       desc: 'Control de vehículos y conductores.',
-      proximo: true,
-      visible: true,
+      visible: false, // Próximamente
     },
     {
-      id: null,
+      id: 'bi',
       icono: '📊',
       titulo: 'Business Intelligence',
       desc: 'Dashboards avanzados y KPIs.',
-      proximo: true,
-      visible: true,
+      visible: false, // Próximamente
     },
-  ].filter(m => m.visible)
+  ]
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: 'var(--gray-bg, #eef1f5)' }}>
-      <style>{`
-        .lobby-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
-        .lobby-card:hover { transform: translateY(-4px); box-shadow: 0 12px 28px rgba(0,51,160,0.14); }
-        .lobby-btn { transition: filter 0.15s ease, transform 0.15s ease; }
-        .lobby-btn:hover:not(:disabled) { filter: brightness(1.12); transform: translateY(-1px); }
-      `}</style>
-
-      {/* ============ HEADER CON LOGO ============ */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', backgroundColor: 'white', padding: '14px 28px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <img
-            src="/logo-p.png"
-            alt="Logo Petro America"
-            onError={(e) => { e.currentTarget.style.display = 'none' }}
-            style={{ height: '46px', width: 'auto', display: 'block' }}
-          />
+    <div style={{ minHeight: '100vh', backgroundColor: '#F3F4F6' }}>
+      {/* Header superior */}
+      <header style={{
+        backgroundColor: 'white',
+        padding: '15px 40px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+        borderBottom: '1px solid #E5E7EB',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div style={{ fontSize: '32px', fontWeight: '900', color: AZUL_CORPORATIVO }}>
+            <span style={{ color: '#00AEEF' }}>P</span>
+          </div>
           <div>
-            <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 900, color: AZUL, letterSpacing: '-0.5px', lineHeight: 1.1 }}>SIGMO</h1>
-            <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>Sistema de Gestión Modular</p>
+            <h1 style={{ margin: 0, fontSize: '22px', color: AZUL_CORPORATIVO, fontWeight: '900' }}>SIGMO</h1>
+            <p style={{ margin: 0, fontSize: '12px', color: '#6B7280' }}>Sistema de Gestión Modular</p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <span style={{ padding: '9px 18px', borderRadius: '999px', backgroundColor: '#eff6ff', color: '#1e40af', fontWeight: 'bold', fontSize: '14px' }}>
-            {sesion?.user?.email} ({String(rol || '').toUpperCase()})
-          </span>
-          {/* ✅ Acceso a cambiar contraseña también desde el Lobby */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div style={{
+            backgroundColor: '#EFF6FF',
+            padding: '8px 16px',
+            borderRadius: '20px',
+            fontSize: '13px',
+            color: AZUL_CORPORATIVO,
+            fontWeight: 'bold',
+          }}>
+            {sesion?.user?.email} ({rol?.toUpperCase() || 'SIN ROL'})
+          </div>
           <button
             onClick={() => setPantalla('cambiar-password')}
-            className="lobby-btn"
-            style={{ padding: '9px 18px', borderRadius: '8px', border: '1px solid #6b7280', backgroundColor: 'white', color: '#6b7280', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' }}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '6px',
+              border: '1px solid #D1D5DB',
+              backgroundColor: 'white',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: 'bold',
+              color: '#374151',
+            }}
           >
-            🔐 Cambiar Contraseña
+            🔒 Cambiar Contraseña
           </button>
           <button
             onClick={cerrarSesion}
-            className="lobby-btn"
-            style={{ padding: '9px 18px', borderRadius: '8px', border: `1px solid ${AZUL}`, backgroundColor: 'white', color: AZUL, fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' }}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '6px',
+              border: '1px solid ' + AZUL_CORPORATIVO,
+              backgroundColor: 'white',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: 'bold',
+              color: AZUL_CORPORATIVO,
+            }}
           >
             Cerrar Sesión
           </button>
         </div>
       </header>
 
-      {/* ============ BIENVENIDA ============ */}
-      <main style={{ padding: '40px 28px', maxWidth: '1400px', margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: '36px' }}>
-          <h2 style={{ margin: '0 0 8px', fontSize: '30px', fontWeight: 800, color: AZUL }}>Bienvenido a SIGMO</h2>
-          <p style={{ margin: 0, fontSize: '16px', color: '#6b7280' }}>Selecciona el módulo que deseas</p>
+      {/* Contenido principal */}
+      <main style={{ padding: '40px 20px', maxWidth: '1200px', margin: '0 auto' }}>
+        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+          <h2 style={{ color: AZUL_CORPORATIVO, fontSize: '28px', marginBottom: '10px', fontWeight: '900' }}>
+            Bienvenido a SIGMO
+          </h2>
+          <p style={{ color: '#6B7280', fontSize: '15px' }}>
+            Selecciona el módulo que deseas
+          </p>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
-          {modulos.map((m) => (
-            <div
-              key={m.titulo}
-              className="lobby-card"
-              style={{ backgroundColor: '#fbfcfe', borderRadius: '14px', boxShadow: '0 4px 14px rgba(0,51,160,0.08)', padding: '30px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '12px' }}
-            >
-              <div style={{ fontSize: '52px', lineHeight: 1, opacity: m.proximo ? 0.55 : 1 }}>{m.icono}</div>
-              <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: m.proximo ? '#7c93c4' : AZUL }}>{m.titulo}</h3>
-              <p style={{ margin: 0, fontSize: '14px', color: '#6b7280', flex: 1 }}>{m.desc}</p>
-              {m.proximo ? (
-                <button disabled style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#e5e7eb', color: '#9ca3af', fontSize: '15px', fontWeight: 'bold', cursor: 'not-allowed' }}>
-                  Próximamente
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '25px' }}>
+          {modulos.map((modulo) => {
+            const esActivo = modulo.visible
+            return (
+              <div
+                key={modulo.id}
+                style={cardStyle(esActivo)}
+                onMouseEnter={(e) => {
+                  if (esActivo) {
+                    e.currentTarget.style.transform = 'translateY(-4px)'
+                    e.currentTarget.style.boxShadow = '0 10px 24px rgba(0,51,160,0.18)'
+                    e.currentTarget.style.borderColor = AZUL_CORPORATIVO
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = esActivo ? '0 4px 6px rgba(0,0,0,0.08)' : 'none'
+                  e.currentTarget.style.borderColor = esActivo ? 'transparent' : '#e5e7eb'
+                }}
+                onClick={() => esActivo && setPantalla(modulo.id)}
+              >
+                <div style={{ fontSize: '50px', marginBottom: '15px' }}>{modulo.icono}</div>
+                <h3 style={{ color: esActivo ? AZUL_CORPORATIVO : GRIS_INACTIVO, marginBottom: '10px', fontSize: '18px', fontWeight: 'bold' }}>
+                  {modulo.titulo}
+                </h3>
+                <p style={{ color: '#6B7280', fontSize: '13px', marginBottom: '20px', lineHeight: '1.4' }}>
+                  {modulo.desc}
+                </p>
+                <button style={btnStyle(esActivo)}>
+                  {esActivo ? 'Entrar al Módulo' : 'Próximamente'}
                 </button>
-              ) : (
-                <button
-                  onClick={() => setPantalla(m.id)}
-                  className="lobby-btn"
-                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: AZUL, color: '#fff', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer' }}
-                >
-                  Entrar al Módulo
-                </button>
-              )}
-            </div>
-          ))}
+              </div>
+            )
+          })}
         </div>
       </main>
     </div>
