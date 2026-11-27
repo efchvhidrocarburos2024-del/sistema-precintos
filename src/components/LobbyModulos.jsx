@@ -75,14 +75,14 @@ export default function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol })
       icono: '🚛',
       titulo: 'Gestión de Flota',
       desc: 'Control de vehículos y conductores.',
-      visible: false, // Próximamente
+      visible: false,
     },
     {
       id: 'bi',
       icono: '📊',
       titulo: 'Business Intelligence',
       desc: 'Dashboards avanzados y KPIs.',
-      visible: false, // Próximamente
+      visible: false,
     },
   ]
 
@@ -99,12 +99,26 @@ export default function LobbyModulos({ sesion, cerrarSesion, setPantalla, rol })
         borderBottom: '1px solid #E5E7EB',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <div style={{ fontSize: '32px', fontWeight: '900', color: AZUL_CORPORATIVO }}>
-            <span style={{ color: '#00AEEF' }}>P</span>
-          </div>
-          <div>
-            <h1 style={{ margin: 0, fontSize: '22px', color: AZUL_CORPORATIVO, fontWeight: '900' }}>SIGMO</h1>
-            <p style={{ margin: 0, fontSize: '12px', color: '#6B7280' }}>Sistema de Gestión Modular</p>
+          {/* Logo original restaurado */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: 'linear-gradient(135deg, #0033A0 0%, #00AEEF 100%)',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '24px',
+              fontWeight: '900',
+              color: 'white',
+            }}>
+              P
+            </div>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '22px', color: AZUL_CORPORATIVO, fontWeight: '900' }}>SIGMO</h1>
+              <p style={{ margin: 0, fontSize: '12px', color: '#6B7280' }}>Sistema de Gestión Modular</p>
+            </div>
           </div>
         </div>
 
