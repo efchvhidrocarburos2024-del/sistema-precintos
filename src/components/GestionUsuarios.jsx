@@ -121,60 +121,79 @@ export default function GestionUsuarios({ setPantalla }) {
   }
 
   async function crearUsuario(e) {
-  e.preventDefault()
-  if (!nuevoNombre || !nuevoEmail || !nuevaPassword || !nuevoRol) return toast.error('Completa los campos requeridos')
-  if (nuevaPassword.length < 6) return toast.error('La contraseña debe tener al menos 6 caracteres')
-
-  setCreando(true)
-  try {
-    // ✅ Verificar que haya sesión válida ANTES de llamar
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      throw new Error('Tu sesión expiró. Cierra sesión e ingresa de nuevo.')
+    e.preventDefault()
+    if (!nuevoNombre || !nuevoEmail || !nuevaPassword || !nuevoRol) {
+      return toast.error('Completa los campos requeridos')
+    }
+    if (nuevaPassword.length < 6) {
+      return toast.error('La contraseña debe tener al menos 6 caracteres')
     }
 
-    // ✅ invoke() envía el token automáticamente desde el cliente
-    const { data, error } = await supabase.functions.invoke('crear-usuario', {
-      body: {
-        nombre_completo: nuevoNombre,
-        email: nuevoEmail,
-        password: nuevaPassword,
-        id_rol: isNaN(Number(nuevoRol)) ? nuevoRol : Number(nuevoRol),
-        id_planta: nuevaPlanta ? (isNaN(Number(nuevaPlanta)) ? nuevaPlanta : Number(nuevaPlanta)) : null,
-        activo: true
+    setCreando(true)
+    try {
+      // ✅ PASO 1: Obtener la sesión actual con token fresco
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError) {
+        console.error('Error al obtener sesión:', sessionError)
+        throw new Error('Error al verificar tu sesión. Cierra sesión e ingresa de nuevo.')
       }
-    })
 
-    if (error) {
-      let errorMsg = error.message
-      if (error.context && typeof error.context.text === 'function') {
-        try {
-          const text = await error.context.text()
-          try {
-            const parsed = JSON.parse(text)
-            errorMsg = parsed.message || parsed.error || text
-          } catch {
-            errorMsg = text || errorMsg
-          }
-        } catch (err) {
-          console.error("No se pudo leer el detalle del error", err)
+      if (!session || !session.access_token) {
+        console.error('Sesión no encontrada o sin token')
+        throw new Error('Tu sesión expiró. Cierra sesión e ingresa de nuevo.')
+      }
+
+      console.log('✅ Token obtenido:', session.access_token.substring(0, 20) + '...')
+
+      // ✅ PASO 2: Invocar la Edge Function con el token explícito en el header
+      const { data, error } = await supabase.functions.invoke('crear-usuario', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: {
+          nombre_completo: nuevoNombre,
+          email: nuevoEmail,
+          password: nuevaPassword,
+          id_rol: isNaN(Number(nuevoRol)) ? nuevoRol : Number(nuevoRol),
+          id_planta: nuevaPlanta ? (isNaN(Number(nuevaPlanta)) ? nuevaPlanta : Number(nuevaPlanta)) : null,
+          activo: true
         }
+      })
+
+      console.log('📤 Respuesta de Edge Function:', { data, error })
+
+      if (error) {
+        let errorMsg = error.message;
+        if (error.context && typeof error.context.text === 'function') {
+          try {
+            const text = await error.context.text();
+            try {
+              const parsed = JSON.parse(text);
+              errorMsg = parsed.message || parsed.error || text;
+            } catch {
+              errorMsg = text || errorMsg;
+            }
+          } catch (err) {
+            console.error("No se pudo leer el detalle del error", err);
+          }
+        }
+        throw new Error(errorMsg);
       }
-      throw new Error(errorMsg)
+
+      if (data && data.error) throw new Error(data.error)
+
+      toast.success('Usuario creado exitosamente')
+      cerrarModalCrear()
+      await cargarDatos()
+    } catch (error) {
+      console.error('❌ Error al crear usuario:', error)
+      toast.error('Error: ' + error.message)
+    } finally {
+      setCreando(false)
     }
-
-    if (data && data.error) throw new Error(data.error)
-
-    toast.success('Usuario creado exitosamente')
-    cerrarModalCrear()
-    await cargarDatos()
-  } catch (error) {
-    console.error(error)
-    toast.error('Error: ' + error.message)
-  } finally {
-    setCreando(false)
   }
-}
 
   const rolEdicionCodigo = roles.find(r => String(r.id_rol) === formRol)?.codigo
   const rolCreacionCodigo = roles.find(r => String(r.id_rol) === nuevoRol)?.codigo
