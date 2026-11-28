@@ -29,6 +29,29 @@ export default function RegistrarCuota({ onVolver, rol }) {
   }])
   const [guardando, setGuardando] = useState(false)
 
+  // Estilos para inputs de fecha con ícono de calendario visible
+  const dateInputStyle = {
+    width: '100%',
+    padding: '10px',
+    paddingRight: '35px',
+    borderRadius: '6px',
+    border: '1px solid #d1d5db',
+    fontSize: '13px',
+    backgroundColor: 'white',
+    color: 'black',
+    boxSizing: 'border-box'
+  }
+
+  const calendarIconStyle = {
+    position: 'absolute',
+    right: '10px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    pointerEvents: 'none',
+    fontSize: '16px',
+    color: '#6b7280'
+  }
+
   useEffect(() => {
     const cargarDatos = async () => {
       console.log('🔄 Cargando catálogos...')
@@ -68,7 +91,6 @@ export default function RegistrarCuota({ onVolver, rol }) {
   const handleProveedorChange = (e) => {
     const valor = e.target.value
     console.log('🏢 Proveedor seleccionado:', valor)
-    console.log('🔍 Buscando proveedor con id:', valor)
     const proveedorEncontrado = proveedores.find(p => p.id === valor)
     console.log('✅ Proveedor encontrado:', proveedorEncontrado)
     setIdProveedor(valor)
@@ -102,6 +124,9 @@ export default function RegistrarCuota({ onVolver, rol }) {
     // Si cambia el grupo, resetear producto
     if (campo === 'id_grupo') {
       nuevos[index].id_producto = ''
+      console.log(`🔍 Grupo seleccionado: ${valor}`)
+      const productosFiltrados = productos.filter(p => p.id_grupo_producto === valor)
+      console.log(`✅ Productos disponibles para este grupo:`, productosFiltrados)
     }
     
     // Lógica de fechas según tipo de cuota
@@ -297,11 +322,16 @@ export default function RegistrarCuota({ onVolver, rol }) {
           <hr style={{ margin: '30px 0', border: 'none', borderTop: '2px solid #e5e7eb' }} />
           
           <h3 style={{ color: '#0033A0', marginBottom: '20px', textAlign: 'center' }}>
-            Productos ({productosForm.length})
+            Producto N°{productosForm.length}
           </h3>
 
           {productosForm.map((prod, index) => (
             <div key={index} style={{ background: '#f9fafb', padding: '20px', borderRadius: '8px', marginBottom: '15px', position: 'relative', border: '1px solid #e5e7eb' }}>
+              {/* Título del producto */}
+              <h4 style={{ color: '#0033A0', marginBottom: '15px', fontSize: '16px', fontWeight: 'bold', marginTop: 0 }}>
+                Producto N°{index + 1}
+              </h4>
+              
               {productosForm.length > 1 && (
                 <button 
                   onClick={() => eliminarProducto(index)} 
@@ -350,10 +380,20 @@ export default function RegistrarCuota({ onVolver, rol }) {
                     style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: !prod.id_grupo ? '#f3f4f6' : 'white', color: 'black' }}
                   >
                     <option value="">Seleccionar</option>
-                    {productos.filter(p => p.id_grupo_producto === prod.id_grupo).map(p => (
-                      <option key={p.id} value={p.id}>{p.nombre}</option>
-                    ))}
+                    {(() => {
+                      const productosFiltrados = productos.filter(p => {
+                        console.log(`🔍 Comparando: p.id_grupo_producto=${p.id_grupo_producto} vs prod.id_grupo=${prod.id_grupo}`)
+                        return p.id_grupo_producto === prod.id_grupo
+                      })
+                      console.log(`✅ Productos filtrados para grupo ${prod.id_grupo}:`, productosFiltrados)
+                      return productosFiltrados.map(p => (
+                        <option key={p.id} value={p.id}>{p.nombre} ({p.codigo})</option>
+                      ))
+                    })()}
                   </select>
+                  {!prod.id_grupo && (
+                    <small style={{ color: '#6b7280', fontSize: '11px' }}>Primero selecciona un grupo</small>
+                  )}
                 </div>
 
                 {/* Cantidad */}
@@ -365,7 +405,7 @@ export default function RegistrarCuota({ onVolver, rol }) {
                     value={prod.cantidad} 
                     onChange={(e) => actualizarProducto(index, 'cantidad', e.target.value)}
                     placeholder="0.00"
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black', boxSizing: 'border-box' }}
                   />
                 </div>
 
@@ -383,27 +423,36 @@ export default function RegistrarCuota({ onVolver, rol }) {
                   </select>
                 </div>
 
-                {/* Fecha Inicio */}
+                {/* Fecha Inicio con ícono de calendario */}
                 <div>
                   <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Fecha Inicio *</label>
-                  <input 
-                    type="date" 
-                    value={prod.fecha_inicio} 
-                    onChange={(e) => actualizarProducto(index, 'fecha_inicio', e.target.value)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input 
+                      type="date" 
+                      value={prod.fecha_inicio} 
+                      onChange={(e) => actualizarProducto(index, 'fecha_inicio', e.target.value)}
+                      style={dateInputStyle}
+                    />
+                    <span style={calendarIconStyle}>📅</span>
+                  </div>
                 </div>
 
-                {/* Fecha Fin */}
+                {/* Fecha Fin con ícono de calendario */}
                 <div>
                   <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Fecha Fin *</label>
-                  <input 
-                    type="date" 
-                    value={prod.fecha_fin} 
-                    onChange={(e) => actualizarProducto(index, 'fecha_fin', e.target.value)}
-                    readOnly={prod.tipo_cuota === 'Diaria'}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: prod.tipo_cuota === 'Diaria' ? '#f3f4f6' : 'white', color: 'black' }}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input 
+                      type="date" 
+                      value={prod.fecha_fin} 
+                      onChange={(e) => actualizarProducto(index, 'fecha_fin', e.target.value)}
+                      readOnly={prod.tipo_cuota === 'Diaria'}
+                      style={{ 
+                        ...dateInputStyle,
+                        backgroundColor: prod.tipo_cuota === 'Diaria' ? '#f3f4f6' : 'white' 
+                      }}
+                    />
+                    <span style={calendarIconStyle}>📅</span>
+                  </div>
                 </div>
 
                 {/* Observaciones */}
@@ -457,7 +506,7 @@ export default function RegistrarCuota({ onVolver, rol }) {
                           value={prod.cantidad_compensada || ''} 
                           onChange={(e) => actualizarProducto(index, 'cantidad_compensada', e.target.value)}
                           placeholder="0.00"
-                          style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
+                          style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black', boxSizing: 'border-box' }}
                         />
                       </div>
                     </div>

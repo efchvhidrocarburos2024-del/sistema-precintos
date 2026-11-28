@@ -3,494 +3,348 @@ import { supabase } from '../../supabase'
 import toast from 'react-hot-toast'
 import { Card, Boton } from '../ui'
 
-export default function RegistrarCuota({ onVolver, rol }) {
-  const [tipoRegistro, setTipoRegistro] = useState('planta')
+export default function ReasignarCuota({ onVolver, rol }) {
   const [plantas, setPlantas] = useState([])
-  const [proveedores, setProveedores] = useState([])
-  const [grupos, setGrupos] = useState([])
   const [productos, setProductos] = useState([])
-  const [asesores, setAsesores] = useState([])
-  
-  const [idPlanta, setIdPlanta] = useState('')
-  const [idProveedor, setIdProveedor] = useState('')
-  const [idAsesor, setIdAsesor] = useState('')
-  
-  const [productosForm, setProductosForm] = useState([{
-    id_grupo: '',
-    id_producto: '',
-    cantidad: '',
-    tipo_cuota: 'Bolsa',
-    fecha_inicio: '',
-    fecha_fin: '',
-    observaciones: '1',
-    compensacion: false,
-    id_planta_alterna: '',
-    cantidad_compensada: ''
-  }])
+  const [plantaSeleccionada, setPlantaSeleccionada] = useState('')
+  const [productoSeleccionado, setProductoSeleccionado] = useState('')
+  const [cuotasAsesores, setCuotasAsesores] = useState([])
+  const [cuotaOrigen, setCuotaOrigen] = useState(null)
+  const [cuotaDestino, setCuotaDestino] = useState(null)
+  const [cantidad, setCantidad] = useState('')
+  const [motivo, setMotivo] = useState('')
   const [guardando, setGuardando] = useState(false)
 
   useEffect(() => {
-    const cargarDatos = async () => {
-      console.log('🔄 Cargando catálogos...')
+    const cargarCatalogos = async () => {
+      console.log('🔄 Cargando catálogos para reasignación...')
       
-      const [p, prov, g, prod, ases] = await Promise.all([
+      const [p, prod] = await Promise.all([
         supabase.from('plantas').select('id_planta, nombre, codigo').eq('activo', true).order('nombre'),
-        supabase.from('proveedores').select('id, nombre, codigo').eq('activo', true).order('nombre'),
-        supabase.from('grupos_productos').select('id, nombre, codigo').eq('activo', true).order('codigo'),
-        supabase.from('productos').select('id, nombre, codigo, id_grupo_producto').eq('activo', true).order('nombre'),
-        supabase.from('usuarios').select('id_usuario, nombre_completo, email').eq('activo', true).order('nombre_completo')
+        supabase.from('productos').select('id, nombre, codigo').eq('activo', true).order('nombre')
       ])
-
+      
       console.log('📦 Plantas:', p.data)
-      console.log('🏢 Proveedores:', prov.data)
-      console.log('📊 Grupos:', g.data)
       console.log('🛢️ Productos:', prod.data)
-      console.log('👥 Asesores:', ases.data)
-
+      
       setPlantas(p.data || [])
-      setProveedores(prov.data || [])
-      setGrupos(g.data || [])
       setProductos(prod.data || [])
-      setAsesores(ases.data || [])
     }
-    cargarDatos()
+    cargarCatalogos()
   }, [])
 
-  // Validar si los campos obligatorios están completos
-  const camposObligatoriosCompletos = idPlanta && idProveedor && (tipoRegistro === 'planta' || idAsesor)
+  // Cargar cuotas cuando cambia planta o producto
+  useEffect(() => {
+    if (!plantaSeleccionada || !productoSeleccionado) {
+      setCuotasAsesores([])
+      return
+    }
+
+    const cargarCuotas = async () => {
+      console.log(`🔍 Buscando cuotas para Planta: ${plantaSeleccionada}, Producto: ${productoSeleccionado}`)
+      
+      const { data, error } = await supabase
+        .from('cuotas')
+        .select(`
+          *,
+          usuarios:usuarios(id_usuario, nombre_completo, email)
+        `)
+        .eq('id_planta', plantaSeleccionada)
+        .eq('id_producto', productoSeleccionado)
+        .eq('tipo_registro', 'asesor')
+        .eq('estado', 'activa')
+        .order('fecha_inicio', { ascending: false })
+
+      if (error) {
+        console.error('❌ Error al cargar cuotas:', error)
+        toast.error('Error al cargar cuotas')
+        return
+      }
+
+      console.log('✅ Cuotas encontradas:', data)
+      setCuotasAsesores(data || [])
+    }
+
+    cargarCuotas()
+  }, [plantaSeleccionada, productoSeleccionado])
 
   const handlePlantaChange = (e) => {
     const valor = e.target.value
     console.log('🏭 Planta seleccionada:', valor)
-    setIdPlanta(valor)
+    setPlantaSeleccionada(valor)
+    setCuotaOrigen(null)
+    setCuotaDestino(null)
   }
 
-  const handleProveedorChange = (e) => {
+  const handleProductoChange = (e) => {
     const valor = e.target.value
-    console.log('🏢 Proveedor seleccionado:', valor)
-    console.log('🔍 Buscando proveedor con id:', valor)
-    const proveedorEncontrado = proveedores.find(p => p.id === valor)
-    console.log('✅ Proveedor encontrado:', proveedorEncontrado)
-    setIdProveedor(valor)
+    console.log('🛢️ Producto seleccionado:', valor)
+    setProductoSeleccionado(valor)
+    setCuotaOrigen(null)
+    setCuotaDestino(null)
   }
 
-  const handleAsesorChange = (e) => {
-    const valor = e.target.value
-    console.log('👤 Asesor seleccionado:', valor)
-    setIdAsesor(valor)
-  }
+  const handleReasignar = async () => {
+    if (!cuotaOrigen || !cuotaDestino) {
+      return toast.error('Selecciona cuota origen y destino')
+    }
+    if (cuotaOrigen.id === cuotaDestino.id) {
+      return toast.error('La cuota origen y destino deben ser diferentes')
+    }
+    if (!cantidad || Number(cantidad) <= 0) {
+      return toast.error('Ingresa una cantidad válida')
+    }
+    if (!motivo.trim()) {
+      return toast.error('Ingresa el motivo de la reasignación')
+    }
 
-  const agregarProducto = () => {
-    setProductosForm([...productosForm, {
-      id_grupo: '',
-      id_producto: '',
-      cantidad: '',
-      tipo_cuota: 'Bolsa',
-      fecha_inicio: '',
-      fecha_fin: '',
-      observaciones: '1',
-      compensacion: false,
-      id_planta_alterna: '',
-      cantidad_compensada: ''
-    }])
-  }
-
-  const actualizarProducto = (index, campo, valor) => {
-    const nuevos = [...productosForm]
-    nuevos[index][campo] = valor
-    
-    // Si cambia el grupo, resetear producto
-    if (campo === 'id_grupo') {
-      nuevos[index].id_producto = ''
-    }
-    
-    // Lógica de fechas según tipo de cuota
-    if (campo === 'tipo_cuota') {
-      const fechaInicio = nuevos[index].fecha_inicio
-      if (valor === 'Diaria' && fechaInicio) {
-        nuevos[index].fecha_fin = fechaInicio
-      } else if (valor === 'Paquete' && fechaInicio) {
-        const fecha = new Date(fechaInicio)
-        const primerDia = new Date(fecha.getFullYear(), fecha.getMonth(), 1)
-        const ultimoDia = new Date(fecha.getFullYear(), fecha.getMonth() + 1, 0)
-        nuevos[index].fecha_inicio = primerDia.toISOString().split('T')[0]
-        nuevos[index].fecha_fin = ultimoDia.toISOString().split('T')[0]
-      }
-    }
-    
-    // Si cambia fecha_inicio y es Diaria, actualizar fecha_fin
-    if (campo === 'fecha_inicio' && nuevos[index].tipo_cuota === 'Diaria') {
-      nuevos[index].fecha_fin = valor
-    }
-    
-    // Si cambia fecha_inicio y es Paquete, calcular último día del mes
-    if (campo === 'fecha_inicio' && nuevos[index].tipo_cuota === 'Paquete') {
-      const fecha = new Date(valor)
-      const primerDia = new Date(fecha.getFullYear(), fecha.getMonth(), 1)
-      const ultimoDia = new Date(fecha.getFullYear(), fecha.getMonth() + 1, 0)
-      nuevos[index].fecha_inicio = primerDia.toISOString().split('T')[0]
-      nuevos[index].fecha_fin = ultimoDia.toISOString().split('T')[0]
-    }
-    
-    setProductosForm(nuevos)
-  }
-
-  const eliminarProducto = (index) => {
-    if (productosForm.length > 1) {
-      setProductosForm(productosForm.filter((_, i) => i !== index))
-    }
-  }
-
-  const guardar = async () => {
-    if (!idPlanta || !idProveedor) {
-      return toast.error('Selecciona Planta y Proveedor')
-    }
-    if (tipoRegistro === 'asesor' && !idAsesor) {
-      return toast.error('Selecciona un Asesor')
-    }
-    
-    for (const p of productosForm) {
-      if (!p.id_producto || !p.cantidad || !p.fecha_inicio || !p.fecha_fin) {
-        return toast.error('Completa todos los campos de los productos')
-      }
-      if (Number(p.cantidad) < 0) {
-        return toast.error('La cantidad no puede ser negativa')
-      }
+    // Validar que la cantidad no exceda el disponible en origen
+    const disponibleOrigen = cuotaOrigen.cantidad - (cuotaOrigen.cantidad_reasignada || 0)
+    if (Number(cantidad) > disponibleOrigen) {
+      return toast.error(`La cantidad excede el disponible en origen (${disponibleOrigen} GLS)`)
     }
 
     setGuardando(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      
-      for (const p of productosForm) {
-        const registro = {
-          tipo_registro: tipoRegistro,
-          id_planta: idPlanta,
-          id_proveedor: idProveedor,
-          id_asesor: tipoRegistro === 'asesor' ? idAsesor : null,
-          id_producto: p.id_producto,
-          id_grupo_producto: p.id_grupo,
-          fecha_inicio: p.fecha_inicio,
-          fecha_fin: p.fecha_fin,
-          tipo_cuota: p.tipo_cuota,
-          cantidad: Number(p.cantidad),
-          observaciones: parseInt(p.observaciones),
-          compensacion: p.compensacion || false,
-          id_planta_alterna: p.id_planta_alterna || null,
-          cantidad_compensada: Number(p.cantidad_compensada || 0),
-          estado: 'activa',
-          creado_por: user?.id
-        }
 
-        console.log('💾 Guardando registro:', registro)
+      console.log('💾 Iniciando reasignación...')
+      console.log('Origen:', cuotaOrigen)
+      console.log('Destino:', cuotaDestino)
+      console.log('Cantidad:', cantidad)
 
-        const { data, error } = await supabase.from('cuotas').insert(registro).select()
+      // 1. Actualizar cuota origen (restar cantidad)
+      const { error: errOrigen } = await supabase
+        .from('cuotas')
+        .update({ cantidad_reasignada: (cuotaOrigen.cantidad_reasignada || 0) - Number(cantidad) })
+        .eq('id', cuotaOrigen.id)
 
-        if (error) {
-          console.error('❌ Error al guardar:', error)
-          throw error
-        }
-
-        console.log('✅ Registro guardado:', data)
+      if (errOrigen) {
+        console.error('❌ Error al actualizar origen:', errOrigen)
+        throw errOrigen
       }
 
-      toast.success('Cuota registrada exitosamente')
-      onVolver()
+      // 2. Actualizar cuota destino (sumar cantidad)
+      const { error: errDestino } = await supabase
+        .from('cuotas')
+        .update({ cantidad_reasignada: (cuotaDestino.cantidad_reasignada || 0) + Number(cantidad) })
+        .eq('id', cuotaDestino.id)
+
+      if (errDestino) {
+        console.error('❌ Error al actualizar destino:', errDestino)
+        throw errDestino
+      }
+
+      // 3. Registrar en tabla de reasignaciones
+      const { error: errReasig } = await supabase.from('cuotas_reasignaciones').insert({
+        id_cuota_origen: cuotaOrigen.id,
+        id_cuota_destino: cuotaDestino.id,
+        id_asesor_origen: cuotaOrigen.id_asesor,
+        id_asesor_destino: cuotaDestino.id_asesor,
+        cantidad_reasignada: Number(cantidad),
+        motivo: motivo.trim(),
+        usuario_admin: user?.id
+      })
+
+      if (errReasig) {
+        console.error('❌ Error al registrar reasignación:', errReasig)
+        throw errReasig
+      }
+
+      // 4. Registrar en historial
+      const { error: errHist1 } = await supabase.from('cuotas_historial').insert({
+        id_cuota: cuotaOrigen.id,
+        accion: 'REASIGNACION',
+        detalle: `Reasignación de ${cantidad} GLS a ${cuotaDestino.usuarios?.nombre_completo}. Motivo: ${motivo}`,
+        usuario_id: user?.id
+      })
+
+      const { error: errHist2 } = await supabase.from('cuotas_historial').insert({
+        id_cuota: cuotaDestino.id,
+        accion: 'REASIGNACION',
+        detalle: `Recibió ${cantidad} GLS de ${cuotaOrigen.usuarios?.nombre_completo}. Motivo: ${motivo}`,
+        usuario_id: user?.id
+      })
+
+      if (errHist1 || errHist2) {
+        console.error('❌ Error al registrar historial:', errHist1 || errHist2)
+      }
+
+      console.log('✅ Reasignación completada exitosamente')
+      toast.success('Reasignación ejecutada exitosamente')
+      
+      // Resetear formulario
+      setCuotaOrigen(null)
+      setCuotaDestino(null)
+      setCantidad('')
+      setMotivo('')
     } catch (error) {
       console.error('❌ Error:', error)
-      toast.error('Error al guardar: ' + error.message)
+      toast.error('Error al reasignar: ' + error.message)
     } finally {
       setGuardando(false)
     }
   }
 
   return (
-    <Card style={{ padding: '30px', maxWidth: '1200px', margin: '0 auto' }}>
-      <h2 style={{ color: '#0033A0', marginBottom: '20px', textAlign: 'center' }}>Registrar Nueva Cuota</h2>
+    <Card style={{ padding: '30px', maxWidth: '1000px', margin: '0 auto' }}>
+      <h2 style={{ color: '#0033A0', marginBottom: '20px', textAlign: 'center' }}>Reasignar Cuota entre Asesores</h2>
       
-      {/* Selector de tipo de registro */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', justifyContent: 'center' }}>
-        <Boton 
-          variante={tipoRegistro === 'planta' ? 'primary' : 'outline'} 
-          onClick={() => { setTipoRegistro('planta'); setIdAsesor('') }}
-        >
-          Por Planta
-        </Boton>
-        <Boton 
-          variante={tipoRegistro === 'asesor' ? 'primary' : 'outline'} 
-          onClick={() => setTipoRegistro('asesor')}
-        >
-          Por Asesor
-        </Boton>
-      </div>
-
-      {/* Campos obligatorios */}
-      <div style={{ display: 'grid', gridTemplateColumns: tipoRegistro === 'asesor' ? '1fr 1fr 1fr' : '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-        
-        {/* Asesor (solo para tipo asesor, aparece primero) */}
-        {tipoRegistro === 'asesor' && (
-          <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>
-              Asesor *
-            </label>
-            <select 
-              value={idAsesor} 
-              onChange={handleAsesorChange}
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: 'white', color: 'black' }}
-            >
-              <option value="">Seleccionar Asesor</option>
-              {asesores.map(a => (
-                <option key={a.id_usuario} value={a.id_usuario}>{a.nombre_completo}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Planta */}
+      {/* Filtros: Planta y Producto */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
         <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>
-            Planta *
-          </label>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Planta *</label>
           <select 
-            value={idPlanta} 
+            value={plantaSeleccionada} 
             onChange={handlePlantaChange}
             style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: 'white', color: 'black' }}
           >
-            <option value="">Seleccionar Planta</option>
+            <option value="">-- Seleccionar planta --</option>
             {plantas.map(p => (
               <option key={p.id_planta} value={p.id_planta}>{p.nombre}</option>
             ))}
           </select>
-          {idPlanta && (
+          {plantaSeleccionada && (
             <small style={{ color: '#0033A0', fontWeight: 'bold', marginTop: '5px', display: 'block' }}>
-              ID: {plantas.find(p => p.id_planta === idPlanta)?.codigo}
+              ID: {plantas.find(p => p.id_planta === plantaSeleccionada)?.codigo}
             </small>
           )}
         </div>
-
-        {/* Proveedor */}
         <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>
-            Proveedor *
-          </label>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Producto *</label>
           <select 
-            value={idProveedor} 
-            onChange={handleProveedorChange}
+            value={productoSeleccionado} 
+            onChange={handleProductoChange}
             style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: 'white', color: 'black' }}
           >
-            <option value="">Seleccionar Proveedor</option>
-            {proveedores.map(p => (
+            <option value="">-- Seleccionar producto --</option>
+            {productos.map(p => (
               <option key={p.id} value={p.id}>{p.nombre}</option>
             ))}
           </select>
-          {idProveedor && (
+          {productoSeleccionado && (
             <small style={{ color: '#0033A0', fontWeight: 'bold', marginTop: '5px', display: 'block' }}>
-              ID: {proveedores.find(p => p.id === idProveedor)?.codigo}
+              ID: {productos.find(p => p.id === productoSeleccionado)?.codigo}
             </small>
           )}
         </div>
       </div>
 
-      {/* Botón Agregar Producto (solo si campos obligatorios están completos) */}
-      {camposObligatoriosCompletos && (
+      {/* Cuotas disponibles */}
+      {plantaSeleccionada && productoSeleccionado && (
         <>
           <hr style={{ margin: '30px 0', border: 'none', borderTop: '2px solid #e5e7eb' }} />
           
-          <h3 style={{ color: '#0033A0', marginBottom: '20px', textAlign: 'center' }}>
-            Productos ({productosForm.length})
-          </h3>
-
-          {productosForm.map((prod, index) => (
-            <div key={index} style={{ background: '#f9fafb', padding: '20px', borderRadius: '8px', marginBottom: '15px', position: 'relative', border: '1px solid #e5e7eb' }}>
-              {productosForm.length > 1 && (
-                <button 
-                  onClick={() => eliminarProducto(index)} 
-                  style={{ 
-                    position: 'absolute', 
-                    top: '10px', 
-                    right: '10px', 
-                    background: '#fee2e2', 
-                    color: '#991b1b', 
-                    border: 'none', 
-                    borderRadius: '50%', 
-                    width: '28px', 
-                    height: '28px', 
-                    cursor: 'pointer', 
-                    fontWeight: 'bold',
-                    fontSize: '16px'
-                  }}
-                >
-                  ×
-                </button>
-              )}
-              
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
-                {/* Grupo Producto */}
+          {cuotasAsesores.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+              <p style={{ fontSize: '16px' }}>⚠️ No hay cuotas de asesores para esta planta y producto</p>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                {/* Cuota Origen */}
                 <div>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Grupo Producto *</label>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px', color: '#dc2626' }}>
+                    📤 Cuota Origen (de donde se resta) *
+                  </label>
                   <select 
-                    value={prod.id_grupo} 
-                    onChange={(e) => actualizarProducto(index, 'id_grupo', e.target.value)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
+                    value={cuotaOrigen?.id || ''} 
+                    onChange={(e) => setCuotaOrigen(cuotasAsesores.find(c => c.id === e.target.value))}
+                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: 'white', color: 'black' }}
                   >
-                    <option value="">Seleccionar</option>
-                    {grupos.map(g => (
-                      <option key={g.id} value={g.id}>{g.nombre}</option>
+                    <option value="">-- Seleccionar --</option>
+                    {cuotasAsesores.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.usuarios?.nombre_completo} - {c.fecha_inicio} ({c.cantidad - (c.cantidad_reasignada || 0)} GLS disp.)
+                      </option>
                     ))}
                   </select>
                 </div>
 
-                {/* Producto */}
+                {/* Cuota Destino */}
                 <div>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Producto *</label>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px', color: '#059669' }}>
+                    📥 Cuota Destino (a donde se suma) *
+                  </label>
                   <select 
-                    value={prod.id_producto} 
-                    onChange={(e) => actualizarProducto(index, 'id_producto', e.target.value)}
-                    disabled={!prod.id_grupo}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: !prod.id_grupo ? '#f3f4f6' : 'white', color: 'black' }}
+                    value={cuotaDestino?.id || ''} 
+                    onChange={(e) => setCuotaDestino(cuotasAsesores.find(c => c.id === e.target.value))}
+                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: 'white', color: 'black' }}
                   >
-                    <option value="">Seleccionar</option>
-                    {productos.filter(p => p.id_grupo_producto === prod.id_grupo).map(p => (
-                      <option key={p.id} value={p.id}>{p.nombre}</option>
+                    <option value="">-- Seleccionar --</option>
+                    {cuotasAsesores.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.usuarios?.nombre_completo} - {c.fecha_inicio} ({c.cantidad - (c.cantidad_reasignada || 0)} GLS disp.)
+                      </option>
                     ))}
-                  </select>
-                </div>
-
-                {/* Cantidad */}
-                <div>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Cantidad *</label>
-                  <input 
-                    type="number" 
-                    step="0.01"
-                    value={prod.cantidad} 
-                    onChange={(e) => actualizarProducto(index, 'cantidad', e.target.value)}
-                    placeholder="0.00"
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
-                  />
-                </div>
-
-                {/* Tipo de Cuota */}
-                <div>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Tipo de Cuota *</label>
-                  <select 
-                    value={prod.tipo_cuota} 
-                    onChange={(e) => actualizarProducto(index, 'tipo_cuota', e.target.value)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
-                  >
-                    <option value="Bolsa">Bolsa</option>
-                    <option value="Diaria">Diaria</option>
-                    <option value="Paquete">Paquete</option>
-                  </select>
-                </div>
-
-                {/* Fecha Inicio */}
-                <div>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Fecha Inicio *</label>
-                  <input 
-                    type="date" 
-                    value={prod.fecha_inicio} 
-                    onChange={(e) => actualizarProducto(index, 'fecha_inicio', e.target.value)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
-                  />
-                </div>
-
-                {/* Fecha Fin */}
-                <div>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Fecha Fin *</label>
-                  <input 
-                    type="date" 
-                    value={prod.fecha_fin} 
-                    onChange={(e) => actualizarProducto(index, 'fecha_fin', e.target.value)}
-                    readOnly={prod.tipo_cuota === 'Diaria'}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: prod.tipo_cuota === 'Diaria' ? '#f3f4f6' : 'white', color: 'black' }}
-                  />
-                </div>
-
-                {/* Observaciones */}
-                <div>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Observaciones *</label>
-                  <select 
-                    value={prod.observaciones} 
-                    onChange={(e) => actualizarProducto(index, 'observaciones', e.target.value)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
-                  >
-                    <option value="0">0 - Sin stock</option>
-                    <option value="1">1 - Libre hasta agotar</option>
-                    <option value="2">2 - Cuota asignada por asesor</option>
-                    <option value="3">3 - Libre</option>
                   </select>
                 </div>
               </div>
 
-              {/* Compensación (solo para tipo planta) */}
-              {tipoRegistro === 'planta' && (
-                <div style={{ marginTop: '15px', padding: '15px', background: 'white', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={prod.compensacion || false} 
-                      onChange={(e) => actualizarProducto(index, 'compensacion', e.target.checked)}
-                      style={{ width: '18px', height: '18px' }}
-                    />
-                    <span style={{ fontWeight: 'bold', fontSize: '13px' }}>¿Compensación?</span>
-                  </label>
-                  {prod.compensacion && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px' }}>
-                      <div>
-                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Planta Alterna</label>
-                        <select 
-                          value={prod.id_planta_alterna || ''} 
-                          onChange={(e) => actualizarProducto(index, 'id_planta_alterna', e.target.value)}
-                          style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
-                        >
-                          <option value="">Seleccionar</option>
-                          {plantas.filter(p => p.id_planta !== idPlanta).map(p => (
-                            <option key={p.id_planta} value={p.id_planta}>{p.nombre}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Cantidad Compensada</label>
-                        <input 
-                          type="number" 
-                          step="0.01"
-                          value={prod.cantidad_compensada || ''} 
-                          onChange={(e) => actualizarProducto(index, 'cantidad_compensada', e.target.value)}
-                          placeholder="0.00"
-                          style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
-                        />
-                      </div>
-                    </div>
-                  )}
+              {/* Resumen de la operación */}
+              {cuotaOrigen && cuotaDestino && cuotaOrigen.id !== cuotaDestino.id && (
+                <div style={{ background: '#f0f9ff', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #bae6fd' }}>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#0033A0' }}>📋 Resumen de la reasignación</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
+                    <p style={{ margin: 0 }}><strong>De:</strong> {cuotaOrigen.usuarios?.nombre_completo}</p>
+                    <p style={{ margin: 0 }}><strong>Para:</strong> {cuotaDestino.usuarios?.nombre_completo}</p>
+                    <p style={{ margin: 0, color: '#dc2626' }}><strong>Disponible origen:</strong> {cuotaOrigen.cantidad - (cuotaOrigen.cantidad_reasignada || 0)} GLS</p>
+                    <p style={{ margin: 0, color: '#059669' }}><strong>Disponible destino:</strong> {cuotaDestino.cantidad - (cuotaDestino.cantidad_reasignada || 0)} GLS</p>
+                  </div>
                 </div>
               )}
-            </div>
-          ))}
 
-          {/* Botones de acción */}
-          <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
-            <Boton variante="outline" onClick={agregarProducto}>+ Agregar Producto</Boton>
-            <Boton 
-              variante="primary" 
-              onClick={guardar} 
-              disabled={guardando}
-              style={{ marginLeft: 'auto' }}
-            >
-              {guardando ? 'Guardando...' : '💾 Guardar Cuota'}
-            </Boton>
-          </div>
+              {/* Campo: Cantidad */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>
+                  Cantidad a reasignar (GLS) *
+                </label>
+                <input 
+                  type="number" 
+                  step="0.01"
+                  value={cantidad} 
+                  onChange={(e) => setCantidad(e.target.value)}
+                  placeholder="0.00"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: 'white', color: 'black', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              {/* Campo: Motivo */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>
+                  Motivo de la reasignación *
+                </label>
+                <textarea 
+                  value={motivo} 
+                  onChange={(e) => setMotivo(e.target.value)}
+                  placeholder="Ej: Ajuste por demanda, redistribución de zona, etc."
+                  rows={3}
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: 'white', color: 'black', resize: 'vertical', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              {/* Botones de acción */}
+              <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
+                <Boton variante="outline" onClick={onVolver}>Cancelar</Boton>
+                <Boton 
+                  variante="danger" 
+                  onClick={handleReasignar} 
+                  disabled={guardando}
+                  style={{ marginLeft: 'auto' }}
+                >
+                  {guardando ? 'Procesando...' : '🔄 Ejecutar Reasignación'}
+                </Boton>
+              </div>
+            </>
+          )}
         </>
       )}
 
       {/* Mensaje si no se han completado los campos obligatorios */}
-      {!camposObligatoriosCompletos && (
+      {!plantaSeleccionada && !productoSeleccionado && (
         <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
           <p style={{ fontSize: '16px', marginBottom: '10px' }}>⚠️ Completa los campos obligatorios para continuar</p>
-          <p style={{ fontSize: '14px' }}>
-            {tipoRegistro === 'asesor' 
-              ? 'Selecciona Asesor, Planta y Proveedor' 
-              : 'Selecciona Planta y Proveedor'}
-          </p>
+          <p style={{ fontSize: '14px' }}>Selecciona Planta y Producto</p>
         </div>
       )}
     </Card>
