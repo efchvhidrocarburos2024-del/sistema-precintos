@@ -127,19 +127,14 @@ export default function GestionUsuarios({ setPantalla }) {
 
   setCreando(true)
   try {
-    // ✅ Obtener la sesión actual con su token fresco
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-    
-    if (sessionError || !session) {
+    // ✅ Verificar que haya sesión válida ANTES de llamar
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
       throw new Error('Tu sesión expiró. Cierra sesión e ingresa de nuevo.')
     }
 
-    // ✅ Invocar la Edge Function con el token explícito
+    // ✅ invoke() envía el token automáticamente desde el cliente
     const { data, error } = await supabase.functions.invoke('crear-usuario', {
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json'
-      },
       body: {
         nombre_completo: nuevoNombre,
         email: nuevoEmail,
@@ -151,21 +146,21 @@ export default function GestionUsuarios({ setPantalla }) {
     })
 
     if (error) {
-      let errorMsg = error.message;
+      let errorMsg = error.message
       if (error.context && typeof error.context.text === 'function') {
         try {
-          const text = await error.context.text();
+          const text = await error.context.text()
           try {
-            const parsed = JSON.parse(text);
-            errorMsg = parsed.message || parsed.error || text;
+            const parsed = JSON.parse(text)
+            errorMsg = parsed.message || parsed.error || text
           } catch {
-            errorMsg = text || errorMsg;
+            errorMsg = text || errorMsg
           }
         } catch (err) {
-          console.error("No se pudo leer el detalle del error", err);
+          console.error("No se pudo leer el detalle del error", err)
         }
       }
-      throw new Error(errorMsg);
+      throw new Error(errorMsg)
     }
 
     if (data && data.error) throw new Error(data.error)
