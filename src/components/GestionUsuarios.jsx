@@ -3,10 +3,16 @@ import { supabase } from '../supabase'
 import toast from 'react-hot-toast'
 import { Card, Input, Select, Boton } from './ui'
 
-const btnHeaderStyle = { background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }
+// ═══════════════════════════════════════════════════════════════════
+// ⚠️ IMPORTANTE: Reemplaza este valor con tu ANON KEY real
+// Obtenerla en: Supabase → Project Settings → API Keys → anon (public)
+// ═══════════════════════════════════════════════════════════════════
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvZGJic2dwaWtsdnhrZmN4cWRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ5MzMzNTUsImV4cCI6MjExMDUwOTM1NX0.1S3yYhPKUjtxrAoPsqoyqovwwZsDBAM7dVGXwD8jv2s'
 
-// ✅ URL base de tu proyecto (reemplaza si cambia)
+// URL base de las Edge Functions de tu proyecto
 const SUPABASE_FUNCTIONS_URL = 'https://podbbsgpiklvxkfcxqdn.supabase.co/functions/v1'
+
+const btnHeaderStyle = { background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }
 
 export default function GestionUsuarios({ setPantalla }) {
   const [usuarios, setUsuarios] = useState([])
@@ -14,12 +20,14 @@ export default function GestionUsuarios({ setPantalla }) {
   const [plantas, setPlantas] = useState([])
   const [cargando, setCargando] = useState(true)
 
+  // --- ESTADOS PARA EDITAR ---
   const [modalEditarAbierto, setModalEditarAbierto] = useState(false)
   const [usuarioEditando, setUsuarioEditando] = useState(null)
   const [formRol, setFormRol] = useState('')
   const [formPlanta, setFormPlanta] = useState('')
   const [formActivo, setFormActivo] = useState(true)
 
+  // --- ESTADOS PARA CREAR ---
   const [modalCrearAbierto, setModalCrearAbierto] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState('')
   const [nuevoEmail, setNuevoEmail] = useState('')
@@ -65,6 +73,7 @@ export default function GestionUsuarios({ setPantalla }) {
     setCargando(false)
   }
 
+  // --- LÓGICA DE EDICIÓN ---
   const abrirModalEditar = (usuario) => {
     setUsuarioEditando(usuario)
     setFormRol(String(usuario.roles?.id_rol || ''))
@@ -98,7 +107,7 @@ export default function GestionUsuarios({ setPantalla }) {
         .select()
 
       if (error) throw error
-      if (!data || data.length === 0) throw new Error('No se pudo actualizar. Revisa las políticas RLS.')
+      if (!data || data.length === 0) throw new Error('No se pudo actualizar. Revisa las políticas RLS en Supabase.')
 
       toast.success('Usuario actualizado correctamente')
       cerrarModalEditar()
@@ -110,6 +119,7 @@ export default function GestionUsuarios({ setPantalla }) {
     }
   }
 
+  // --- LÓGICA DE CREACIÓN (FETCH DIRECTO A EDGE FUNCTION) ---
   const cerrarModalCrear = () => {
     setModalCrearAbierto(false)
     setNuevoNombre('')
@@ -119,94 +129,73 @@ export default function GestionUsuarios({ setPantalla }) {
     setNuevaPlanta('')
   }
 
-  // ✅ CREACIÓN USANDO FETCH DIRECTO (control total del header)
   async function crearUsuario(e) {
-  e.preventDefault()
-  if (!nuevoNombre || !nuevoEmail || !nuevaPassword || !nuevoRol) {
-    return toast.error('Completa los campos requeridos')
-  }
-  if (nuevaPassword.length < 6) {
-    return toast.error('La contraseña debe tener al menos 6 caracteres')
-  }
+    e.preventDefault()
+    if (!nuevoNombre || !nuevoEmail || !nuevaPassword || !nuevoRol) {
+      return toast.error('Completa los campos requeridos')
+    }
+    if (nuevaPassword.length < 6) {
+      return toast.error('La contraseña debe tener al menos 6 caracteres')
+    }
 
-  setCreando(true)
-  try {
-    console.log('🔵 PASO 1: Obteniendo sesión actual...')
-    
-    // Intentar obtener la sesión actual
-    const { data: { session: sessionActual }, error: errorSesion } = await supabase.auth.getSession()
-    
-    console.log('🔵 Sesión actual:', {
-      existe: !!sessionActual,
-      tieneToken: !!sessionActual?.access_token,
-      error: errorSesion?.message
-    })
-
-    // Si no hay sesión válida, intentar refresh
-    let session = sessionActual
-    if (!session || !session.access_token) {
-      console.log('🟡 No hay sesión válida, intentando refresh...')
-      const { data: { session: sessionRefresh }, error: errorRefresh } = await supabase.auth.refreshSession()
+    setCreando(true)
+    try {
+      console.log('🔵 PASO 1: Obteniendo sesión actual...')
       
-      console.log('🟡 Resultado del refresh:', {
-        existe: !!sessionRefresh,
-        tieneToken: !!sessionRefresh?.access_token,
-        error: errorRefresh?.message
-      })
+      // ✅ Obtener la sesión actual (sin refresh, para no forzar rotación innecesaria)
+      const { data: { session }, error: errorSesion } = await supabase.auth.getSession()
       
-      session = sessionRefresh
-    }
+      if (errorSesion) {
+        console.error('❌ Error al obtener sesión:', errorSesion)
+        throw new Error('Error al verificar tu sesión. Cierra sesión e ingresa de nuevo.')
+      }
 
-    if (!session || !session.access_token) {
-      console.error('❌ No se pudo obtener token válido')
-      throw new Error('Tu sesión expiró. Cierra sesión e ingresa de nuevo.')
-    }
+      if (!session || !session.access_token) {
+        console.error('❌ Sesión no encontrada o sin token')
+        throw new Error('Tu sesión expiró. Cierra sesión e ingresa de nuevo.')
+      }
 
-    console.log('✅ PASO 2: Token obtenido, longitud:', session.access_token.length)
-    console.log('📤 Enviando request a:', `${SUPABASE_FUNCTIONS_URL}/crear-usuario`)
+      console.log('✅ PASO 2: Token obtenido, longitud:', session.access_token.length)
 
-    // Llamar a la Edge Function
-    const response = await fetch(`${SUPABASE_FUNCTIONS_URL}/crear-usuario`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
-        'apikey': session.access_token
-      },
-      body: JSON.stringify({
-        nombre_completo: nuevoNombre,
-        email: nuevoEmail,
-        password: nuevaPassword,
-        id_rol: isNaN(Number(nuevoRol)) ? nuevoRol : Number(nuevoRol),
-        id_planta: nuevaPlanta ? (isNaN(Number(nuevaPlanta)) ? nuevaPlanta : Number(nuevaPlanta)) : null,
-        activo: true
+      // ✅ Fetch directo con headers correctos
+      const response = await fetch(`${SUPABASE_FUNCTIONS_URL}/crear-usuario`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': SUPABASE_ANON_KEY  // ✅ La anon key del proyecto (NO el token)
+        },
+        body: JSON.stringify({
+          nombre_completo: nuevoNombre,
+          email: nuevoEmail,
+          password: nuevaPassword,
+          id_rol: isNaN(Number(nuevoRol)) ? nuevoRol : Number(nuevoRol),
+          id_planta: nuevaPlanta ? (isNaN(Number(nuevaPlanta)) ? nuevaPlanta : Number(nuevaPlanta)) : null,
+          activo: true
+        })
       })
-    })
 
-    console.log('📥 PASO 3: Respuesta recibida')
-    console.log('📥 Status:', response.status)
-    console.log('📥 Headers:', Object.fromEntries(response.headers.entries()))
+      console.log('📥 PASO 3: Status:', response.status)
+      
+      const result = await response.json()
+      console.log('📦 Body:', result)
 
-    const result = await response.json()
-    console.log('📦 Body:', result)
+      if (!response.ok) {
+        throw new Error(result.error || `Error HTTP ${response.status}`)
+      }
 
-    if (!response.ok) {
-      throw new Error(result.error || `Error HTTP ${response.status}`)
+      if (result.error) throw new Error(result.error)
+
+      toast.success('Usuario creado exitosamente')
+      cerrarModalCrear()
+      await cargarDatos()
+    } catch (error) {
+      console.error('❌ ERROR FINAL:', error)
+      toast.error('Error: ' + error.message)
+    } finally {
+      setCreando(false)
     }
-
-    if (result.error) throw new Error(result.error)
-
-    console.log('✅ Usuario creado exitosamente')
-    toast.success('Usuario creado exitosamente')
-    cerrarModalCrear()
-    await cargarDatos()
-  } catch (error) {
-    console.error('❌ ERROR FINAL:', error)
-    toast.error('Error: ' + error.message)
-  } finally {
-    setCreando(false)
   }
-}
 
   const rolEdicionCodigo = roles.find(r => String(r.id_rol) === formRol)?.codigo
   const rolCreacionCodigo = roles.find(r => String(r.id_rol) === nuevoRol)?.codigo
