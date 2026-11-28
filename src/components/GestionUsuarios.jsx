@@ -20,7 +20,7 @@ export default function GestionUsuarios({ setPantalla }) {
 
   // --- ESTADOS PARA CREAR ---
   const [modalCrearAbierto, setModalCrearAbierto] = useState(false)
-  const [nuevoNombre, setNuevoNombre] = useState('') // 👈 NUEVO ESTADO
+  const [nuevoNombre, setNuevoNombre] = useState('')
   const [nuevoEmail, setNuevoEmail] = useState('')
   const [nuevaPassword, setNuevaPassword] = useState('')
   const [nuevoRol, setNuevoRol] = useState('')
@@ -113,7 +113,7 @@ export default function GestionUsuarios({ setPantalla }) {
   // --- LÓGICA DE CREACIÓN (EDGE FUNCTION) ---
   const cerrarModalCrear = () => {
     setModalCrearAbierto(false)
-    setNuevoNombre('') // 👈 LIMPIAMOS EL NOMBRE
+    setNuevoNombre('')
     setNuevoEmail('')
     setNuevaPassword('')
     setNuevoRol('')
@@ -127,9 +127,10 @@ export default function GestionUsuarios({ setPantalla }) {
 
     setCreando(true)
     try {
-      const { data, error } = await supabase.functions.invoke('create-user', {
+      // ✅ CORREGIDO: el nombre real de la Edge Function en Supabase es 'crear-usuario'
+      const { data, error } = await supabase.functions.invoke('crear-usuario', {
         body: {
-          nombre_completo: nuevoNombre, // 👈 ENVIAMOS EL NOMBRE
+          nombre_completo: nuevoNombre,
           email: nuevoEmail,
           password: nuevaPassword,
           id_rol: isNaN(Number(nuevoRol)) ? nuevoRol : Number(nuevoRol),
@@ -303,7 +304,6 @@ export default function GestionUsuarios({ setPantalla }) {
             
             <form onSubmit={crearUsuario} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               
-              {/* 👇 NUEVO CAMPO DE NOMBRE COMPLETO 👇 */}
               <Input 
                 label="Nombre Completo" 
                 type="text" 
