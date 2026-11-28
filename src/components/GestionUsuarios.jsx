@@ -121,65 +121,92 @@ export default function GestionUsuarios({ setPantalla }) {
 
   // ✅ CREACIÓN USANDO FETCH DIRECTO (control total del header)
   async function crearUsuario(e) {
-    e.preventDefault()
-    if (!nuevoNombre || !nuevoEmail || !nuevaPassword || !nuevoRol) {
-      return toast.error('Completa los campos requeridos')
-    }
-    if (nuevaPassword.length < 6) {
-      return toast.error('La contraseña debe tener al menos 6 caracteres')
-    }
-
-    setCreando(true)
-    try {
-      // PASO 1: Forzar refresh de la sesión para obtener token fresco
-      const { data: { session }, error: refreshError } = await supabase.auth.refreshSession()
-      
-      if (refreshError || !session || !session.access_token) {
-        console.error('❌ Error al refrescar sesión:', refreshError)
-        throw new Error('Tu sesión expiró. Cierra sesión e ingresa de nuevo.')
-      }
-
-      console.log('✅ Token fresco obtenido, longitud:', session.access_token.length)
-
-      // PASO 2: Llamar a la Edge Function con fetch nativo
-      const response = await fetch(`${SUPABASE_FUNCTIONS_URL}/crear-usuario`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': session.access_token // algunos proyectos requieren esto también
-        },
-        body: JSON.stringify({
-          nombre_completo: nuevoNombre,
-          email: nuevoEmail,
-          password: nuevaPassword,
-          id_rol: isNaN(Number(nuevoRol)) ? nuevoRol : Number(nuevoRol),
-          id_planta: nuevaPlanta ? (isNaN(Number(nuevaPlanta)) ? nuevaPlanta : Number(nuevaPlanta)) : null,
-          activo: true
-        })
-      })
-
-      console.log('📥 Status de respuesta:', response.status)
-
-      const result = await response.json()
-      console.log('📦 Body de respuesta:', result)
-
-      if (!response.ok) {
-        throw new Error(result.error || `Error HTTP ${response.status}`)
-      }
-
-      if (result.error) throw new Error(result.error)
-
-      toast.success('Usuario creado exitosamente')
-      cerrarModalCrear()
-      await cargarDatos()
-    } catch (error) {
-      console.error('❌ Error al crear usuario:', error)
-      toast.error('Error: ' + error.message)
-    } finally {
-      setCreando(false)
-    }
+  e.preventDefault()
+  if (!nuevoNombre || !nuevoEmail || !nuevaPassword || !nuevoRol) {
+    return toast.error('Completa los campos requeridos')
   }
+  if (nuevaPassword.length < 6) {
+    return toast.error('La contraseña debe tener al menos 6 caracteres')
+  }
+
+  setCreando(true)
+  try {
+    console.log('🔵 PASO 1: Obteniendo sesión actual...')
+    
+    // Intentar obtener la sesión actual
+    const { data: { session: sessionActual }, error: errorSesion } = await supabase.auth.getSession()
+    
+    console.log('🔵 Sesión actual:', {
+      existe: !!sessionActual,
+      tieneToken: !!sessionActual?.access_token,
+      error: errorSesion?.message
+    })
+
+    // Si no hay sesión válida, intentar refresh
+    let session = sessionActual
+    if (!session || !session.access_token) {
+      console.log('🟡 No hay sesión válida, intentando refresh...')
+      const { data: { session: sessionRefresh }, error: errorRefresh } = await supabase.auth.refreshSession()
+      
+      console.log('🟡 Resultado del refresh:', {
+        existe: !!sessionRefresh,
+        tieneToken: !!sessionRefresh?.access_token,
+        error: errorRefresh?.message
+      })
+      
+      session = sessionRefresh
+    }
+
+    if (!session || !session.access_token) {
+      console.error('❌ No se pudo obtener token válido')
+      throw new Error('Tu sesión expiró. Cierra sesión e ingresa de nuevo.')
+    }
+
+    console.log('✅ PASO 2: Token obtenido, longitud:', session.access_token.length)
+    console.log('📤 Enviando request a:', `${SUPABASE_FUNCTIONS_URL}/crear-usuario`)
+
+    // Llamar a la Edge Function
+    const response = await fetch(`${SUPABASE_FUNCTIONS_URL}/crear-usuario`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': session.access_token
+      },
+      body: JSON.stringify({
+        nombre_completo: nuevoNombre,
+        email: nuevoEmail,
+        password: nuevaPassword,
+        id_rol: isNaN(Number(nuevoRol)) ? nuevoRol : Number(nuevoRol),
+        id_planta: nuevaPlanta ? (isNaN(Number(nuevaPlanta)) ? nuevaPlanta : Number(nuevaPlanta)) : null,
+        activo: true
+      })
+    })
+
+    console.log('📥 PASO 3: Respuesta recibida')
+    console.log('📥 Status:', response.status)
+    console.log('📥 Headers:', Object.fromEntries(response.headers.entries()))
+
+    const result = await response.json()
+    console.log('📦 Body:', result)
+
+    if (!response.ok) {
+      throw new Error(result.error || `Error HTTP ${response.status}`)
+    }
+
+    if (result.error) throw new Error(result.error)
+
+    console.log('✅ Usuario creado exitosamente')
+    toast.success('Usuario creado exitosamente')
+    cerrarModalCrear()
+    await cargarDatos()
+  } catch (error) {
+    console.error('❌ ERROR FINAL:', error)
+    toast.error('Error: ' + error.message)
+  } finally {
+    setCreando(false)
+  }
+}
 
   const rolEdicionCodigo = roles.find(r => String(r.id_rol) === formRol)?.codigo
   const rolCreacionCodigo = roles.find(r => String(r.id_rol) === nuevoRol)?.codigo
