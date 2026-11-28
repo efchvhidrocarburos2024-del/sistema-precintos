@@ -28,18 +28,35 @@ const btnHeaderStyle = {
   fontWeight: 'bold' 
 }
 
+// ✅ Estilos forzados para dropdowns legibles
+const selectStyle = { 
+  width: '100%', 
+  padding: '10px', 
+  borderRadius: '8px', 
+  border: '1px solid #d1d5db', 
+  fontSize: '14px',
+  backgroundColor: 'white',
+  color: 'black'
+}
+
+const optionStyle = { 
+  backgroundColor: 'white', 
+  color: 'black' 
+}
+
 export default function GestionCatalogos({ setPantalla }) {
   const [vista, setVista] = useState('menu')
   const [datos, setDatos] = useState([])
   const [cargando, setCargando] = useState(false)
-  const [grupos, setGrupos] = useState([]) // ✅ NUEVO: Grupos de productos
+  const [grupos, setGrupos] = useState([])
   
   // Estados para el Modal
   const [modalAbierto, setModalAbierto] = useState(false)
   const [editandoId, setEditandoId] = useState(null)
   const [formCodigo, setFormCodigo] = useState('')
   const [formNombre, setFormNombre] = useState('')
-  const [formGrupo, setFormGrupo] = useState('') // ✅ NUEVO: Grupo seleccionado
+  const [formGrupo, setFormGrupo] = useState('')
+  const [formPrefijo, setFormPrefijo] = useState('') // ✅ NUEVO: para plantas
   const [guardando, setGuardando] = useState(false)
 
   const obtenerColumnaId = () => {
@@ -56,16 +73,15 @@ export default function GestionCatalogos({ setPantalla }) {
     cargarDatos()
   }, [vista])
 
-  // ✅ Cargar grupos de productos cuando la vista es 'productos'
   async function cargarDatos() {
     setCargando(true)
     const tabla = vista === 'proveedores' ? 'proveedores' : vista === 'productos' ? 'productos' : 'plantas'
     
-    let query = supabase.from(tabla).select('*').order('nombre')
-    
-    // Si es productos, incluir el grupo relacionado
+    let query
     if (vista === 'productos') {
       query = supabase.from(tabla).select('*, grupos_productos(id, nombre, codigo)').order('nombre')
+    } else {
+      query = supabase.from(tabla).select('*').order('nombre')
     }
     
     const { data, error } = await query
@@ -77,7 +93,6 @@ export default function GestionCatalogos({ setPantalla }) {
       setDatos(data || [])
     }
     
-    // Cargar grupos de productos si estamos en la vista de productos
     if (vista === 'productos') {
       const { data: gruposData, error: gruposError } = await supabase
         .from('grupos_productos')
@@ -100,17 +115,22 @@ export default function GestionCatalogos({ setPantalla }) {
       setEditandoId(obtenerValorId(item))
       setFormCodigo(item.codigo || '')
       setFormNombre(item.nombre || '')
-      // ✅ Si es producto, cargar el grupo asignado
       if (vista === 'productos') {
         setFormGrupo(item.grupos_productos?.id || item.id_grupo_producto || '')
       } else {
         setFormGrupo('')
+      }
+      if (vista === 'plantas') {
+        setFormPrefijo(item.prefijo_correlativo || '') // ✅ Cargar prefijo
+      } else {
+        setFormPrefijo('')
       }
     } else {
       setEditandoId(null)
       setFormCodigo('')
       setFormNombre('')
       setFormGrupo('')
+      setFormPrefijo('')
     }
     setModalAbierto(true)
   }
@@ -121,37 +141,47 @@ export default function GestionCatalogos({ setPantalla }) {
     setFormCodigo('')
     setFormNombre('')
     setFormGrupo('')
+    setFormPrefijo('')
   }
 
   async function guardarRegistro(e) {
     e.preventDefault()
-    if (!formCodigo || !formNombre) return toast.error('Completa todos los campos')
     
-    // ✅ Validar que el grupo esté seleccionado si es producto
-    if (vista === 'productos' && !formGrupo) {
-      return toast.error('Debes seleccionar un Grupo de Producto')
-    }
+    // ✅ Validaciones específicas por vista
+    if (!formCodigo || !formNombre) return toast.error('Completa todos los campos')
+    if (vista === 'productos' && !formGrupo) return toast.error('Debes seleccionar un Grupo de Producto')
+    if (vista === 'plantas' && !formPrefijo) return toast.error('Debes ingresar el Prefijo Correlativo')
     
     setGuardando(true)
     const tabla = vista === 'proveedores' ? 'proveedores' : vista === 'productos' ? 'productos' : 'plantas'
     const idColumn = obtenerColumnaId()
     
+    // ✅ Construir objeto de datos según la vista
+    let datosAGuardar
+    if (vista === 'plantas') {
+      datosAGuardar = {
+        codigo: formCodigo.trim().toUpperCase(),
+        nombre: formNombre.trim(),
+        prefijo_correlativo: formPrefijo.trim().toUpperCase()
+      }
+    } else if (vista === 'productos') {
+      datosAGuardar = {
+        codigo: formCodigo.trim(),
+        nombre: formNombre.trim(),
+        id_grupo_producto: formGrupo
+      }
+    } else {
+      datosAGuardar = {
+        codigo: formCodigo.trim(),
+        nombre: formNombre.trim()
+      }
+    }
+    
     try {
       if (editandoId) {
-        // EDICIÓN
-        const datosActualizar = { 
-          codigo: formCodigo, 
-          nombre: formNombre 
-        }
-        
-        // ✅ Agregar grupo si es producto
-        if (vista === 'productos') {
-          datosActualizar.id_grupo_producto = formGrupo
-        }
-        
         const { data, error } = await supabase
           .from(tabla)
-          .update(datosActualizar)
+          .update(datosAGuardar)
           .eq(idColumn, editandoId)
           .select()
 
@@ -160,21 +190,9 @@ export default function GestionCatalogos({ setPantalla }) {
 
         toast.success('Actualizado correctamente')
       } else {
-        // CREACIÓN
-        const datosInsertar = { 
-          codigo: formCodigo, 
-          nombre: formNombre, 
-          activo: true 
-        }
-        
-        // ✅ Agregar grupo si es producto
-        if (vista === 'productos') {
-          datosInsertar.id_grupo_producto = formGrupo
-        }
-        
         const { data, error } = await supabase
           .from(tabla)
-          .insert(datosInsertar)
+          .insert({ ...datosAGuardar, activo: true })
           .select()
 
         if (error) throw error
@@ -361,8 +379,8 @@ export default function GestionCatalogos({ setPantalla }) {
                   <tr style={{ textAlign: 'left' }}>
                     <th style={{ padding: '15px' }}>CÓDIGO</th>
                     <th style={{ padding: '15px' }}>NOMBRE</th>
-                    {/* ✅ Columna GRUPO solo para productos */}
                     {vista === 'productos' && <th style={{ padding: '15px' }}>GRUPO</th>}
+                    {vista === 'plantas' && <th style={{ padding: '15px' }}>PREFIJO</th>}
                     <th style={{ padding: '15px' }}>ESTADO</th>
                     <th style={{ padding: '15px', textAlign: 'center' }}>ACCIONES</th>
                   </tr>
@@ -372,7 +390,6 @@ export default function GestionCatalogos({ setPantalla }) {
                     <tr key={obtenerValorId(item)} style={{ borderBottom: '1px solid #eee', backgroundColor: item.activo ? 'white' : '#f9fafb' }}>
                       <td style={{ padding: '15px', fontWeight: 'bold' }}>{item.codigo}</td>
                       <td style={{ padding: '15px' }}>{item.nombre}</td>
-                      {/* ✅ Mostrar grupo si es producto */}
                       {vista === 'productos' && (
                         <td style={{ padding: '15px' }}>
                           <span style={{ 
@@ -384,6 +401,20 @@ export default function GestionCatalogos({ setPantalla }) {
                             fontWeight: 'bold' 
                           }}>
                             {item.grupos_productos?.nombre || 'Sin grupo'}
+                          </span>
+                        </td>
+                      )}
+                      {vista === 'plantas' && (
+                        <td style={{ padding: '15px' }}>
+                          <span style={{ 
+                            padding: '4px 10px', 
+                            backgroundColor: '#f3e8ff', 
+                            color: '#7e22ce', 
+                            borderRadius: '12px', 
+                            fontSize: '12px', 
+                            fontWeight: 'bold' 
+                          }}>
+                            {item.prefijo_correlativo || 'N/A'}
                           </span>
                         </td>
                       )}
@@ -415,36 +446,72 @@ export default function GestionCatalogos({ setPantalla }) {
               {editandoId ? 'Editar Registro' : 'Nuevo Registro'}
             </h3>
             <form onSubmit={guardarRegistro} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <Input label="Código (RUC / ID)" value={formCodigo} onChange={(e) => setFormCodigo(e.target.value)} placeholder="Ej. 025" required />
-              <Input label="Nombre" value={formNombre} onChange={(e) => setFormNombre(e.target.value)} placeholder="Ej. DIESEL" required />
               
-              {/* ✅ Dropdown de Grupo de Producto (solo para productos) */}
-              {vista === 'productos' && (
-                <div>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '13px', color: 'var(--text-dark)' }}>
-                    Grupo de Producto *
-                  </label>
-                  <select 
-                    value={formGrupo} 
-                    onChange={(e) => setFormGrupo(e.target.value)}
-                    required
-                    style={{ 
-                      width: '100%', 
-                      padding: '10px', 
-                      borderRadius: '8px', 
-                      border: '1px solid #d1d5db', 
-                      fontSize: '14px',
-                      backgroundColor: 'white'
-                    }}
-                  >
-                    <option value="">Seleccione un grupo...</option>
-                    {grupos.map(g => (
-                      <option key={g.id} value={g.id}>
-                        {g.nombre} ({g.codigo})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {/* ====== CAMPOS PARA PLANTAS ====== */}
+              {vista === 'plantas' ? (
+                <>
+                  <Input 
+                    label="Nombre de la Planta" 
+                    value={formNombre} 
+                    onChange={(e) => setFormNombre(e.target.value)} 
+                    placeholder="Ej. Pampilla" 
+                    required 
+                  />
+                  <Input 
+                    label="Código Corto" 
+                    value={formCodigo} 
+                    onChange={(e) => setFormCodigo(e.target.value)} 
+                    placeholder="Ej. PAM" 
+                    required 
+                  />
+                  <Input 
+                    label="Prefijo Correlativo" 
+                    value={formPrefijo} 
+                    onChange={(e) => setFormPrefijo(e.target.value)} 
+                    placeholder="Ej. PAMPILLA" 
+                    required 
+                  />
+                </>
+              ) : (
+                <>
+                  {/* ====== CAMPOS PARA PROVEEDORES Y PRODUCTOS ====== */}
+                  <Input 
+                    label={vista === 'proveedores' ? 'Código (RUC)' : 'Código (ID)'} 
+                    value={formCodigo} 
+                    onChange={(e) => setFormCodigo(e.target.value)} 
+                    placeholder={vista === 'proveedores' ? 'Ej. 20100128218' : 'Ej. 025'} 
+                    required 
+                  />
+                  <Input 
+                    label="Nombre" 
+                    value={formNombre} 
+                    onChange={(e) => setFormNombre(e.target.value)} 
+                    placeholder={vista === 'proveedores' ? 'Ej. PETROPERU' : 'Ej. DIESEL'} 
+                    required 
+                  />
+                  
+                  {/* ====== DROPDOWN GRUPO (solo productos) ====== */}
+                  {vista === 'productos' && (
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '13px', color: 'var(--text-dark)' }}>
+                        Grupo de Producto *
+                      </label>
+                      <select 
+                        value={formGrupo} 
+                        onChange={(e) => setFormGrupo(e.target.value)}
+                        required
+                        style={selectStyle}
+                      >
+                        <option value="" style={optionStyle}>Seleccione un grupo...</option>
+                        {grupos.map(g => (
+                          <option key={g.id} value={g.id} style={optionStyle}>
+                            {g.nombre} ({g.codigo})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </>
               )}
               
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
