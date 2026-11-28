@@ -6,9 +6,9 @@ import { Card, Input, Boton } from './ui'
 
 // ══ PALETA CORPORATIVA PETROAMÉRICA — BANNER ══
 const AZUL_PROFUNDO = '#001B5E'
-const AZUL_CORPORATIVO = '#0033A0'   // ← color principal del logo
+const AZUL_CORPORATIVO = '#0033A0'
 const AZUL_MEDIO = '#0057D8'
-const CYAN = '#00AEEF'               // ← acento / línea inferior
+const CYAN = '#00AEEF'
 const BLANCO = '#FFFFFF'
 
 const cardStyle = {
@@ -16,7 +16,7 @@ const cardStyle = {
   boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '2px solid transparent', cursor: 'pointer',
   transition: 'all 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
 }
-// ✅ Estilo del botón para el banner corporativo
+
 const btnHeaderStyle = { 
   background: 'rgba(255,255,255,0.14)', 
   border: '1px solid rgba(255,255,255,0.6)', 
@@ -29,41 +29,69 @@ const btnHeaderStyle = {
 }
 
 export default function GestionCatalogos({ setPantalla }) {
-  const [vista, setVista] = useState('menu') // 'menu', 'proveedores', 'productos', 'plantas'
+  const [vista, setVista] = useState('menu')
   const [datos, setDatos] = useState([])
   const [cargando, setCargando] = useState(false)
+  const [grupos, setGrupos] = useState([]) // ✅ NUEVO: Grupos de productos
   
   // Estados para el Modal
   const [modalAbierto, setModalAbierto] = useState(false)
   const [editandoId, setEditandoId] = useState(null)
   const [formCodigo, setFormCodigo] = useState('')
   const [formNombre, setFormNombre] = useState('')
+  const [formGrupo, setFormGrupo] = useState('') // ✅ NUEVO: Grupo seleccionado
   const [guardando, setGuardando] = useState(false)
 
-  // Función auxiliar para obtener el nombre real de la columna ID según la tabla
   const obtenerColumnaId = () => {
-    if (vista === 'plantas') return 'id_planta' // Si plantas llegara a fallar, cámbialo a 'id'
-    return 'id' // Proveedores y productos usan 'id'
+    if (vista === 'plantas') return 'id_planta'
+    return 'id'
   }
 
-  // Función auxiliar para obtener el valor del ID del objeto
   const obtenerValorId = (item) => {
     return item.id || item.id_producto || item.id_proveedor || item.id_planta
   }
 
-  // Cargar datos según la vista
   useEffect(() => {
     if (vista === 'menu') return
     cargarDatos()
   }, [vista])
 
+  // ✅ Cargar grupos de productos cuando la vista es 'productos'
   async function cargarDatos() {
     setCargando(true)
     const tabla = vista === 'proveedores' ? 'proveedores' : vista === 'productos' ? 'productos' : 'plantas'
-    const { data, error } = await supabase.from(tabla).select('*').order('nombre')
     
-    if (error) toast.error('Error al cargar datos')
-    else setDatos(data || [])
+    let query = supabase.from(tabla).select('*').order('nombre')
+    
+    // Si es productos, incluir el grupo relacionado
+    if (vista === 'productos') {
+      query = supabase.from(tabla).select('*, grupos_productos(id, nombre, codigo)').order('nombre')
+    }
+    
+    const { data, error } = await query
+    
+    if (error) {
+      toast.error('Error al cargar datos')
+      console.error(error)
+    } else {
+      setDatos(data || [])
+    }
+    
+    // Cargar grupos de productos si estamos en la vista de productos
+    if (vista === 'productos') {
+      const { data: gruposData, error: gruposError } = await supabase
+        .from('grupos_productos')
+        .select('id, nombre, codigo')
+        .eq('activo', true)
+        .order('codigo')
+      
+      if (gruposError) {
+        console.error('Error al cargar grupos:', gruposError)
+      } else {
+        setGrupos(gruposData || [])
+      }
+    }
+    
     setCargando(false)
   }
 
@@ -72,10 +100,17 @@ export default function GestionCatalogos({ setPantalla }) {
       setEditandoId(obtenerValorId(item))
       setFormCodigo(item.codigo || '')
       setFormNombre(item.nombre || '')
+      // ✅ Si es producto, cargar el grupo asignado
+      if (vista === 'productos') {
+        setFormGrupo(item.grupos_productos?.id || item.id_grupo_producto || '')
+      } else {
+        setFormGrupo('')
+      }
     } else {
       setEditandoId(null)
       setFormCodigo('')
       setFormNombre('')
+      setFormGrupo('')
     }
     setModalAbierto(true)
   }
@@ -85,11 +120,17 @@ export default function GestionCatalogos({ setPantalla }) {
     setEditandoId(null)
     setFormCodigo('')
     setFormNombre('')
+    setFormGrupo('')
   }
 
   async function guardarRegistro(e) {
     e.preventDefault()
     if (!formCodigo || !formNombre) return toast.error('Completa todos los campos')
+    
+    // ✅ Validar que el grupo esté seleccionado si es producto
+    if (vista === 'productos' && !formGrupo) {
+      return toast.error('Debes seleccionar un Grupo de Producto')
+    }
     
     setGuardando(true)
     const tabla = vista === 'proveedores' ? 'proveedores' : vista === 'productos' ? 'productos' : 'plantas'
@@ -98,9 +139,19 @@ export default function GestionCatalogos({ setPantalla }) {
     try {
       if (editandoId) {
         // EDICIÓN
+        const datosActualizar = { 
+          codigo: formCodigo, 
+          nombre: formNombre 
+        }
+        
+        // ✅ Agregar grupo si es producto
+        if (vista === 'productos') {
+          datosActualizar.id_grupo_producto = formGrupo
+        }
+        
         const { data, error } = await supabase
           .from(tabla)
-          .update({ codigo: formCodigo, nombre: formNombre })
+          .update(datosActualizar)
           .eq(idColumn, editandoId)
           .select()
 
@@ -110,9 +161,20 @@ export default function GestionCatalogos({ setPantalla }) {
         toast.success('Actualizado correctamente')
       } else {
         // CREACIÓN
+        const datosInsertar = { 
+          codigo: formCodigo, 
+          nombre: formNombre, 
+          activo: true 
+        }
+        
+        // ✅ Agregar grupo si es producto
+        if (vista === 'productos') {
+          datosInsertar.id_grupo_producto = formGrupo
+        }
+        
         const { data, error } = await supabase
           .from(tabla)
-          .insert({ codigo: formCodigo, nombre: formNombre, activo: true })
+          .insert(datosInsertar)
           .select()
 
         if (error) throw error
@@ -171,7 +233,6 @@ export default function GestionCatalogos({ setPantalla }) {
           <button onClick={() => setVista('menu')} style={btnHeaderStyle}>← Volver al Menú</button>
         )}
         
-        {/* ✅ Icono ️ al lado izquierdo del título */}
         <div style={{ 
           width: '52px', 
           height: '52px', 
@@ -204,7 +265,6 @@ export default function GestionCatalogos({ setPantalla }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
             
-            {/* ✅ Tarjeta Proveedores con icono 🏢 y efecto hover completo */}
             <div onClick={() => setVista('proveedores')} style={cardStyle} 
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = AZUL_CORPORATIVO
@@ -275,7 +335,7 @@ export default function GestionCatalogos({ setPantalla }) {
     )
   }
 
-  // --- VISTA 2: TABLA DE DATOS (Proveedores, Productos o Plantas) ---
+  // --- VISTA 2: TABLA DE DATOS ---
   const tituloTabla = vista === 'proveedores' ? 'Proveedores' : vista === 'productos' ? 'Productos' : 'Plantas / Terminales'
   const idColumn = obtenerColumnaId()
 
@@ -301,6 +361,8 @@ export default function GestionCatalogos({ setPantalla }) {
                   <tr style={{ textAlign: 'left' }}>
                     <th style={{ padding: '15px' }}>CÓDIGO</th>
                     <th style={{ padding: '15px' }}>NOMBRE</th>
+                    {/* ✅ Columna GRUPO solo para productos */}
+                    {vista === 'productos' && <th style={{ padding: '15px' }}>GRUPO</th>}
                     <th style={{ padding: '15px' }}>ESTADO</th>
                     <th style={{ padding: '15px', textAlign: 'center' }}>ACCIONES</th>
                   </tr>
@@ -310,6 +372,21 @@ export default function GestionCatalogos({ setPantalla }) {
                     <tr key={obtenerValorId(item)} style={{ borderBottom: '1px solid #eee', backgroundColor: item.activo ? 'white' : '#f9fafb' }}>
                       <td style={{ padding: '15px', fontWeight: 'bold' }}>{item.codigo}</td>
                       <td style={{ padding: '15px' }}>{item.nombre}</td>
+                      {/* ✅ Mostrar grupo si es producto */}
+                      {vista === 'productos' && (
+                        <td style={{ padding: '15px' }}>
+                          <span style={{ 
+                            padding: '4px 10px', 
+                            backgroundColor: '#e0f2fe', 
+                            color: '#0369a1', 
+                            borderRadius: '12px', 
+                            fontSize: '12px', 
+                            fontWeight: 'bold' 
+                          }}>
+                            {item.grupos_productos?.nombre || 'Sin grupo'}
+                          </span>
+                        </td>
+                      )}
                       <td style={{ padding: '15px' }}>
                         <span style={{ padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold', backgroundColor: item.activo ? '#DCFCE7' : '#FEE2E2', color: item.activo ? '#166534' : '#991B1B' }}>
                           {item.activo ? 'Activo' : 'Inactivo'}
@@ -338,8 +415,37 @@ export default function GestionCatalogos({ setPantalla }) {
               {editandoId ? 'Editar Registro' : 'Nuevo Registro'}
             </h3>
             <form onSubmit={guardarRegistro} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <Input label="Código (RUC / ID)" value={formCodigo} onChange={(e) => setFormCodigo(e.target.value)} placeholder="Ej. 20100128218" required />
-              <Input label="Nombre" value={formNombre} onChange={(e) => setFormNombre(e.target.value)} placeholder="Ej. PETROPERU" required />
+              <Input label="Código (RUC / ID)" value={formCodigo} onChange={(e) => setFormCodigo(e.target.value)} placeholder="Ej. 025" required />
+              <Input label="Nombre" value={formNombre} onChange={(e) => setFormNombre(e.target.value)} placeholder="Ej. DIESEL" required />
+              
+              {/* ✅ Dropdown de Grupo de Producto (solo para productos) */}
+              {vista === 'productos' && (
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '13px', color: 'var(--text-dark)' }}>
+                    Grupo de Producto *
+                  </label>
+                  <select 
+                    value={formGrupo} 
+                    onChange={(e) => setFormGrupo(e.target.value)}
+                    required
+                    style={{ 
+                      width: '100%', 
+                      padding: '10px', 
+                      borderRadius: '8px', 
+                      border: '1px solid #d1d5db', 
+                      fontSize: '14px',
+                      backgroundColor: 'white'
+                    }}
+                  >
+                    <option value="">Seleccione un grupo...</option>
+                    {grupos.map(g => (
+                      <option key={g.id} value={g.id}>
+                        {g.nombre} ({g.codigo})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                 <Boton variante="outline" onClick={cerrarModal} style={{ flex: 1 }} disabled={guardando}>Cancelar</Boton>
