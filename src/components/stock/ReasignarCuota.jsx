@@ -22,12 +22,17 @@ export default function RegistrarCuota({ onVolver, rol }) {
     tipo_cuota: 'Bolsa',
     fecha_inicio: '',
     fecha_fin: '',
-    observaciones: '1'
+    observaciones: '1',
+    compensacion: false,
+    id_planta_alterna: '',
+    cantidad_compensada: ''
   }])
   const [guardando, setGuardando] = useState(false)
 
   useEffect(() => {
     const cargarDatos = async () => {
+      console.log('🔄 Cargando catálogos...')
+      
       const [p, prov, g, prod, ases] = await Promise.all([
         supabase.from('plantas').select('id_planta, nombre, codigo').eq('activo', true).order('nombre'),
         supabase.from('proveedores').select('id, nombre, codigo').eq('activo', true).order('nombre'),
@@ -35,6 +40,13 @@ export default function RegistrarCuota({ onVolver, rol }) {
         supabase.from('productos').select('id, nombre, codigo, id_grupo_producto').eq('activo', true).order('nombre'),
         supabase.from('usuarios').select('id_usuario, nombre_completo, email').eq('activo', true).order('nombre_completo')
       ])
+
+      console.log('📦 Plantas:', p.data)
+      console.log('🏢 Proveedores:', prov.data)
+      console.log('📊 Grupos:', g.data)
+      console.log('🛢️ Productos:', prod.data)
+      console.log('👥 Asesores:', ases.data)
+
       setPlantas(p.data || [])
       setProveedores(prov.data || [])
       setGrupos(g.data || [])
@@ -44,19 +56,28 @@ export default function RegistrarCuota({ onVolver, rol }) {
     cargarDatos()
   }, [])
 
-  // Validar si Planta y Proveedor están seleccionados
+  // Validar si los campos obligatorios están completos
   const camposObligatoriosCompletos = idPlanta && idProveedor && (tipoRegistro === 'planta' || idAsesor)
 
   const handlePlantaChange = (e) => {
-    setIdPlanta(e.target.value)
+    const valor = e.target.value
+    console.log('🏭 Planta seleccionada:', valor)
+    setIdPlanta(valor)
   }
 
   const handleProveedorChange = (e) => {
-    setIdProveedor(e.target.value)
+    const valor = e.target.value
+    console.log('🏢 Proveedor seleccionado:', valor)
+    console.log('🔍 Buscando proveedor con id:', valor)
+    const proveedorEncontrado = proveedores.find(p => p.id === valor)
+    console.log('✅ Proveedor encontrado:', proveedorEncontrado)
+    setIdProveedor(valor)
   }
 
   const handleAsesorChange = (e) => {
-    setIdAsesor(e.target.value)
+    const valor = e.target.value
+    console.log('👤 Asesor seleccionado:', valor)
+    setIdAsesor(valor)
   }
 
   const agregarProducto = () => {
@@ -67,7 +88,10 @@ export default function RegistrarCuota({ onVolver, rol }) {
       tipo_cuota: 'Bolsa',
       fecha_inicio: '',
       fecha_fin: '',
-      observaciones: '1'
+      observaciones: '1',
+      compensacion: false,
+      id_planta_alterna: '',
+      cantidad_compensada: ''
     }])
   }
 
@@ -139,7 +163,7 @@ export default function RegistrarCuota({ onVolver, rol }) {
       const { data: { user } } = await supabase.auth.getUser()
       
       for (const p of productosForm) {
-        const { data, error } = await supabase.from('cuotas').insert({
+        const registro = {
           tipo_registro: tipoRegistro,
           id_planta: idPlanta,
           id_proveedor: idProveedor,
@@ -151,17 +175,29 @@ export default function RegistrarCuota({ onVolver, rol }) {
           tipo_cuota: p.tipo_cuota,
           cantidad: Number(p.cantidad),
           observaciones: parseInt(p.observaciones),
+          compensacion: p.compensacion || false,
+          id_planta_alterna: p.id_planta_alterna || null,
+          cantidad_compensada: Number(p.cantidad_compensada || 0),
           estado: 'activa',
           creado_por: user?.id
-        }).select()
+        }
 
-        if (error) throw error
+        console.log('💾 Guardando registro:', registro)
+
+        const { data, error } = await supabase.from('cuotas').insert(registro).select()
+
+        if (error) {
+          console.error('❌ Error al guardar:', error)
+          throw error
+        }
+
+        console.log('✅ Registro guardado:', data)
       }
 
       toast.success('Cuota registrada exitosamente')
       onVolver()
     } catch (error) {
-      console.error(error)
+      console.error('❌ Error:', error)
       toast.error('Error al guardar: ' + error.message)
     } finally {
       setGuardando(false)
@@ -200,7 +236,7 @@ export default function RegistrarCuota({ onVolver, rol }) {
             <select 
               value={idAsesor} 
               onChange={handleAsesorChange}
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: 'white', color: 'black' }}
             >
               <option value="">Seleccionar Asesor</option>
               {asesores.map(a => (
@@ -218,7 +254,7 @@ export default function RegistrarCuota({ onVolver, rol }) {
           <select 
             value={idPlanta} 
             onChange={handlePlantaChange}
-            style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
+            style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: 'white', color: 'black' }}
           >
             <option value="">Seleccionar Planta</option>
             {plantas.map(p => (
@@ -240,7 +276,7 @@ export default function RegistrarCuota({ onVolver, rol }) {
           <select 
             value={idProveedor} 
             onChange={handleProveedorChange}
-            style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
+            style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', backgroundColor: 'white', color: 'black' }}
           >
             <option value="">Seleccionar Proveedor</option>
             {proveedores.map(p => (
@@ -295,7 +331,7 @@ export default function RegistrarCuota({ onVolver, rol }) {
                   <select 
                     value={prod.id_grupo} 
                     onChange={(e) => actualizarProducto(index, 'id_grupo', e.target.value)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
                   >
                     <option value="">Seleccionar</option>
                     {grupos.map(g => (
@@ -311,7 +347,7 @@ export default function RegistrarCuota({ onVolver, rol }) {
                     value={prod.id_producto} 
                     onChange={(e) => actualizarProducto(index, 'id_producto', e.target.value)}
                     disabled={!prod.id_grupo}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: !prod.id_grupo ? '#f3f4f6' : 'white' }}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: !prod.id_grupo ? '#f3f4f6' : 'white', color: 'black' }}
                   >
                     <option value="">Seleccionar</option>
                     {productos.filter(p => p.id_grupo_producto === prod.id_grupo).map(p => (
@@ -329,7 +365,7 @@ export default function RegistrarCuota({ onVolver, rol }) {
                     value={prod.cantidad} 
                     onChange={(e) => actualizarProducto(index, 'cantidad', e.target.value)}
                     placeholder="0.00"
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
                   />
                 </div>
 
@@ -339,7 +375,7 @@ export default function RegistrarCuota({ onVolver, rol }) {
                   <select 
                     value={prod.tipo_cuota} 
                     onChange={(e) => actualizarProducto(index, 'tipo_cuota', e.target.value)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
                   >
                     <option value="Bolsa">Bolsa</option>
                     <option value="Diaria">Diaria</option>
@@ -354,7 +390,7 @@ export default function RegistrarCuota({ onVolver, rol }) {
                     type="date" 
                     value={prod.fecha_inicio} 
                     onChange={(e) => actualizarProducto(index, 'fecha_inicio', e.target.value)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
                   />
                 </div>
 
@@ -366,7 +402,7 @@ export default function RegistrarCuota({ onVolver, rol }) {
                     value={prod.fecha_fin} 
                     onChange={(e) => actualizarProducto(index, 'fecha_fin', e.target.value)}
                     readOnly={prod.tipo_cuota === 'Diaria'}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: prod.tipo_cuota === 'Diaria' ? '#f3f4f6' : 'white' }}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: prod.tipo_cuota === 'Diaria' ? '#f3f4f6' : 'white', color: 'black' }}
                   />
                 </div>
 
@@ -376,7 +412,7 @@ export default function RegistrarCuota({ onVolver, rol }) {
                   <select 
                     value={prod.observaciones} 
                     onChange={(e) => actualizarProducto(index, 'observaciones', e.target.value)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
                   >
                     <option value="0">0 - Sin stock</option>
                     <option value="1">1 - Libre hasta agotar</option>
@@ -405,7 +441,7 @@ export default function RegistrarCuota({ onVolver, rol }) {
                         <select 
                           value={prod.id_planta_alterna || ''} 
                           onChange={(e) => actualizarProducto(index, 'id_planta_alterna', e.target.value)}
-                          style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
+                          style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
                         >
                           <option value="">Seleccionar</option>
                           {plantas.filter(p => p.id_planta !== idPlanta).map(p => (
@@ -421,7 +457,7 @@ export default function RegistrarCuota({ onVolver, rol }) {
                           value={prod.cantidad_compensada || ''} 
                           onChange={(e) => actualizarProducto(index, 'cantidad_compensada', e.target.value)}
                           placeholder="0.00"
-                          style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
+                          style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: 'white', color: 'black' }}
                         />
                       </div>
                     </div>
