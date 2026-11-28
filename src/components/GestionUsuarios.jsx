@@ -5,20 +5,21 @@ import { Card, Input, Select, Boton } from './ui'
 
 const btnHeaderStyle = { background: '#f3f4f6', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold' }
 
+// ✅ URL base de tu proyecto (reemplaza si cambia)
+const SUPABASE_FUNCTIONS_URL = 'https://podbbsgpiklvxkfcxqdn.supabase.co/functions/v1'
+
 export default function GestionUsuarios({ setPantalla }) {
   const [usuarios, setUsuarios] = useState([])
   const [roles, setRoles] = useState([])
   const [plantas, setPlantas] = useState([])
   const [cargando, setCargando] = useState(true)
 
-  // --- ESTADOS PARA EDITAR ---
   const [modalEditarAbierto, setModalEditarAbierto] = useState(false)
   const [usuarioEditando, setUsuarioEditando] = useState(null)
   const [formRol, setFormRol] = useState('')
   const [formPlanta, setFormPlanta] = useState('')
   const [formActivo, setFormActivo] = useState(true)
 
-  // --- ESTADOS PARA CREAR ---
   const [modalCrearAbierto, setModalCrearAbierto] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState('')
   const [nuevoEmail, setNuevoEmail] = useState('')
@@ -64,7 +65,6 @@ export default function GestionUsuarios({ setPantalla }) {
     setCargando(false)
   }
 
-  // --- LÓGICA DE EDICIÓN ---
   const abrirModalEditar = (usuario) => {
     setUsuarioEditando(usuario)
     setFormRol(String(usuario.roles?.id_rol || ''))
@@ -84,8 +84,8 @@ export default function GestionUsuarios({ setPantalla }) {
     
     setGuardando(true)
     try {
-      const idRolParsed = isNaN(Number(formRol)) ? formRol : Number(formRol);
-      const idPlantaParsed = formPlanta ? (isNaN(Number(formPlanta)) ? formPlanta : Number(formPlanta)) : null;
+      const idRolParsed = isNaN(Number(formRol)) ? formRol : Number(formRol)
+      const idPlantaParsed = formPlanta ? (isNaN(Number(formPlanta)) ? formPlanta : Number(formPlanta)) : null
 
       const { data, error } = await supabase
         .from('usuarios')
@@ -98,7 +98,7 @@ export default function GestionUsuarios({ setPantalla }) {
         .select()
 
       if (error) throw error
-      if (!data || data.length === 0) throw new Error('No se pudo actualizar. Revisa las políticas RLS en Supabase.')
+      if (!data || data.length === 0) throw new Error('No se pudo actualizar. Revisa las políticas RLS.')
 
       toast.success('Usuario actualizado correctamente')
       cerrarModalEditar()
@@ -110,7 +110,6 @@ export default function GestionUsuarios({ setPantalla }) {
     }
   }
 
-  // --- LÓGICA DE CREACIÓN (EDGE FUNCTION) ---
   const cerrarModalCrear = () => {
     setModalCrearAbierto(false)
     setNuevoNombre('')
@@ -120,6 +119,7 @@ export default function GestionUsuarios({ setPantalla }) {
     setNuevaPlanta('')
   }
 
+  // ✅ CREACIÓN USANDO FETCH DIRECTO (control total del header)
   async function crearUsuario(e) {
     e.preventDefault()
     if (!nuevoNombre || !nuevoEmail || !nuevaPassword || !nuevoRol) {
@@ -131,58 +131,44 @@ export default function GestionUsuarios({ setPantalla }) {
 
     setCreando(true)
     try {
-      // ✅ PASO 1: Obtener la sesión actual con token fresco
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      // PASO 1: Forzar refresh de la sesión para obtener token fresco
+      const { data: { session }, error: refreshError } = await supabase.auth.refreshSession()
       
-      if (sessionError) {
-        console.error('Error al obtener sesión:', sessionError)
-        throw new Error('Error al verificar tu sesión. Cierra sesión e ingresa de nuevo.')
-      }
-
-      if (!session || !session.access_token) {
-        console.error('Sesión no encontrada o sin token')
+      if (refreshError || !session || !session.access_token) {
+        console.error('❌ Error al refrescar sesión:', refreshError)
         throw new Error('Tu sesión expiró. Cierra sesión e ingresa de nuevo.')
       }
 
-      console.log('✅ Token obtenido:', session.access_token.substring(0, 20) + '...')
+      console.log('✅ Token fresco obtenido, longitud:', session.access_token.length)
 
-      // ✅ PASO 2: Invocar la Edge Function con el token explícito en el header
-      const { data, error } = await supabase.functions.invoke('crear-usuario', {
+      // PASO 2: Llamar a la Edge Function con fetch nativo
+      const response = await fetch(`${SUPABASE_FUNCTIONS_URL}/crear-usuario`, {
+        method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
+          'apikey': session.access_token // algunos proyectos requieren esto también
         },
-        body: {
+        body: JSON.stringify({
           nombre_completo: nuevoNombre,
           email: nuevoEmail,
           password: nuevaPassword,
           id_rol: isNaN(Number(nuevoRol)) ? nuevoRol : Number(nuevoRol),
           id_planta: nuevaPlanta ? (isNaN(Number(nuevaPlanta)) ? nuevaPlanta : Number(nuevaPlanta)) : null,
           activo: true
-        }
+        })
       })
 
-      console.log('📤 Respuesta de Edge Function:', { data, error })
+      console.log('📥 Status de respuesta:', response.status)
 
-      if (error) {
-        let errorMsg = error.message;
-        if (error.context && typeof error.context.text === 'function') {
-          try {
-            const text = await error.context.text();
-            try {
-              const parsed = JSON.parse(text);
-              errorMsg = parsed.message || parsed.error || text;
-            } catch {
-              errorMsg = text || errorMsg;
-            }
-          } catch (err) {
-            console.error("No se pudo leer el detalle del error", err);
-          }
-        }
-        throw new Error(errorMsg);
+      const result = await response.json()
+      console.log('📦 Body de respuesta:', result)
+
+      if (!response.ok) {
+        throw new Error(result.error || `Error HTTP ${response.status}`)
       }
 
-      if (data && data.error) throw new Error(data.error)
+      if (result.error) throw new Error(result.error)
 
       toast.success('Usuario creado exitosamente')
       cerrarModalCrear()
