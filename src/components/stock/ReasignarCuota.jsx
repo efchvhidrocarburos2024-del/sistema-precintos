@@ -3,277 +3,460 @@ import { supabase } from '../../supabase'
 import toast from 'react-hot-toast'
 import { Card, Boton } from '../ui'
 
-export default function ReasignarCuota({ onVolver, rol }) {
+export default function RegistrarCuota({ onVolver, rol }) {
+  const [tipoRegistro, setTipoRegistro] = useState('planta')
   const [plantas, setPlantas] = useState([])
+  const [proveedores, setProveedores] = useState([])
+  const [grupos, setGrupos] = useState([])
   const [productos, setProductos] = useState([])
-  const [plantaSeleccionada, setPlantaSeleccionada] = useState('')
-  const [productoSeleccionado, setProductoSeleccionado] = useState('')
-  const [cuotasOrigen, setCuotasOrigen] = useState([])
-  const [cuotasDestino, setCuotasDestino] = useState([])
-  const [cuotaOrigen, setCuotaOrigen] = useState(null)
-  const [cuotaDestino, setCuotaDestino] = useState(null)
-  const [cantidad, setCantidad] = useState('')
-  const [motivo, setMotivo] = useState('')
+  const [asesores, setAsesores] = useState([])
+  
+  const [idPlanta, setIdPlanta] = useState('')
+  const [idProveedor, setIdProveedor] = useState('')
+  const [idAsesor, setIdAsesor] = useState('')
+  
+  const [productosForm, setProductosForm] = useState([{
+    id_grupo: '',
+    id_producto: '',
+    cantidad: '',
+    tipo_cuota: 'Bolsa',
+    fecha_inicio: '',
+    fecha_fin: '',
+    observaciones: '1'
+  }])
   const [guardando, setGuardando] = useState(false)
 
   useEffect(() => {
-    const cargarCatalogos = async () => {
-      const [p, prod] = await Promise.all([
-        supabase.from('plantas').select('id, nombre, codigo').eq('activo', true).order('nombre'),
-        supabase.from('productos').select('id, nombre, codigo').eq('activo', true).order('nombre')
+    const cargarDatos = async () => {
+      const [p, prov, g, prod, ases] = await Promise.all([
+        supabase.from('plantas').select('id_planta, nombre, codigo').eq('activo', true).order('nombre'),
+        supabase.from('proveedores').select('id, nombre, codigo').eq('activo', true).order('nombre'),
+        supabase.from('grupos_productos').select('id, nombre, codigo').eq('activo', true).order('codigo'),
+        supabase.from('productos').select('id, nombre, codigo, id_grupo_producto').eq('activo', true).order('nombre'),
+        supabase.from('usuarios').select('id_usuario, nombre_completo, email').eq('activo', true).order('nombre_completo')
       ])
       setPlantas(p.data || [])
+      setProveedores(prov.data || [])
+      setGrupos(g.data || [])
       setProductos(prod.data || [])
+      setAsesores(ases.data || [])
     }
-    cargarCatalogos()
+    cargarDatos()
   }, [])
 
-  // Cargar cuotas cuando cambia planta o producto
-  useEffect(() => {
-    if (!plantaSeleccionada || !productoSeleccionado) {
-      setCuotasOrigen([])
-      setCuotasDestino([])
-      return
+  // Validar si Planta y Proveedor están seleccionados
+  const camposObligatoriosCompletos = idPlanta && idProveedor && (tipoRegistro === 'planta' || idAsesor)
+
+  const handlePlantaChange = (e) => {
+    setIdPlanta(e.target.value)
+  }
+
+  const handleProveedorChange = (e) => {
+    setIdProveedor(e.target.value)
+  }
+
+  const handleAsesorChange = (e) => {
+    setIdAsesor(e.target.value)
+  }
+
+  const agregarProducto = () => {
+    setProductosForm([...productosForm, {
+      id_grupo: '',
+      id_producto: '',
+      cantidad: '',
+      tipo_cuota: 'Bolsa',
+      fecha_inicio: '',
+      fecha_fin: '',
+      observaciones: '1'
+    }])
+  }
+
+  const actualizarProducto = (index, campo, valor) => {
+    const nuevos = [...productosForm]
+    nuevos[index][campo] = valor
+    
+    // Si cambia el grupo, resetear producto
+    if (campo === 'id_grupo') {
+      nuevos[index].id_producto = ''
     }
-
-    const cargarCuotas = async () => {
-      const { data, error } = await supabase
-        .from('cuotas')
-        .select(`
-          *,
-          usuarios:asesor_id (nombre_completo, email)
-        `)
-        .eq('planta_id', plantaSeleccionada)
-        .eq('producto_id', productoSeleccionado)
-        .eq('tipo_registro', 'asesor')
-        .eq('estado', 'activa')
-        .order('fecha_inicio', { ascending: false })
-
-      if (error) {
-        toast.error('Error al cargar cuotas')
-        return
+    
+    // Lógica de fechas según tipo de cuota
+    if (campo === 'tipo_cuota') {
+      const fechaInicio = nuevos[index].fecha_inicio
+      if (valor === 'Diaria' && fechaInicio) {
+        nuevos[index].fecha_fin = fechaInicio
+      } else if (valor === 'Paquete' && fechaInicio) {
+        const fecha = new Date(fechaInicio)
+        const primerDia = new Date(fecha.getFullYear(), fecha.getMonth(), 1)
+        const ultimoDia = new Date(fecha.getFullYear(), fecha.getMonth() + 1, 0)
+        nuevos[index].fecha_inicio = primerDia.toISOString().split('T')[0]
+        nuevos[index].fecha_fin = ultimoDia.toISOString().split('T')[0]
       }
+    }
+    
+    // Si cambia fecha_inicio y es Diaria, actualizar fecha_fin
+    if (campo === 'fecha_inicio' && nuevos[index].tipo_cuota === 'Diaria') {
+      nuevos[index].fecha_fin = valor
+    }
+    
+    // Si cambia fecha_inicio y es Paquete, calcular último día del mes
+    if (campo === 'fecha_inicio' && nuevos[index].tipo_cuota === 'Paquete') {
+      const fecha = new Date(valor)
+      const primerDia = new Date(fecha.getFullYear(), fecha.getMonth(), 1)
+      const ultimoDia = new Date(fecha.getFullYear(), fecha.getMonth() + 1, 0)
+      nuevos[index].fecha_inicio = primerDia.toISOString().split('T')[0]
+      nuevos[index].fecha_fin = ultimoDia.toISOString().split('T')[0]
+    }
+    
+    setProductosForm(nuevos)
+  }
 
-      setCuotasOrigen(data || [])
-      setCuotasDestino(data || [])
+  const eliminarProducto = (index) => {
+    if (productosForm.length > 1) {
+      setProductosForm(productosForm.filter((_, i) => i !== index))
     }
+  }
 
-    cargarCuotas()
-  }, [plantaSeleccionada, productoSeleccionado])
-
-  const handleReasignar = async () => {
-    if (!cuotaOrigen || !cuotaDestino) {
-      return toast.error('Selecciona cuota origen y destino')
+  const guardar = async () => {
+    if (!idPlanta || !idProveedor) {
+      return toast.error('Selecciona Planta y Proveedor')
     }
-    if (cuotaOrigen.id === cuotaDestino.id) {
-      return toast.error('La cuota origen y destino deben ser diferentes')
+    if (tipoRegistro === 'asesor' && !idAsesor) {
+      return toast.error('Selecciona un Asesor')
     }
-    if (!cantidad || Number(cantidad) <= 0) {
-      return toast.error('Ingresa una cantidad válida')
-    }
-    if (!motivo.trim()) {
-      return toast.error('Ingresa el motivo de la reasignación')
-    }
-
-    // Validar que la cantidad no exceda el disponible en origen
-    const disponibleOrigen = cuotaOrigen.cantidad - (cuotaOrigen.cantidad_reasignada || 0)
-    if (Number(cantidad) > disponibleOrigen) {
-      return toast.error(`La cantidad excede el disponible en origen (${disponibleOrigen} GLS)`)
+    
+    for (const p of productosForm) {
+      if (!p.id_producto || !p.cantidad || !p.fecha_inicio || !p.fecha_fin) {
+        return toast.error('Completa todos los campos de los productos')
+      }
+      if (Number(p.cantidad) < 0) {
+        return toast.error('La cantidad no puede ser negativa')
+      }
     }
 
     setGuardando(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
-
-      // 1. Actualizar cuota origen (restar cantidad)
-      const { error: errOrigen } = await supabase
-        .from('cuotas')
-        .update({ cantidad_reasignada: (cuotaOrigen.cantidad_reasignada || 0) - Number(cantidad) })
-        .eq('id', cuotaOrigen.id)
-
-      if (errOrigen) throw errOrigen
-
-      // 2. Actualizar cuota destino (sumar cantidad)
-      const { error: errDestino } = await supabase
-        .from('cuotas')
-        .update({ cantidad_reasignada: (cuotaDestino.cantidad_reasignada || 0) + Number(cantidad) })
-        .eq('id', cuotaDestino.id)
-
-      if (errDestino) throw errDestino
-
-      // 3. Registrar en tabla de reasignaciones
-      const { error: errReasig } = await supabase.from('cuotas_reasignaciones').insert({
-        cuota_origen_id: cuotaOrigen.id,
-        cuota_destino_id: cuotaDestino.id,
-        cantidad: Number(cantidad),
-        motivo: motivo.trim(),
-        usuario_admin_id: user?.id
-      })
-
-      if (errReasig) throw errReasig
-
-      // 4. Registrar en historial
-      await supabase.from('cuotas_historial').insert([
-        {
-          cuota_id: cuotaOrigen.id,
-          accion: 'REASIGNACION',
-          detalle: `Reasignación de ${cantidad} GLS a ${cuotaDestino.usuarios?.nombre_completo}. Motivo: ${motivo}`,
-          usuario_id: user?.id
-        },
-        {
-          cuota_id: cuotaDestino.id,
-          accion: 'REASIGNACION',
-          detalle: `Recibió ${cantidad} GLS de ${cuotaOrigen.usuarios?.nombre_completo}. Motivo: ${motivo}`,
-          usuario_id: user?.id
-        }
-      ])
-
-      toast.success('Reasignación ejecutada exitosamente')
       
-      // Resetear formulario
-      setCuotaOrigen(null)
-      setCuotaDestino(null)
-      setCantidad('')
-      setMotivo('')
+      for (const p of productosForm) {
+        const { data, error } = await supabase.from('cuotas').insert({
+          tipo_registro: tipoRegistro,
+          id_planta: idPlanta,
+          id_proveedor: idProveedor,
+          id_asesor: tipoRegistro === 'asesor' ? idAsesor : null,
+          id_producto: p.id_producto,
+          id_grupo_producto: p.id_grupo,
+          fecha_inicio: p.fecha_inicio,
+          fecha_fin: p.fecha_fin,
+          tipo_cuota: p.tipo_cuota,
+          cantidad: Number(p.cantidad),
+          observaciones: parseInt(p.observaciones),
+          estado: 'activa',
+          creado_por: user?.id
+        }).select()
+
+        if (error) throw error
+      }
+
+      toast.success('Cuota registrada exitosamente')
+      onVolver()
     } catch (error) {
       console.error(error)
-      toast.error('Error al reasignar: ' + error.message)
+      toast.error('Error al guardar: ' + error.message)
     } finally {
       setGuardando(false)
     }
   }
 
   return (
-    <Card style={{ padding: '30px', maxWidth: '1000px', margin: '0 auto' }}>
-      <h2 style={{ color: '#0033A0', marginBottom: '20px' }}>Reasignar Cuota entre Asesores</h2>
+    <Card style={{ padding: '30px', maxWidth: '1200px', margin: '0 auto' }}>
+      <h2 style={{ color: '#0033A0', marginBottom: '20px', textAlign: 'center' }}>Registrar Nueva Cuota</h2>
       
-      {/* Filtros: Planta y Producto */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-        <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Planta</label>
-          <select 
-            value={plantaSeleccionada} 
-            onChange={(e) => setPlantaSeleccionada(e.target.value)}
-            style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
-          >
-            <option value="">-- Seleccionar planta --</option>
-            {plantas.map(p => (
-              <option key={p.id} value={p.id}>{p.nombre}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Producto</label>
-          <select 
-            value={productoSeleccionado} 
-            onChange={(e) => setProductoSeleccionado(e.target.value)}
-            style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
-          >
-            <option value="">-- Seleccionar producto --</option>
-            {productos.map(p => (
-              <option key={p.id} value={p.id}>{p.nombre}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Cuotas disponibles */}
-      {plantaSeleccionada && productoSeleccionado && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-          {/* Cuota Origen */}
-          <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px', color: '#dc2626' }}>
-              📤 Cuota Origen (de donde se resta)
-            </label>
-            <select 
-              value={cuotaOrigen?.id || ''} 
-              onChange={(e) => setCuotaOrigen(cuotasOrigen.find(c => c.id === e.target.value))}
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
-            >
-              <option value="">-- Seleccionar --</option>
-              {cuotasOrigen.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.usuarios?.nombre_completo} - {c.fecha_inicio} ({c.cantidad - (c.cantidad_reasignada || 0)} GLS disp.)
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Cuota Destino */}
-          <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px', color: '#059669' }}>
-              📥 Cuota Destino (a donde se suma)
-            </label>
-            <select 
-              value={cuotaDestino?.id || ''} 
-              onChange={(e) => setCuotaDestino(cuotasDestino.find(c => c.id === e.target.value))}
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
-            >
-              <option value="">-- Seleccionar --</option>
-              {cuotasDestino.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.usuarios?.nombre_completo} - {c.fecha_inicio} ({c.cantidad - (c.cantidad_reasignada || 0)} GLS disp.)
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      )}
-
-      {/* Resumen de la operación */}
-      {cuotaOrigen && cuotaDestino && cuotaOrigen.id !== cuotaDestino.id && (
-        <div style={{ background: '#f0f9ff', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #bae6fd' }}>
-          <h4 style={{ margin: '0 0 10px 0', color: '#0033A0' }}>📋 Resumen de la reasignación</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
-            <p style={{ margin: 0 }}><strong>De:</strong> {cuotaOrigen.usuarios?.nombre_completo}</p>
-            <p style={{ margin: 0 }}><strong>Para:</strong> {cuotaDestino.usuarios?.nombre_completo}</p>
-            <p style={{ margin: 0, color: '#dc2626' }}><strong>Disponible origen:</strong> {cuotaOrigen.cantidad - (cuotaOrigen.cantidad_reasignada || 0)} GLS</p>
-            <p style={{ margin: 0, color: '#059669' }}><strong>Disponible destino:</strong> {cuotaDestino.cantidad - (cuotaDestino.cantidad_reasignada || 0)} GLS</p>
-          </div>
-        </div>
-      )}
-
-      {/* Campo: Cantidad */}
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>
-          Cantidad a reasignar (GLS)
-        </label>
-        <input 
-          type="number" 
-          step="0.01"
-          value={cantidad} 
-          onChange={(e) => setCantidad(e.target.value)}
-          placeholder="0.00"
-          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
-        />
-      </div>
-
-      {/* Campo: Motivo */}
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>
-          Motivo de la reasignación *
-        </label>
-        <textarea 
-          value={motivo} 
-          onChange={(e) => setMotivo(e.target.value)}
-          placeholder="Ej: Ajuste por demanda, redistribución de zona, etc."
-          rows={3}
-          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', resize: 'vertical' }}
-        />
-      </div>
-
-      {/* Botones de acción */}
-      <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
-        <Boton variante="outline" onClick={onVolver}>Cancelar</Boton>
+      {/* Selector de tipo de registro */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', justifyContent: 'center' }}>
         <Boton 
-          variante="danger" 
-          onClick={handleReasignar} 
-          disabled={guardando}
-          style={{ marginLeft: 'auto' }}
+          variante={tipoRegistro === 'planta' ? 'primary' : 'outline'} 
+          onClick={() => { setTipoRegistro('planta'); setIdAsesor('') }}
         >
-          {guardando ? 'Procesando...' : '🔄 Ejecutar Reasignación'}
+          Por Planta
+        </Boton>
+        <Boton 
+          variante={tipoRegistro === 'asesor' ? 'primary' : 'outline'} 
+          onClick={() => setTipoRegistro('asesor')}
+        >
+          Por Asesor
         </Boton>
       </div>
+
+      {/* Campos obligatorios */}
+      <div style={{ display: 'grid', gridTemplateColumns: tipoRegistro === 'asesor' ? '1fr 1fr 1fr' : '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+        
+        {/* Asesor (solo para tipo asesor, aparece primero) */}
+        {tipoRegistro === 'asesor' && (
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>
+              Asesor *
+            </label>
+            <select 
+              value={idAsesor} 
+              onChange={handleAsesorChange}
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
+            >
+              <option value="">Seleccionar Asesor</option>
+              {asesores.map(a => (
+                <option key={a.id_usuario} value={a.id_usuario}>{a.nombre_completo}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Planta */}
+        <div>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>
+            Planta *
+          </label>
+          <select 
+            value={idPlanta} 
+            onChange={handlePlantaChange}
+            style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
+          >
+            <option value="">Seleccionar Planta</option>
+            {plantas.map(p => (
+              <option key={p.id_planta} value={p.id_planta}>{p.nombre}</option>
+            ))}
+          </select>
+          {idPlanta && (
+            <small style={{ color: '#0033A0', fontWeight: 'bold', marginTop: '5px', display: 'block' }}>
+              ID: {plantas.find(p => p.id_planta === idPlanta)?.codigo}
+            </small>
+          )}
+        </div>
+
+        {/* Proveedor */}
+        <div>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>
+            Proveedor *
+          </label>
+          <select 
+            value={idProveedor} 
+            onChange={handleProveedorChange}
+            style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px' }}
+          >
+            <option value="">Seleccionar Proveedor</option>
+            {proveedores.map(p => (
+              <option key={p.id} value={p.id}>{p.nombre}</option>
+            ))}
+          </select>
+          {idProveedor && (
+            <small style={{ color: '#0033A0', fontWeight: 'bold', marginTop: '5px', display: 'block' }}>
+              ID: {proveedores.find(p => p.id === idProveedor)?.codigo}
+            </small>
+          )}
+        </div>
+      </div>
+
+      {/* Botón Agregar Producto (solo si campos obligatorios están completos) */}
+      {camposObligatoriosCompletos && (
+        <>
+          <hr style={{ margin: '30px 0', border: 'none', borderTop: '2px solid #e5e7eb' }} />
+          
+          <h3 style={{ color: '#0033A0', marginBottom: '20px', textAlign: 'center' }}>
+            Productos ({productosForm.length})
+          </h3>
+
+          {productosForm.map((prod, index) => (
+            <div key={index} style={{ background: '#f9fafb', padding: '20px', borderRadius: '8px', marginBottom: '15px', position: 'relative', border: '1px solid #e5e7eb' }}>
+              {productosForm.length > 1 && (
+                <button 
+                  onClick={() => eliminarProducto(index)} 
+                  style={{ 
+                    position: 'absolute', 
+                    top: '10px', 
+                    right: '10px', 
+                    background: '#fee2e2', 
+                    color: '#991b1b', 
+                    border: 'none', 
+                    borderRadius: '50%', 
+                    width: '28px', 
+                    height: '28px', 
+                    cursor: 'pointer', 
+                    fontWeight: 'bold',
+                    fontSize: '16px'
+                  }}
+                >
+                  ×
+                </button>
+              )}
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
+                {/* Grupo Producto */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Grupo Producto *</label>
+                  <select 
+                    value={prod.id_grupo} 
+                    onChange={(e) => actualizarProducto(index, 'id_grupo', e.target.value)}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
+                  >
+                    <option value="">Seleccionar</option>
+                    {grupos.map(g => (
+                      <option key={g.id} value={g.id}>{g.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Producto */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Producto *</label>
+                  <select 
+                    value={prod.id_producto} 
+                    onChange={(e) => actualizarProducto(index, 'id_producto', e.target.value)}
+                    disabled={!prod.id_grupo}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: !prod.id_grupo ? '#f3f4f6' : 'white' }}
+                  >
+                    <option value="">Seleccionar</option>
+                    {productos.filter(p => p.id_grupo_producto === prod.id_grupo).map(p => (
+                      <option key={p.id} value={p.id}>{p.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Cantidad */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Cantidad *</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    value={prod.cantidad} 
+                    onChange={(e) => actualizarProducto(index, 'cantidad', e.target.value)}
+                    placeholder="0.00"
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
+                  />
+                </div>
+
+                {/* Tipo de Cuota */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Tipo de Cuota *</label>
+                  <select 
+                    value={prod.tipo_cuota} 
+                    onChange={(e) => actualizarProducto(index, 'tipo_cuota', e.target.value)}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
+                  >
+                    <option value="Bolsa">Bolsa</option>
+                    <option value="Diaria">Diaria</option>
+                    <option value="Paquete">Paquete</option>
+                  </select>
+                </div>
+
+                {/* Fecha Inicio */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Fecha Inicio *</label>
+                  <input 
+                    type="date" 
+                    value={prod.fecha_inicio} 
+                    onChange={(e) => actualizarProducto(index, 'fecha_inicio', e.target.value)}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
+                  />
+                </div>
+
+                {/* Fecha Fin */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Fecha Fin *</label>
+                  <input 
+                    type="date" 
+                    value={prod.fecha_fin} 
+                    onChange={(e) => actualizarProducto(index, 'fecha_fin', e.target.value)}
+                    readOnly={prod.tipo_cuota === 'Diaria'}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px', backgroundColor: prod.tipo_cuota === 'Diaria' ? '#f3f4f6' : 'white' }}
+                  />
+                </div>
+
+                {/* Observaciones */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Observaciones *</label>
+                  <select 
+                    value={prod.observaciones} 
+                    onChange={(e) => actualizarProducto(index, 'observaciones', e.target.value)}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
+                  >
+                    <option value="0">0 - Sin stock</option>
+                    <option value="1">1 - Libre hasta agotar</option>
+                    <option value="2">2 - Cuota asignada por asesor</option>
+                    <option value="3">3 - Libre</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Compensación (solo para tipo planta) */}
+              {tipoRegistro === 'planta' && (
+                <div style={{ marginTop: '15px', padding: '15px', background: 'white', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={prod.compensacion || false} 
+                      onChange={(e) => actualizarProducto(index, 'compensacion', e.target.checked)}
+                      style={{ width: '18px', height: '18px' }}
+                    />
+                    <span style={{ fontWeight: 'bold', fontSize: '13px' }}>¿Compensación?</span>
+                  </label>
+                  {prod.compensacion && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px' }}>
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Planta Alterna</label>
+                        <select 
+                          value={prod.id_planta_alterna || ''} 
+                          onChange={(e) => actualizarProducto(index, 'id_planta_alterna', e.target.value)}
+                          style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
+                        >
+                          <option value="">Seleccionar</option>
+                          {plantas.filter(p => p.id_planta !== idPlanta).map(p => (
+                            <option key={p.id_planta} value={p.id_planta}>{p.nombre}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '12px' }}>Cantidad Compensada</label>
+                        <input 
+                          type="number" 
+                          step="0.01"
+                          value={prod.cantidad_compensada || ''} 
+                          onChange={(e) => actualizarProducto(index, 'cantidad_compensada', e.target.value)}
+                          placeholder="0.00"
+                          style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Botones de acción */}
+          <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
+            <Boton variante="outline" onClick={agregarProducto}>+ Agregar Producto</Boton>
+            <Boton 
+              variante="primary" 
+              onClick={guardar} 
+              disabled={guardando}
+              style={{ marginLeft: 'auto' }}
+            >
+              {guardando ? 'Guardando...' : '💾 Guardar Cuota'}
+            </Boton>
+          </div>
+        </>
+      )}
+
+      {/* Mensaje si no se han completado los campos obligatorios */}
+      {!camposObligatoriosCompletos && (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+          <p style={{ fontSize: '16px', marginBottom: '10px' }}>⚠️ Completa los campos obligatorios para continuar</p>
+          <p style={{ fontSize: '14px' }}>
+            {tipoRegistro === 'asesor' 
+              ? 'Selecciona Asesor, Planta y Proveedor' 
+              : 'Selecciona Planta y Proveedor'}
+          </p>
+        </div>
+      )}
     </Card>
   )
 }
